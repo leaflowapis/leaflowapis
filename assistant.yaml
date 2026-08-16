@@ -27,11 +27,30 @@ components:
         - width
         - height
       type: object
+    BindingCodeResponseBody:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        expiresAt:
+          format: date-time
+          type: string
+      required:
+        - code
+        - expiresAt
+      type: object
     BindingResource:
       additionalProperties: false
       properties:
         channelId:
           format: uuid
+          type: string
+        connState:
+          enum:
+            - logged_out
+            - qr_pending
+            - online
+            - expired
           type: string
         createdAt:
           format: date-time
@@ -44,6 +63,10 @@ components:
         platform:
           type: string
         status:
+          enum:
+            - pending
+            - active
+            - revoked
           type: string
         verifiedAt:
           format: date-time
@@ -56,6 +79,7 @@ components:
         - platform
         - peerName
         - status
+        - connState
         - verifiedAt
         - createdAt
       type: object
@@ -68,6 +92,14 @@ components:
           type:
             - array
             - "null"
+        connState:
+          description: 平台接入状态。只有 online 才收得到消息、也才签得出绑定码
+          enum:
+            - logged_out
+            - qr_pending
+            - online
+            - expired
+          type: string
         createdAt:
           format: date-time
           type: string
@@ -78,9 +110,22 @@ components:
           type: string
         platform:
           type: string
+        runtimeState:
+          description: 常驻连接此刻的状态。回调型平台恒为 stopped
+          enum:
+            - stopped
+            - running
+          type: string
         senderPolicy:
+          enum:
+            - bound_only
+            - open
           type: string
         status:
+          enum:
+            - active
+            - suspended
+            - disabled
           type: string
         updatedAt:
           format: date-time
@@ -98,6 +143,83 @@ components:
         - platform
         - name
         - status
+        - connState
+        - runtimeState
+        - senderPolicy
+        - allowFrom
+        - webhookUrl
+        - webhookPath
+        - createdAt
+        - updatedAt
+      type: object
+    ChannelWithSecretResponseBody:
+      additionalProperties: false
+      properties:
+        allowFrom:
+          items:
+            type: string
+          type:
+            - array
+            - "null"
+        connState:
+          description: 平台接入状态。只有 online 才收得到消息、也才签得出绑定码
+          enum:
+            - logged_out
+            - qr_pending
+            - online
+            - expired
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        id:
+          format: uuid
+          type: string
+        name:
+          type: string
+        platform:
+          type: string
+        runtimeState:
+          description: 常驻连接此刻的状态。回调型平台恒为 stopped
+          enum:
+            - stopped
+            - running
+          type: string
+        senderPolicy:
+          enum:
+            - bound_only
+            - open
+          type: string
+        status:
+          enum:
+            - active
+            - suspended
+            - disabled
+          type: string
+        updatedAt:
+          format: date-time
+          type: string
+        webhookPath:
+          description: 回调路径，网关配置和排查时用
+          type: string
+        webhookSecret:
+          description: 我们生成的那把回调密钥，拿去粘到平台后台。**之后无法再次取回**，只能轮换出新的一把。密钥由平台生成（secretSource=supplied）或该平台不走回调时为 null
+          type:
+            - string
+            - "null"
+        webhookUrl:
+          description: 填到平台后台的回调地址。部署未声明公网入口时为 null
+          type:
+            - string
+            - "null"
+      required:
+        - webhookSecret
+        - id
+        - platform
+        - name
+        - status
+        - connState
+        - runtimeState
         - senderPolicy
         - allowFrom
         - webhookUrl
@@ -115,18 +237,6 @@ components:
       required:
         - label
         - description
-      type: object
-    ClaimCodeResponseBody:
-      additionalProperties: false
-      properties:
-        code:
-          type: string
-        expiresAt:
-          format: date-time
-          type: string
-      required:
-        - code
-        - expiresAt
       type: object
     ContextResource:
       additionalProperties: false
@@ -178,9 +288,12 @@ components:
         platform:
           type: string
         senderPolicy:
+          enum:
+            - bound_only
+            - open
           type: string
         webhookSecret:
-          description: 不提供则自动生成。仅在本次响应中返回一次
+          description: 平台生成密钥的平台（secretSource=supplied）必须传；我们生成的（generated）不能传，那把会在本次响应的 webhookSecret 里返回一次
           type: string
       required:
         - platform
@@ -370,7 +483,7 @@ components:
             - completed
             - failed
             - declined
-            - aborted
+            - interrupted
           type: string
         target:
           type:
@@ -391,6 +504,7 @@ components:
             - dynamic_tool_call
             - context_compaction
             - token_budget_reminder
+            - turn_failure
           type: string
       required:
         - id
@@ -457,23 +571,30 @@ components:
       additionalProperties: false
       properties:
         expiresAt:
+          description: 这条登录流的截止时间。到点之后不要再轮询，重新发起一次
           format: date-time
           type: string
         id:
           format: uuid
           type: string
-        qrcode:
-          type: string
         qrcodeData:
+          description: 二维码图片内容，直接作为 <img> 的 src 使用。码过期时这条流会自己换一张接着等，所以每次轮询拿到的可能是新的一张
           type: string
         reason:
+          description: 失败原因。仅在 status 为 error 或 expired 时有内容
           type: string
         status:
+          enum:
+            - wait
+            - scanned
+            - confirmed
+            - expired
+            - error
+            - need_verify_code
           type: string
       required:
         - id
         - status
-        - qrcode
         - qrcodeData
         - reason
         - expiresAt
@@ -812,8 +933,8 @@ components:
         senderPolicy:
           description: 传了才会连同 allowFrom 一起替换
           enum:
-            - BOUND_ONLY
-            - OPEN
+            - bound_only
+            - open
           type: string
       type: object
     UpdateThreadRequestBody:
@@ -1144,6 +1265,7 @@ paths:
       tags:
         - Onboarding
     post:
+      description: 回调密钥归谁定由平台决定，见 list-platforms 的 secretSource：generated 的平台不要传 webhookSecret，我们生成的那把仅在本次响应中返回一次、之后无法再次取回，错过了只能调轮换接口换一把新的；supplied 的平台必须把平台后台那把传进来，此时响应里的webhookSecret 为 null。
       operationId: create-channel
       requestBody:
         content:
@@ -1156,7 +1278,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ChannelResource"
+                $ref: "#/components/schemas/ChannelWithSecretResponseBody"
           description: Created
         default:
           content:
@@ -1247,10 +1369,10 @@ paths:
       summary: 修改通道
       tags:
         - Onboarding
-  /v1/channels/{channel}/claim-codes:
+  /v1/channels/{channel}/binding-codes:
     post:
-      description: 生成一个一次性认领码交给待绑定的人，他在该平台上用自己的账号把这个码发给助手即完成绑定。绑定只能由本人以这种方式建立，不能直接指定平台账号。认领码有有效期，过期后需重新签发。
-      operationId: create-claim-code
+      description: 生成一个一次性绑定码交给待绑定的人，他在该平台上用自己的账号把这个码发给助手即完成绑定。绑定只能由本人以这种方式建立，不能直接指定平台账号。绑定码有有效期，过期后需重新签发。
+      operationId: create-binding-code
       parameters:
         - in: path
           name: channel
@@ -1263,7 +1385,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ClaimCodeResponseBody"
+                $ref: "#/components/schemas/BindingCodeResponseBody"
           description: Created
         default:
           content:
@@ -1271,7 +1393,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
           description: Error
-      summary: 签发认领码
+      summary: 签发绑定码
       tags:
         - Onboarding
   /v1/channels/{channel}/rejections:
@@ -1344,7 +1466,7 @@ paths:
         - Onboarding
   /v1/channels/{channel}/sender-check:
     get:
-      description: 改完发件人策略之后用来自查，不发送任何消息、也不改变任何状态：它走的是和真实入站完全相同的那份判定，并说明结论由哪一条规则得出。无法推演认领码那一条——是否是认领码取决于对方发来的内容。
+      description: 改完发件人策略之后用来自查，不发送任何消息、也不改变任何状态：它走的是和真实入站完全相同的那份判定，并说明结论由哪一条规则得出。无法推演绑定码那一条——是否是绑定码取决于对方发来的内容。
       operationId: check-sender
       parameters:
         - in: path
