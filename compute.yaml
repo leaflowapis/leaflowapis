@@ -1087,16 +1087,6 @@ components:
         created_at:
           format: date-time
           type: string
-        gateway_v4:
-          description: 该私有网络出口的 v4 地址
-          type:
-            - string
-            - "null"
-        gateway_v6:
-          description: 该私有网络出口的 v6 地址，未启用 IPv6 时为空
-          type:
-            - string
-            - "null"
         has_internet_gateway:
           type: boolean
         id:
@@ -1121,8 +1111,6 @@ components:
         - cidr
         - status
         - has_internet_gateway
-        - gateway_v4
-        - gateway_v6
         - created_at
         - updated_at
       type: object
