@@ -668,7 +668,7 @@ components:
             - string
             - "null"
         public_ips:
-          description: 云服务器主网卡上绑定的公网 IPv4，未绑定时为空数组
+          description: 云服务器各网卡上绑定的公网 IPv4，含弹性网卡；未绑定时为空数组
           items:
             type: string
           type:
@@ -971,6 +971,13 @@ components:
         private_network_id:
           format: uuid
           type: string
+        public_ips:
+          description: 绑在这张网卡上的公网 IPv4，未绑定时为空数组
+          items:
+            type: string
+          type:
+            - array
+            - "null"
         subnet_id:
           format: uuid
           type: string
@@ -984,6 +991,7 @@ components:
         - attached_instance_id
         - private_ip
         - ipv6_address
+        - public_ips
       type: object
     PrivateImageListResponseBody:
       additionalProperties: false
