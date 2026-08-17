@@ -578,7 +578,7 @@ components:
           format: uuid
           type: string
         qrcodeData:
-          description: 二维码图片内容，直接作为 <img> 的 src 使用。码过期时这条流会自己换一张接着等，所以每次轮询拿到的可能是新的一张
+          description: 二维码的内容，由客户端编码成二维码图形渲染（不是图片地址，也不是 data URI）。码过期时这条流会自己换一张接着等，所以每次轮询拿到的可能是新的一串
           type: string
         reason:
           description: 失败原因。仅在 status 为 error 或 expired 时有内容
