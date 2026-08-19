@@ -2808,6 +2808,7 @@ components:
           type: integer
         snapshot_id:
           description: 从该快照恢复。提供时容量只需不小于快照本身
+          format: uuid
           type: string
       required:
         - disk_type_id
@@ -3104,6 +3105,7 @@ components:
         security_group_ids:
           description: 新建主网卡时必填，至少一个；不会自动使用默认安全组。使用 port_id 时忽略——那张网卡的安全组在创建它时已经定了
           items:
+            format: uuid
             type: string
           minItems: 1
           type:
@@ -3418,6 +3420,7 @@ components:
         security_group_ids:
           description: 至少一个，且必须属于同一个私有网络
           items:
+            format: uuid
             type: string
           minItems: 1
           type:

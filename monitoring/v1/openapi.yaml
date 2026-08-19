@@ -2419,7 +2419,10 @@ components:
           format: int64
           type: integer
         result:
-          $ref: '#/components/schemas/WebCheckResultResource'
+          anyOf:
+            - $ref: '#/components/schemas/WebCheckResultResource'
+            - type: 'null'
+          description: null 表示这个检查还一轮都没跑过。零值会把「还不知道」显示成「响应 0 秒、状态码 0」
         retries:
           format: int64
           type: integer
