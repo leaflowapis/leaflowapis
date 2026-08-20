@@ -17,6 +17,32 @@ info:
 security:
   - bearerAuth: []
 paths:
+  /account/v1/settings:
+    get:
+      summary: 这个平台现在收不收人
+      description: |-
+        注册页和「新建项目」按钮用它决定画什么。不需要令牌。
+
+        `registration_mode` 不是 `OPEN` 时 `POST /account/v1/register` 会答 403：`CLOSED` 是整个关着，`INVITE_ONLY` 是只收手上有项目邀请的邮箱。`project_creation_mode` 同理，`VERIFIED_ONLY` 要先过实名。
+
+        两条配额是 0 表示不限。它们只用来提前提示，真正的判定在写入那一刻。
+      operationId: get-settings
+      tags:
+        - Setting
+      security: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SettingsResource'
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Error
   /account/v1/agreements:
     get:
       summary: 列出注册必须同意的文件
@@ -412,6 +438,37 @@ components:
   schemas:
     Error:
       $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    SettingsResource:
+      additionalProperties: false
+      properties:
+        max_members_per_project:
+          description: 一个项目最多几个成员，0 表示不限
+          format: int64
+          type: integer
+        max_projects_per_user:
+          description: 你最多能当几个项目的所有者，0 表示不限。已删除的项目不算在内
+          format: int64
+          type: integer
+        project_creation_mode:
+          description: VERIFIED_ONLY 要求先过实名，审核中不算
+          enum:
+            - OPEN
+            - VERIFIED_ONLY
+            - CLOSED
+          type: string
+        registration_mode:
+          description: INVITE_ONLY 是只收手上有项目邀请的邮箱
+          enum:
+            - OPEN
+            - INVITE_ONLY
+            - CLOSED
+          type: string
+      required:
+        - registration_mode
+        - project_creation_mode
+        - max_projects_per_user
+        - max_members_per_project
+      type: object
     AgreementResource:
       additionalProperties: false
       properties:
