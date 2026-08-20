@@ -199,7 +199,7 @@ paths:
             default: 50
             description: 这一页最多返回多少条
             format: int64
-            maximum: 200
+            maximum: 100
             minimum: 1
             type: integer
         - description: 跳过多少条。要翻得更深请改用游标翻页的接口
@@ -294,7 +294,7 @@ paths:
             default: 50
             description: 这一页最多返回多少条
             format: int64
-            maximum: 200
+            maximum: 100
             minimum: 1
             type: integer
         - description: 跳过多少条。要翻得更深请改用游标翻页的接口
