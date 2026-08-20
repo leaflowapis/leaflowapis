@@ -34,7 +34,7 @@ components:
           format: date-time
           type: string
         enabled:
-          description: 上游账户当前是否启用。现问上游，不经过缓存。为 false 表示被平台停用（欠费、违规或项目停服），用户这一侧没有任何按钮能改它
+          description: 隧道当前是否可用。为 false 表示被平台停用（欠费、违规或项目停服），需要先处理停用的原因
           type: boolean
         id:
           format: uuid
@@ -139,8 +139,6 @@ info:
     平台的隧道分二层、三层、四层三种。**这一份文档里的接口全部属于四层**，路径以 `/tunnel/l4` 开头。二层和三层尚未开放，届时会有各自的路径前缀。
 
 
-    不带层号的话，二层上线时要么撞路径，要么得给后来的两层加一个不对称的前缀。
-
 
     ## 身份与鉴权
 
@@ -179,7 +177,7 @@ paths:
       description: '还没生成过时返回 `TUNNEL_NOT_FOUND`——首屏据此决定画「生成订阅链接」那个按钮还是画结果。
 
 
-        **这里没有订阅地址、没有用量、没有配额。** 它们各有自己的接口，而且都是现问上游的；摆一份可能是旧的在这里，比不摆更糟。'
+        订阅地址、用量、配额各有自己的接口，这里不重复返回。'
       operationId: get-l4-tunnel
       responses:
         '200':
@@ -201,7 +199,7 @@ paths:
       description: '**幂等**：已经有了再调一次返回同一条，不报错。按钮被点两次是安全的。
 
 
-        生成之后用订阅接口取地址——那是两个动作，因为订阅地址是凭据，不该跟着每一次生成请求发出去。'
+        生成之后请调订阅接口取地址，本接口不返回它。'
       operationId: generate-l4-tunnel
       responses:
         '200':
@@ -246,7 +244,7 @@ paths:
         隧道被平台停用时无法重置（`TUNNEL_DISABLED_FOR_ROTATE`），需要先处理停用的原因。
 
 
-        重置后再调订阅接口取新地址——**这个接口不返回新地址**，那是两个动作。'
+        重置后请调订阅接口取新地址，**本接口不返回它**。'
       operationId: rotate-l4-tunnel-subscription
       responses:
         '200':
@@ -261,7 +259,7 @@ paths:
       - Tunnel
   /api/v1/tunnel/l4/usage:
     get:
-      description: '现问上游，不经过缓存。
+      description: '实时查询，不经过缓存。
 
 
         判断是否超额只看 `billed_bytes`：线路可以设置倍率（如 1.5× 或 0×），`raw_bytes` 是实际传输量，两者不一定相等。`quota_bytes` 为 0 表示不限量。'
