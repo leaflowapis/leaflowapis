@@ -1,0 +1,62 @@
+# 契约变了就推给 CLI，让它长出新命令。
+#
+# CLI（LeaflowNET/leaflow）的命令是从这些契约生成的：一个 operationId 就是一条命令。所以这里
+# 加一个操作，那边就多一条命令；这里删一个，那边就少一条——而少一条是会打断别人脚本的事。
+#
+# 因此这个 workflow 只负责**推一个分支**过去，不直接改它的 main。对面收到之后自己跑一遍构建和
+# 测试，再开 PR，由人看一眼「哪些命令出现了、哪些消失了」再决定合不合。
+#
+# main 和 tag 都触发：这个仓库目前是直接往 main 提交契约（`chore(compute): sync openapi from …`），
+# 还没有打 tag 的惯例。只认 tag 的话，实际发生的契约变更一次都不会被推过去。对面有「没变化就
+# 什么都不做」的判断，所以多触发几次是安全的。
+#
+# 凭据是一把部署密钥（secret：LEAFLOW_CLI_DEPLOY_KEY），只对 LeaflowNET/leaflow 有写权限，
+# 不属于任何人的账号，也调不了 API——有人离职、或者换一把钥匙，都不影响别的东西。
+
+name: publish-to-cli
+
+on:
+  push:
+    branches: [main]
+    paths: ["leaflow/**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.LEAFLOW_CLI_DEPLOY_KEY }}
+
+      - name: 把契约推到 CLI 仓库
+        run: |
+          set -euo pipefail
+
+          git clone --depth 1 git@github.com:LeaflowNET/leaflow.git cli
+          cd cli
+          git checkout -B contracts/sync
+
+          # 整个目录换掉，而不是逐个文件覆盖：这样这边删掉一个服务，那边也会跟着删，
+          # 否则 CLI 会一直带着一份早就不存在的契约，并为它生成命令。
+          rm -rf apis/leaflow
+          cp -R ../leaflow apis/leaflow
+
+          if git diff --quiet -- apis/; then
+            echo "契约没有变化，什么都不用做。"
+            exit 0
+          fi
+
+          git config user.name "leaflow-contracts"
+          git config user.email "contracts@leaflow.net"
+          git add apis/
+          git commit -m "chore: sync API contracts from ${GITHUB_REF_NAME}"
+
+          # 强推：这个分支只表示「最新一次同步」，它的历史就是本仓库的历史，
+          # 不需要在对面再累积一份。
+          git push -f origin contracts/sync
+
+          echo "已推送 contracts/sync。"
