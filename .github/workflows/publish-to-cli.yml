@@ -1,17 +1,23 @@
-# 契约变了就推给 CLI，让它长出新命令。
+# Push contracts to the CLI when they change, so it can grow the new commands.
 #
-# CLI（LeaflowNET/leaflow）的命令是从这些契约生成的：一个 operationId 就是一条命令。所以这里
-# 加一个操作，那边就多一条命令；这里删一个，那边就少一条——而少一条是会打断别人脚本的事。
+# The CLI (LeaflowNET/leaflow) generates its commands from these contracts: one
+# operationId is one command. Adding an operation here adds a command there;
+# removing one removes a command, which breaks whatever was scripted against it.
 #
-# 因此这个 workflow 只负责**推一个分支**过去，不直接改它的 main。对面收到之后自己跑一遍构建和
-# 测试，再开 PR，由人看一眼「哪些命令出现了、哪些消失了」再决定合不合。
+# So this only pushes a branch. It never touches that repository's main: the CLI
+# builds and tests the result itself, then opens a pull request stating which
+# commands appear and disappear, for a person to approve.
 #
-# main 和 tag 都触发：这个仓库目前是直接往 main 提交契约（`chore(compute): sync openapi from …`），
-# 还没有打 tag 的惯例。只认 tag 的话，实际发生的契约变更一次都不会被推过去。对面有「没变化就
-# 什么都不做」的判断，所以多触发几次是安全的。
+# Both main and tags trigger it. Contracts currently land as commits on main
+# (`chore(compute): sync openapi from …`) and this repository has no tagging
+# convention yet, so listening only for tags would never fire on a real change.
+# The CLI side does nothing when the contracts are unchanged, which makes extra
+# triggers harmless.
 #
-# 凭据是一把部署密钥（secret：LEAFLOW_CLI_DEPLOY_KEY），只对 LeaflowNET/leaflow 有写权限，
-# 不属于任何人的账号，也调不了 API——有人离职、或者换一把钥匙，都不影响别的东西。
+# The credential is a deploy key (secret: LEAFLOW_CLI_DEPLOY_KEY) with write
+# access to LeaflowNET/leaflow and nothing else. It belongs to no personal
+# account and carries no API rights, so rotating it, or someone leaving, affects
+# nothing else.
 
 name: publish-to-cli
 
@@ -32,7 +38,7 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.LEAFLOW_CLI_DEPLOY_KEY }}
 
-      - name: 把契约推到 CLI 仓库
+      - name: push contracts to the CLI repository
         run: |
           set -euo pipefail
 
@@ -40,13 +46,15 @@ jobs:
           cd cli
           git checkout -B contracts/sync
 
-          # 整个目录换掉，而不是逐个文件覆盖：这样这边删掉一个服务，那边也会跟着删，
-          # 否则 CLI 会一直带着一份早就不存在的契约，并为它生成命令。
+          # The whole directory is replaced rather than copied over file by
+          # file, so that a service deleted here disappears there too. Otherwise
+          # the CLI keeps a contract that no longer exists and keeps generating
+          # commands for it.
           rm -rf apis/leaflow
           cp -R ../leaflow apis/leaflow
 
           if git diff --quiet -- apis/; then
-            echo "契约没有变化，什么都不用做。"
+            echo "Contracts unchanged, nothing to do."
             exit 0
           fi
 
@@ -55,8 +63,9 @@ jobs:
           git add apis/
           git commit -m "chore: sync API contracts from ${GITHUB_REF_NAME}"
 
-          # 强推：这个分支只表示「最新一次同步」，它的历史就是本仓库的历史，
-          # 不需要在对面再累积一份。
+          # Force-pushed: this branch means "the latest sync" and nothing else.
+          # Its history is this repository's history and does not need to
+          # accumulate a second copy over there.
           git push -f origin contracts/sync
 
-          echo "已推送 contracts/sync。"
+          echo "Pushed contracts/sync."
