@@ -497,6 +497,7 @@ components:
             - DPA
           type: string
         version:
+          minLength: 1
           maxLength: 32
           type: string
       required:
@@ -612,6 +613,7 @@ components:
           minLength: 6
           type: string
         real_name:
+          minLength: 1
           description: 真实姓名。敏感个人信息，加密入库，任何接口都不会再把它读出来
           maxLength: 128
           type: string

@@ -1181,9 +1181,11 @@ components:
           description: 平台侧凭据。只写不读，创建后无法取回
           type: object
         name:
+          minLength: 1
           maxLength: 128
           type: string
         platform:
+          minLength: 1
           type: string
         senderPolicy:
           enum:
@@ -1515,6 +1517,7 @@ components:
       additionalProperties: false
       properties:
         code:
+          minLength: 1
           type: string
       required:
       - code
@@ -1954,6 +1957,7 @@ components:
           - array
           - 'null'
         text:
+          minLength: 1
           type: string
       required:
       - text

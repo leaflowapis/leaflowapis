@@ -601,6 +601,7 @@ components:
       additionalProperties: false
       properties:
         display_name:
+          minLength: 1
           description: 这条隧道的名字，只影响显示
           maxLength: 128
           type: string
@@ -621,6 +622,7 @@ components:
       additionalProperties: false
       properties:
         display_name:
+          minLength: 1
           maxLength: 128
           type: string
         email:

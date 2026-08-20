@@ -826,6 +826,7 @@ components:
             - string
             - 'null'
         name:
+          minLength: 1
           description: 给自己看的名字，比如「CI」「生产」
           maxLength: 128
           type: string
