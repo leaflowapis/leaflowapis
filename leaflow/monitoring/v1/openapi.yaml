@@ -2231,6 +2231,7 @@ components:
       additionalProperties: false
       properties:
         address:
+          minLength: 1
           maxLength: 255
           type: string
         address_kind:

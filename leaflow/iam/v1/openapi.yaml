@@ -949,6 +949,7 @@ components:
       additionalProperties: false
       properties:
         to_user_id:
+          minLength: 1
           description: 接手的人必须已经是这个项目的成员
           maxLength: 255
           type: string
@@ -1016,6 +1017,7 @@ components:
       additionalProperties: false
       properties:
         code:
+          minLength: 1
           description: 小写字母开头，可含数字和下划线。建好之后不能改——成员绑定和邀请都指着它
           maxLength: 64
           type: string
@@ -1023,6 +1025,7 @@ components:
           maxLength: 255
           type: string
         name:
+          minLength: 1
           maxLength: 64
           type: string
         permissions:
@@ -1043,6 +1046,7 @@ components:
           maxLength: 255
           type: string
         name:
+          minLength: 1
           maxLength: 64
           type: string
         permissions:
@@ -1130,6 +1134,7 @@ components:
       additionalProperties: false
       properties:
         name:
+          minLength: 1
           maxLength: 128
           type: string
         owner:
@@ -1140,6 +1145,7 @@ components:
             - project
           type: string
         public_key:
+          minLength: 1
           description: OpenSSH 格式的公钥。类型和指纹从它算出来，都不可改
           maxLength: 16384
           type: string
@@ -1159,6 +1165,7 @@ components:
       additionalProperties: false
       properties:
         name:
+          minLength: 1
           maxLength: 128
           type: string
       required:
