@@ -1,0 +1,48 @@
+# 跨服务共用的错误形状。
+#
+# # 为什么单独一份
+#
+# 此前每份契约各自定义一次,共七份,内容完全相同。副本之间的漂移不会被任何环节发现:某份契约中
+# `meta` 少一层嵌套时,依据它编写的错误处理在其他服务上读不到内容,而两份文档各自看起来都是对的。
+#
+# 错误形状本身也不属于任何单个服务——它由传输层统一决定,契约在此描述的是同一件事。
+#
+# # 目录名
+#
+# 取 `type/`,与 googleapis 的 `google/type/`(Money、Date、LatLng 等共用值类型)一致。
+# 未采用 `google/rpc/` 的命名:本平台的接口是 REST。
+#
+# # 此处只放 Error
+#
+# 分页参数看似同类,实际不是同一件事:部分接口按游标翻页(主键自带时间序),部分按偏移量,用量类
+# 接口另有必填的时间范围与上限。归一需要以 allOf 逐个修补差异,而对本已规则的结构追加声明,正是
+# 使其开始变得不规则的起点。
+openapi: 3.1.0
+info:
+  title: Leaflow 共用类型
+  version: v1
+  description: |-
+    全平台共用的形状。这里**没有接口**，只有类型——paths 是空的，那是有意的。
+
+    生成出来的是一个独立的 Go 包，各服务的契约用 import-mapping 指过来，于是整个平台只有一个
+    Error 类型，而不是十三个长得一样的。
+paths: {}
+components:
+  schemas:
+    Error:
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        meta:
+          additionalProperties: {}
+          type: object
+        status:
+          format: int64
+          type: integer
+      required:
+        - status
+        - message
+      type: object

@@ -390,22 +390,7 @@ components:
       type: http
   schemas:
     Error:
-      additionalProperties: false
-      properties:
-        code:
-          type: string
-        message:
-          type: string
-        meta:
-          additionalProperties: {}
-          type: object
-        status:
-          format: int64
-          type: integer
-      required:
-        - status
-        - message
-      type: object
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
     OperationLogResource:
       additionalProperties: false
       properties:
