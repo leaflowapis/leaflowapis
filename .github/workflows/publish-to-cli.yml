@@ -53,14 +53,22 @@ jobs:
           rm -rf apis/leaflow
           cp -R ../leaflow apis/leaflow
 
-          if git diff --quiet -- apis/; then
+          git config user.name "leaflow-contracts"
+          git config user.email "contracts@leaflow.net"
+
+          # Staged before the question is asked, because no form of `git diff`
+          # reports an untracked file. Asked as `git diff -- apis/`, a change that
+          # only *adds* a contract — the first version of a new service — reads as
+          # "nothing to do", and the CLI never grows that service's commands. The
+          # deletion and edit cases were reported correctly, which is what makes
+          # this the kind that goes unnoticed.
+          git add -A apis/
+
+          if git diff --cached --quiet -- apis/; then
             echo "Contracts unchanged, nothing to do."
             exit 0
           fi
 
-          git config user.name "leaflow-contracts"
-          git config user.email "contracts@leaflow.net"
-          git add apis/
           git commit -m "chore: sync API contracts from ${GITHUB_REF_NAME}"
 
           # Force-pushed: this branch means "the latest sync" and nothing else.
