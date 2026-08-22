@@ -27,5 +27,5 @@ leaflow/<服务>/<版本>/
 | `monitoring` | 主机监控、告警、可用性检查、SLO |
 | `canopy` | 模型网关的密钥与用量 |
 | `assistant` | 对话与工具调用 |
-| `tunnel` | 隧道与订阅 |
+| `tunnel` | L2, L3, L4 隧道互联 |
 | `dns` | 多云 DNS 凭据、域名与解析记录 |
