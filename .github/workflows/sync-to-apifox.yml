@@ -1,0 +1,156 @@
+# Keep the Apifox projects in sync with the contracts in this repository.
+#
+# Required repository/organization settings:
+#   secret   APIFOX_ACCESS_TOKEN  Apifox API access token
+#   variable APIFOX_TEAM_ID       Team in which missing projects are created
+
+name: sync-to-apifox
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "leaflow/**"
+      - ".github/workflows/sync-to-apifox.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-to-apifox
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      APIFOX_ACCESS_TOKEN: ${{ secrets.APIFOX_ACCESS_TOKEN }}
+      APIFOX_TEAM_ID: ${{ vars.APIFOX_TEAM_ID }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${APIFOX_ACCESS_TOKEN}" ]]; then
+            echo "Missing GitHub secret APIFOX_ACCESS_TOKEN." >&2
+            exit 1
+          fi
+
+          if [[ ! "${APIFOX_TEAM_ID}" =~ ^[0-9]+$ ]]; then
+            echo "GitHub variable APIFOX_TEAM_ID must be a numeric Apifox Team ID." >&2
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Install sync tools
+        run: npm install --global apifox-cli@2.2.9 @redocly/cli@2.47.0
+
+      - name: Sign in to Apifox
+        shell: bash
+        run: apifox login --with-token "${APIFOX_ACCESS_TOKEN}"
+
+      - name: Import contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          projects="$(apifox project list --team "${APIFOX_TEAM_ID}")"
+          tmp_dir="$(mktemp -d)"
+          trap 'rm -rf "${tmp_dir}"' EXIT
+
+          while IFS= read -r spec; do
+            service="$(cut -d/ -f2 <<<"${spec}")"
+            project_name="$(
+              awk '
+                /^info:[[:space:]]*$/ { in_info = 1; next }
+                in_info && /^[^[:space:]]/ { in_info = 0 }
+                in_info && /^  title:[[:space:]]*/ {
+                  sub(/^  title:[[:space:]]*/, "")
+                  print
+                  exit
+                }
+              ' "${spec}"
+            )"
+
+            if [[ -z "${project_name}" ]]; then
+              echo "${spec} has no plain-string info.title; cannot name its Apifox project." >&2
+              exit 1
+            fi
+
+            mapfile -t project_ids < <(
+              jq -r --arg name "${project_name}" '.data[] | select(.name == $name) | .id' <<<"${projects}"
+            )
+
+            if ((${#project_ids[@]} > 1)); then
+              echo "More than one Apifox project is named '${project_name}'; refusing to choose one." >&2
+              exit 1
+            fi
+
+            if ((${#project_ids[@]} == 0)); then
+              echo "Creating Apifox project '${project_name}'."
+              created="$(
+                apifox project create \
+                  --team "${APIFOX_TEAM_ID}" \
+                  --name "${project_name}" \
+                  --type HTTP \
+                  --language zh-CN
+              )"
+              project_id="$(jq -er '.data.id' <<<"${created}")"
+            else
+              project_id="${project_ids[0]}"
+            fi
+
+            echo "Importing ${service} from ${spec} into Apifox project ${project_id}."
+            bundle_file="${tmp_dir}/${service}.yaml"
+            payload_file="${tmp_dir}/${service}.request.json"
+            response_file="${tmp_dir}/${service}.response.json"
+
+            redocly bundle "${spec}" --output "${bundle_file}"
+            jq -Rs '
+              {
+                input: .,
+                options: {
+                  endpointOverwriteBehavior: "OVERWRITE_EXISTING",
+                  schemaOverwriteBehavior: "OVERWRITE_EXISTING",
+                  updateFolderOfChangedEndpoint: true,
+                  prependBasePath: false
+                }
+              }
+            ' "${bundle_file}" >"${payload_file}"
+
+            curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --max-time 180 \
+              --retry 3 \
+              --retry-all-errors \
+              --request POST \
+              "https://api.apifox.com/v1/projects/${project_id}/import-openapi?locale=zh-CN" \
+              --header "X-Apifox-Api-Version: 2024-03-28" \
+              --header "Authorization: Bearer ${APIFOX_ACCESS_TOKEN}" \
+              --header "Content-Type: application/json" \
+              --data-binary "@${payload_file}" \
+              >"${response_file}"
+
+            jq -e '
+              .data.counters
+              | ((.endpointFailed // 0) == 0)
+                and ((.schemaFailed // 0) == 0)
+                and ((.securitySchemeFailed // 0) == 0)
+            ' "${response_file}" >/dev/null
+
+            jq -r '
+              .data.counters
+              | "Synced endpoints: created=\(.endpointCreated // 0), updated=\(.endpointUpdated // 0), failed=\(.endpointFailed // 0); schemas: created=\(.schemaCreated // 0), updated=\(.schemaUpdated // 0), failed=\(.schemaFailed // 0)"
+            ' "${response_file}"
+          done < <(find leaflow -mindepth 3 -maxdepth 3 -name openapi.yaml -print | sort)
