@@ -629,6 +629,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
           description: Error
+  /api/v1/dynamic-calls/{call}/result:
+    post:
+      summary: Report what an action produced
+      description: |-
+        The assistant asks the client to run an action by adding a tool call to the conversation
+        with the namespace `dynamic`; the client acts when that entry turns in_progress and reports
+        back here.
+
+        The first result is the one that counts. A later one is refused rather than replacing it.
+      operationId: submit-dynamic-call-result
+      tags:
+      - Thread
+      parameters:
+      - description: The id of the tool call entry in the conversation.
+        in: path
+        name: call
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DynamicCallResultRequestBody'
+        required: true
+      responses:
+        '204':
+          description: No Content
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Error
   /api/v1/memories:
     get:
       summary: List what the assistant remembers
@@ -2046,11 +2080,131 @@ components:
           type:
           - array
           - 'null'
+        client:
+          $ref: '#/components/schemas/ClientContextRequest'
         text:
           minLength: 1
           type: string
       required:
       - text
+      type: object
+    ClientContextRequest:
+      additionalProperties: false
+      description: |-
+        What this client can do, so the assistant can ask it to do those things while it answers.
+
+        Send `actions` only when they differ from the last message on this conversation. Sending the
+        block without `actions` keeps whatever was declared before.
+      properties:
+        actions:
+          description: The actions on offer right now. Omit when unchanged since the last message.
+          items:
+            $ref: '#/components/schemas/ClientActionRequest'
+          maxItems: 32
+          type:
+          - array
+          - 'null'
+        clientId:
+          description: Identifies this client while it stays open. Any stable string; one per tab.
+          minLength: 1
+          maxLength: 128
+          type: string
+        label:
+          description: 'How the client calls itself, for example "Leaflow console (web)".'
+          maxLength: 64
+          type: string
+        page:
+          $ref: '#/components/schemas/ClientPageRequest'
+      required:
+      - clientId
+      type: object
+    ClientActionRequest:
+      additionalProperties: false
+      description: The shape of a tool in the OpenAI Chat Completions API, plus `readOnly` and `timeoutMs`.
+      properties:
+        function:
+          $ref: '#/components/schemas/ClientFunctionRequest'
+        readOnly:
+          description: True when the action changes nothing outside the client. Anything else goes through this conversation's approval before it runs.
+          type: boolean
+        timeoutMs:
+          description: How long the assistant should wait for this action. Omit for the default; longer values are capped.
+          format: int64
+          minimum: 0
+          type: integer
+        type:
+          default: function
+          description: Only functions are supported.
+          enum:
+          - function
+          type: string
+      required:
+      - function
+      - readOnly
+      type: object
+    ClientFunctionRequest:
+      additionalProperties: false
+      description: The function object from the OpenAI tools format.
+      properties:
+        description:
+          description: What the action does, written for the model. An action without one can only be guessed at from its name.
+          minLength: 1
+          maxLength: 500
+          type: string
+        inputSchema:
+          additionalProperties: true
+          description: 'The MCP and Anthropic spelling of `parameters`. Give one or the other, not both.'
+          type:
+          - object
+          - 'null'
+        name:
+          minLength: 1
+          maxLength: 64
+          type: string
+        parameters:
+          additionalProperties: true
+          description: JSON Schema for the arguments. Omit for an action that takes none.
+          type:
+          - object
+          - 'null'
+      required:
+      - name
+      - description
+      type: object
+    ClientPageRequest:
+      additionalProperties: false
+      description: What the operator is looking at.
+      properties:
+        title:
+          maxLength: 200
+          type: string
+        url:
+          maxLength: 2000
+          type: string
+      type: object
+    DynamicCallResultRequestBody:
+      additionalProperties: false
+      properties:
+        clientId:
+          description: The same value sent with the message. A result from a different client is refused.
+          minLength: 1
+          type: string
+        error:
+          description: Why it failed, when `ok` is false. It reaches the assistant, so write it for a reader who cannot see the screen.
+          maxLength: 2000
+          type: string
+        nextCursor:
+          description: Pass back when there is more to read. The assistant will call again with it.
+          maxLength: 500
+          type: string
+        ok:
+          type: boolean
+        output:
+          description: What the action produced. At most 64 KiB; use `nextCursor` for anything larger.
+          type: string
+      required:
+      - clientId
+      - ok
       type: object
     TodoResource:
       additionalProperties: false
