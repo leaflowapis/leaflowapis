@@ -2246,6 +2246,43 @@ components:
       required:
       - parts
       type: object
+    MemoryListResponseBody:
+      additionalProperties: false
+      properties:
+        items:
+          items:
+            $ref: '#/components/schemas/MemoryResource'
+          type: array
+      required:
+      - items
+      type: object
+    MemoryResource:
+      additionalProperties: false
+      properties:
+        body:
+          description: The fact itself
+          type: string
+        createdAt:
+          format: date-time
+          type: string
+        id:
+          type: string
+        name:
+          description: The name the assistant gave this fact; it overwrites or deletes its own entries by that name
+          type: string
+        sourceThreadId:
+          description: Which conversation the assistant learned it in. That conversation may since have been deleted
+          type: string
+        updatedAt:
+          format: date-time
+          type: string
+      required:
+      - id
+      - name
+      - body
+      - createdAt
+      - updatedAt
+      type: object
     MessagePart:
       additionalProperties: false
       description: |-
