@@ -2204,11 +2204,6 @@ components:
           type: string
         archived:
           type: boolean
-
-            Independent of `model` — sending one does not touch the other.
-          type:
-          - string
-          - 'null'
       type: object
     DecideRequestBody:
       additionalProperties: false
