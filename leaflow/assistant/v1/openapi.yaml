@@ -1974,7 +1974,12 @@ components:
           - integer
           - 'null'
         inputModalities:
-          description: 'What kinds of input the model behind this conversation accepts, as modality names: text, image. A client uses this to decide whether a control exists — an attach button on a model that cannot read pictures is a control whose only outcome is a refusal, and the refusal arrives after somebody has chosen a file. An empty list is not a claim that the model reads nothing: it means this deployment has not stated the modalities, or the conversation names a model that has since been retired. Treat empty as unknown and keep the control, because hiding one for a reason nobody can see is worse than a refusal that says why.'
+          description: |-
+            What kinds of input the model behind this conversation accepts, as modality names: text, image.
+
+            This governs images and nothing else. Text and binary attachments reach every model: a small text file is placed inline, a large one is read on demand, and a binary is downloaded onto a cloud instance — none of which asks the model to see a picture. So this decides whether pasting a screenshot does anything, not whether the attach control exists. Hiding file upload on a text-only model takes away something that would have worked.
+
+            An empty list is not a claim that the model reads nothing: it means this deployment has not stated the modalities, or the conversation names a model that has since been retired. Treat empty as unknown and keep the control, because hiding one for a reason nobody can see is worse than a refusal that says why.
           items:
             type: string
           type: array
