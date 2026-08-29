@@ -505,12 +505,18 @@ paths:
       responses:
         '200':
           content:
-            application/octet-stream:
+            '*/*':
               schema:
-                contentMediaType: application/octet-stream
                 format: binary
                 type: string
           description: OK
+          headers:
+            Content-Disposition:
+              description: >-
+                `inline` when the content type can be rendered safely and `inline` was asked for,
+                `attachment` otherwise. Carries the original file name
+              schema:
+                type: string
         default:
           content:
             application/json:
