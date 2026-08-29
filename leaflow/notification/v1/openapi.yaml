@@ -959,7 +959,7 @@ components:
           description: The text as a fragment of HTML, same rules as a notification body
           type: string
         severity:
-          $ref: '#/components/schemas/Severity'
+          $ref: '#/components/schemas/NotificationSeverity'
         critical:
           description: >-
             You cannot dismiss this one. It is a property of the announcement rather than a second
