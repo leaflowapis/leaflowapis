@@ -746,6 +746,31 @@ paths:
                 $ref: '#/components/schemas/Error'
           description: Error
   /api/v1/folders/{folder}:
+    get:
+      summary: Fetch one folder
+      description: 'The list returns every folder at once, so this is for the case the list does not cover: a page opened straight at a folder, holding nothing but the id from the address bar. Its conversations are a separate request — `GET /api/v1/threads?folder=<id>`.'
+      operationId: get-folder
+      tags:
+      - Folder
+      parameters:
+      - in: path
+        name: folder
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FolderResource'
+          description: OK
+        default:
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: Error
     patch:
       summary: Rename a folder
       description: The conversations in it are untouched, and none of them move in the list — a folder's name is not part of what any conversation is about.
