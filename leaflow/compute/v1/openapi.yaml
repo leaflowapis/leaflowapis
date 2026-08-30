@@ -2909,6 +2909,7 @@ components:
         - items
       type: object
     PrepaidPrice:
+      type: object
       additionalProperties: false
       properties:
         term:
