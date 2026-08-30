@@ -2936,6 +2936,26 @@ components:
         vcpus:
           format: int64
           type: integer
+        sold_out:
+          description: |-
+            Whether this type can be ordered right now.
+
+            It reflects a limit set by operations, not what the cloud can physically schedule — raising
+            the limit does not create capacity that is not there, and a type that is not sold out can
+            still fail to start if the zone is full.
+
+            It is advisory: it is read when the list is built, and the last one can be taken between
+            that read and the order. The order is what actually refuses.
+          type: boolean
+        remaining:
+          description: |-
+            How many more may be created. Absent when this type is not limited at all.
+
+            Absent is not zero and not "unknown": a type with no limit simply has no number to show.
+            Reporting it as a number would need a sentinel, and any sentinel eventually gets compared
+            against a real count.
+          format: int64
+          type: integer
       required:
         - id
         - name
@@ -2946,6 +2966,7 @@ components:
         - max_ports
         - max_floating_ips
         - max_bandwidth_mbps
+        - sold_out
       type: object
     InstanceTypeListResponseBody:
       additionalProperties: false
