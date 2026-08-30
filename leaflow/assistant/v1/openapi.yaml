@@ -8,20 +8,25 @@ info:
     ## A conversation
 
 
-    1. `POST /v1/threads` creates one;
+    The path one conversation takes, end to end. It names the operations that path needs, not all of
+    them — the full list is below, and it also covers folders, attachments, memories, skills and the
+    instant messaging side.
 
-    2. `POST /v1/threads/{thread}/messages` sends a message and returns a `turnId` at once; the
+
+    1. `POST /api/v1/threads` creates one;
+
+    2. `POST /api/v1/threads/{thread}/messages` sends a message and returns a `turnId` at once; the
     assistant runs in the background;
 
-    3. `GET /v1/threads/{thread}` returns the conversation document to render, whose `stream` is where
+    3. `GET /api/v1/threads/{thread}` returns the conversation document to render, whose `stream` is where
     live output arrives;
 
     4. When the assistant needs the user, the document''s `wait` says which kind: approving a batch of
-    tool calls (`POST /v1/threads/{thread}/approvals/{batch}`), or answering a few questions (`POST
-    /v1/threads/{thread}/questions/{item}`). It continues on its own once that is handled.
+    tool calls (`POST /api/v1/threads/{thread}/approvals/{batch}`), or answering a few questions (`POST
+    /api/v1/threads/{thread}/questions/{item}`). It continues on its own once that is handled.
 
 
-    Sending a file takes two steps: `POST /v1/attachments` for an id, then put that id in
+    Sending a file takes two steps: `POST /api/v1/attachments` for an id, then put that id in
     `attachmentIds` when sending the message. Images, text and arbitrary binaries all go through the
     same two steps; what differs is how the assistant reads them afterwards, which the upload
     response''s `kind` says.
@@ -32,12 +37,15 @@ info:
 
     ```
 
-    GET /v1/turns/{turn}/stream?ticket=<ticket>&cursor=<cursor>
+    GET /api/v1/turns/{turn}/stream?ticket=<ticket>&cursor=<cursor>
 
     ```
 
 
-    This is a Server-Sent Events stream, which is why it is not in the operation list below.
+    This is a Server-Sent Events stream, which is why it is not in the operation list below and why
+    generated clients have no method for it. Open it with `EventSource`, or any SSE client. It is how
+    live output arrives; polling the document on a timer is not the intended way to follow a
+    conversation.
 
 
     - `path` and `ticket` both come from the conversation document''s `stream`. `path` is relative,
