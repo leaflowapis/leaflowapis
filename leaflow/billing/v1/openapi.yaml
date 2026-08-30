@@ -1945,10 +1945,55 @@ components:
             Decimal string, the real-time figure. The booked figure would show a machine that only
             just started as zero
           type: string
+        feature_key:
+          description: |-
+            Which meter it is for, when the charge came from usage. A hash, not something to show —
+            it is here so two rows can be told apart programmatically and so support can line a row
+            up with the catalogue.
+          type: string
+        type:
+          description: |-
+            Whether this figure moves. A usage charge climbs through the period; a flat fee does not.
+            Without it, the same number on two refreshes could mean "nobody used it" or "it never
+            moves", and those need different next steps.
+          type: string
+          enum: [usage_based, flat_fee]
+        period_from:
+          description: |-
+            Start of the service period this charge covers.
+
+            This is what tells two same-named rows apart. Something billed by the hour produces
+            hundreds of identically named charges in a month, and a list carrying only a name and an
+            amount shows them as a wall of duplicates — which is what it looks like today.
+          format: date-time
+          type: string
+        period_to:
+          description: End of the service period this charge covers.
+          format: date-time
+          type: string
+        credits:
+          description: |-
+            How much of this charge was covered by credit, as a decimal string.
+
+            It is the answer to "I have a balance, why am I still being charged". Without it the
+            customer sees a number that disagrees with what they expected and the only thing that
+            explains it is on our side.
+          type: string
+        discounts:
+          description: |-
+            How much was taken off by a discount, as a decimal string. A usage allowance (the first N
+            units free) lands here too.
+          type: string
+        description:
+          description: Free text from the charge, usually empty. Set on charges raised by hand.
+          type: string
       required:
         - id
         - name
         - total
+        - type
+        - period_from
+        - period_to
     ChargeList:
       type: object
       additionalProperties: false
