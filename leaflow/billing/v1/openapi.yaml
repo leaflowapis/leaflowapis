@@ -1408,6 +1408,15 @@ components:
           description: When this offer stops being purchasable. Absent means it does not expire
           type: string
           format: date-time
+        plan_key:
+          description: |-
+            The plan this offer sells, matching `plan_key` on the subscription. Present on offers
+            that sell a plan.
+
+            It is here so the pricing page can mark the tier the account is already on. Without it
+            the current tier looks like every other one, and the obvious thing to do — buy it — is
+            refused as a switch to the same plan
+          type: string
         pricing:
           description: Present on offers that sell a plan
           $ref: '#/components/schemas/Pricing'
