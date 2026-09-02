@@ -1384,13 +1384,43 @@ components:
           type: string
         unpriced:
           description: |-
-            Keys that were given a usage but have no rate card on this plan.
+            The usages that have no rate card on this plan.
 
             **Reported rather than ignored**, because ignoring them yields a smaller but entirely
             normal-looking number — and that is the most expensive misconfiguration there is: usage
-            lands, the usage chart shows it, and the bill has no line for it
+            lands, the usage chart shows it, and the bill has no line for it.
+
+            ## Each entry carries the caller's own naming, not only the key
+
+            A meter key is a hash, and callers are told not to compute it (see `QuoteUsage`). An answer
+            that named the unpriced usages by key alone was therefore unusable whenever more than one
+            usage was priced at a time: the caller could see that something was unsold but not which of
+            the things it asked about. That is the case a catalogue page needs — pricing thirty machine
+            types in one call and marking the ones this plan does not sell — so the answer echoes the
+            `service` and `product_id` that were given
           type: array
           items:
+            $ref: '#/components/schemas/UnpricedUsage'
+    UnpricedUsage:
+      description: One usage that has no rate card on the plan it was priced against.
+      type: object
+      additionalProperties: false
+      required:
+        - key
+      properties:
+        key:
+          description: The meter key this usage resolved to
+          type: string
+        service:
+          description: Echoed from the request when the usage was named by service and product
+          type: string
+        product_id:
+          description: Echoed from the request when the usage was named by service and product
+          type: string
+        variant:
+          description: Echoed from the request
+          type: object
+          additionalProperties:
             type: string
     PlanChangeTiming:
       description: |-
