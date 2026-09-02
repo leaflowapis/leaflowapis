@@ -2550,6 +2550,15 @@ components:
             still being served until then, and this can still be undone — unlike a scheduled
             downgrade
           type: boolean
+        is_default_plan:
+          description: |-
+            True when this is the free tier every account starts on.
+
+            Coming off it is not a thing that can happen: cancelling puts the account back on it, so
+            offering that as an action is at best a no-op and at worst a gap — between the period
+            ending and the sweep putting the tier back, the account has no plan at all and admission
+            refuses it. A console reads this to leave the action out.
+          type: boolean
       required:
         - id
         - plan_key
