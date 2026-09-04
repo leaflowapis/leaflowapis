@@ -3548,6 +3548,24 @@ components:
     LaunchInstanceRequestBody:
       additionalProperties: false
       properties:
+        assign_public_ip:
+          description: |-
+            Give this instance a public address, as part of creating it.
+
+            The address is on the same order as the instance and its system disk — one purchase with
+            one total — and the three are created together or not at all: if anything fails, the
+            address goes back to the pool and the instance is not created. Asking for the address
+            separately afterwards is still possible, but then the two are separate purchases and a
+            failure in between leaves an instance you cannot reach.
+
+            The address is always billed by the hour, even when the instance is bought outright for a
+            term: a public IPv4 is a scarce resource the platform keeps holding for as long as you
+            have it, so it is not something that can be paid for once.
+
+            Rejected together with `port_id` when that interface already has a floating IP: an
+            interface carries one IPv4, and one IPv4 takes one floating IP. Attach another interface
+            to hold a second address.
+          type: boolean
         count:
           description: Number of instances to create; 1 when omitted. Names are numbered automatically for several
           format: int64
@@ -3617,9 +3635,13 @@ components:
             refused — it is never quietly sold by the hour instead, because the customer who asked for
             a year would find out only from the bill.
 
-            The system disk is bought for the same term: it is the same purchase, and one order cannot
-            be half outright and half hourly. A term is therefore refused together with `boot_disk_id`,
-            where the disk already exists and is already billed its own way.
+            The system disk is bought for the same term, because it is the same purchase: an instance
+            bought for a year whose disk is billed hourly is a bill nobody would predict from what they
+            clicked. A term is therefore refused together with `boot_disk_id`, where the disk already
+            exists and is already billed its own way.
+
+            A public address asked for with `assign_public_ip` stays hourly regardless — it cannot be
+            bought outright — so one order can carry both.
 
             When the term runs out the instance is stopped, not deleted, and starts again once it is
             renewed. Renewal lives in the billing console, across every product, because what a
