@@ -235,6 +235,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /account/v1/billing-accounts/{accountKey}/balance/movement:
+    get:
+      summary: How the balance moved this month
+      description: |-
+        Opening balance, money in, money out, closing balance — for the current calendar month.
+
+        **The four add up**: `closing = opening + income - spending`. That is the point of the
+        endpoint. The balance alone answers "how much is left" and cannot answer "how did it get
+        there", which is what somebody watching their balance shrink is actually asking. Four
+        figures that add up can be checked by the holder; a single figure can only be taken on
+        faith or queried with support.
+
+        `closing` is computed from the other three rather than read separately. Reading the current
+        balance for it would leave the equation off by whatever was booked between the two reads —
+        and an equation that is off by a few cents is worse than no equation, because it puts the
+        ledger itself in doubt.
+
+        The window is the **calendar** month, not the engine's billing period. This is the month a
+        person means when they say "this month"; the billing anchor is an internal recurrence that
+        happens to line up.
+
+        A month with no movement reports opening equal to closing and zero on both sides — not all
+        zeroes, which would read as "your money is gone".
+      operationId: read-billing-account-balance-movement
+      tags:
+        - BillingAccount
+      parameters:
+        - $ref: '#/components/parameters/AccountKey'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceMovement'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /account/v1/billing-accounts/{accountKey}/projects/{projectId}:
     put:
       summary: Make this account pay for a project
@@ -1668,6 +1709,52 @@ components:
         - placed_by
         - state
         - created_at
+    BalanceMovement:
+      type: object
+      additionalProperties: false
+      properties:
+        currency:
+          $ref: '#/components/schemas/Currency'
+        from:
+          description: Start of the window — the first instant of the current calendar month, UTC.
+          format: date-time
+          type: string
+        to:
+          description: End of the window, which is **now** rather than the month's end. The month is not over.
+          format: date-time
+          type: string
+        opening:
+          description: |-
+            The balance when the window opened, as a decimal string.
+
+            Taken from the earliest transaction in the window rather than read separately: every
+            transaction carries the balance before and after it, so this figure and the totals below
+            come from one read of one ledger and therefore agree.
+          type: string
+        income:
+          description: What came in — top-ups and credit issued by operations. Never negative.
+          type: string
+        spending:
+          description: |-
+            What went out — consumption and expiry. **Never negative**: the direction is in the
+            name, not in the sign. Signed, a client would have to handle both `-20` and `20` meaning
+            the same thing.
+          type: string
+        closing:
+          description: '`opening + income - spending`. Computed, not read separately — see the endpoint.'
+          type: string
+        present:
+          description: False when this account has no balance record in this currency at all, which is not the same as a zero balance.
+          type: boolean
+      required:
+        - currency
+        - from
+        - to
+        - opening
+        - income
+        - spending
+        - closing
+        - present
     OrderLine:
       type: object
       additionalProperties: false
