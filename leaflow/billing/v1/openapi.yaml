@@ -1630,9 +1630,16 @@ components:
         currency:
           type: string
         payment_state:
-          description: Always `none` on a metered order.
+          description: |-
+            Always `none` on a metered order.
+
+            `pending` is an order paid for online whose money has not arrived yet: the checkout
+            session is open and nothing has been created. It was missing from this enum while the
+            column had it and the handler passed it through unchanged, so such an order read back
+            a value outside the enum — the one state where the caller most needs to know not to
+            expect the resource yet.
           type: string
-          enum: [none, paid, refunded]
+          enum: [none, pending, paid, refunded]
         created_at:
           format: date-time
           type: string
