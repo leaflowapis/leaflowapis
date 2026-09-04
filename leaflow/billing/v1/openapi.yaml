@@ -1783,6 +1783,22 @@ components:
             Empty on orders placed before this was recorded, and on the rare call that omits it.
             Fall back to `product_id`.
           type: string
+        configuration:
+          description: |-
+            What was configured on this line at the moment of sale, as key–value pairs meant for a
+            person to read.
+
+            **Free-form, not fixed fields.** Every service's products have their own dimensions — a
+            machine has cores and memory, a disk has capacity and medium, an address has bandwidth.
+            Fixed fields would mean adding more of them for every service that comes along, or
+            squeezing one service's answers into another's boxes.
+
+            Do not parse it. The keys are written for the reader, in the reader's language, and they
+            change when the wording changes. Anything a program needs to decide on is in
+            `product_id` and `quantity`.
+          additionalProperties:
+            type: string
+          type: object
         quantity:
           type: integer
           format: int64
