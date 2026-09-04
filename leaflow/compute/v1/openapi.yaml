@@ -3643,6 +3643,28 @@ components:
     LaunchInstanceResponseBody:
       additionalProperties: false
       properties:
+        order_ids:
+          description: |-
+            The orders these instances were bought under, in the same order as `instances`.
+
+            **One per instance, not one per request.** A batch of three places three orders, because
+            each machine is ordered as it is created — stopping halfway leaves the machines already
+            made, and they each have to be paid for. A caller showing "your order" for a batch has to
+            show all of them.
+
+            Empty when the deployment has no billing wired in, and on the `checkout_url` branch where
+            nothing was created yet.
+
+            Given so the caller can point at the transaction. Creating a resource takes money — by
+            the hour from that moment for a metered one, in full from the balance for a prepaid one —
+            and until now the only thing handed back was the resource itself. Somebody asking "why
+            was I charged" had nothing to open.
+          items:
+            format: uuid
+            type: string
+          type:
+            - array
+            - 'null'
         failure:
           description: Non-empty when only some of the instances were created, stating why the sequence stopped
           type:
