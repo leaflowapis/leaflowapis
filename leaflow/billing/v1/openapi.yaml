@@ -1655,7 +1655,10 @@ components:
           format: date-time
           type: string
         lines:
-          description: Only present on the single-order route.
+          description: |-
+            What this order was for. Present on the list route too — an order list that shows only
+            numbers and amounts is a page of identifiers with no content, and recognising one
+            ("which of these was last week's machine") is the reason anyone opens it.
           type: array
           items:
             $ref: '#/components/schemas/OrderLine'
