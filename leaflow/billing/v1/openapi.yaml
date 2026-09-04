@@ -1629,6 +1629,17 @@ components:
           type: string
         currency:
           type: string
+        paid_at:
+          description: |-
+            When the money for this order arrived. Absent on an order nothing was charged for, and on
+            one still waiting to be paid.
+
+            Separate from `created_at` because the two can be far apart: an order paid online is
+            created first and paid whenever the customer gets round to it. Merged into one field,
+            "how long did this sit unpaid" has no answer anywhere — and that is the number chasing
+            payment looks at.
+          format: date-time
+          type: string
         payment_state:
           description: |-
             Always `none` on a metered order.
@@ -1669,15 +1680,54 @@ components:
         product_id:
           description: That service's own catalogue identifier for what was asked for.
           type: string
+        product_name:
+          description: |-
+            What this was called when it was ordered.
+
+            A snapshot, not a lookup. `product_id` is usually a uuid, and an order page that shows it
+            shows a string of hex. Asking the owning service for the name later is worse: it is a
+            cross-service call per row, and by then the product may have been renamed or withdrawn —
+            a bill has to answer "what did I buy", and that answer has to be in the words used at the
+            time.
+
+            Empty on orders placed before this was recorded, and on the rare call that omits it.
+            Fall back to `product_id`.
+          type: string
         quantity:
           type: integer
           format: int64
+        term:
+          description: |-
+            How this line is paid for: empty is by the hour, an ISO 8601 duration (`P1M`, `P1Y`) is
+            bought outright for that long.
+
+            Fixed at the moment of sale. The asset's own term can move afterwards (renewing can
+            change the period); this one cannot, because an order is a transaction that already
+            happened.
+          type: string
+        service_period_from:
+          description: |-
+            Start of the period this line bought. **Absent when billed by the hour** — that has no
+            service period, and filling in "today to today" would state a term that does not exist.
+          format: date-time
+          type: string
+        service_period_to:
+          description: End of the period this line bought. Absent when billed by the hour.
+          format: date-time
+          type: string
+        resource_id:
+          description: |-
+            The resource this line produced, in the owning service's own identifiers. Absent until
+            that service reports it back, which is also the moment the line starts being billed.
+          type: string
       required:
         - id
         - action
         - service
         - product_id
+        - product_name
         - quantity
+        - term
     PrepaidAsset:
       type: object
       additionalProperties: false
