@@ -3497,6 +3497,15 @@ components:
             they are the only two values a renewal moves.
           type: string
           enum: [postpaid, prepaid]
+        billing_order_id:
+          description: |-
+            The order this instance was bought under, in billing's own identifiers. Empty when the
+            deployment has no billing wired in.
+
+            Kept so the question can be answered later. "Why was I charged for this" is asked days
+            after the fact, and an order id handed back only in the launch response is one the
+            person who needs it never had.
+          type: string
       required:
         - id
         - name
@@ -3522,6 +3531,7 @@ components:
         - updated_at
         - term
         - charge_type
+        - billing_order_id
       type: object
     InstanceListResponseBody:
       additionalProperties: false
