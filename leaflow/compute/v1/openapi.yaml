@@ -2833,6 +2833,17 @@ components:
             - deleting
             - error
           type: string
+        charge_type:
+          description: |-
+            How this disk is paid for. `postpaid` is billed by the hour for as long as it exists;
+            `prepaid` was bought outright for a term.
+
+            **Not the term.** How long it was bought for belongs to the order, not to the disk:
+            renewing can change it, and a machine bought for a year and then renewed for a month is
+            still a prepaid machine. Ask billing for the term and the expiry — they live there, and
+            they are the only two values a renewal moves.
+          type: string
+          enum: [postpaid, prepaid]
       required:
         - id
         - name
@@ -2845,6 +2856,7 @@ components:
         - attached_instance_id
         - device
         - created_at
+        - charge_type
       type: object
     DiskTypeResource:
       additionalProperties: false
@@ -2877,6 +2889,50 @@ components:
           type: integer
         throughput_display:
           type: string
+        sold_out:
+          description: |-
+            Whether any capacity is left in this type's pool.
+
+            The same shape as on an instance type, but it answers less here: a disk is sold by the
+            GiB, so "not sold out" does not mean the size being asked for fits. `remaining` is the
+            field that decides that, and this one only says whether the pool is empty outright.
+
+            It reflects a limit set by operations, not what the storage backend physically has —
+            raising the limit does not create capacity, and a type that is not sold out can still fail
+            to create if the backend is full.
+
+            Advisory: it is read when the list is built, and capacity can be taken between that read
+            and the order. The order is what actually refuses.
+          type: boolean
+        remaining:
+          description: |-
+            How much capacity is left, **in GiB**. Absent when this type is not limited at all.
+
+            Unlike an instance type, where this is a count of machines, here it is an amount of
+            storage — and it is the number that bounds the size a customer may ask for. A picker that
+            offers sizes above it produces orders that are refused after the customer has chosen
+            everything else.
+
+            Absent is not zero and not "unknown": a type with no limit simply has no number to show.
+            Reporting it as a number would need a sentinel, and any sentinel eventually gets compared
+            against a real size.
+          format: int64
+          type: integer
+        prepaid_prices:
+          description: |-
+            What buying this type outright costs, per term. Empty means this type is only sold by the
+            hour.
+
+            **The amount is per GiB for the whole term**, not the price of one disk: a disk's size is
+            chosen by the customer, so the total is this figure times the size. That differs from an
+            instance type, where the same field is the price of one machine — the unit follows what
+            the product is sold by, and the order is priced the same way.
+
+            Advisory, like `sold_out`: it is read when the list is built. The order is what fixes the
+            price, and it refuses rather than falling back to hourly if the term is not sold.
+          type: array
+          items:
+            $ref: '#/components/schemas/PrepaidPrice'
       required:
         - id
         - name
@@ -2888,6 +2944,7 @@ components:
         - step_gb
         - iops_display
         - throughput_display
+        - sold_out
       type: object
     DiskTypeListResponseBody:
       additionalProperties: false
@@ -3415,6 +3472,17 @@ components:
         updated_at:
           format: date-time
           type: string
+        charge_type:
+          description: |-
+            How this instance is paid for. `postpaid` is billed by the hour for as long as it exists;
+            `prepaid` was bought outright for a term.
+
+            **Not the term.** How long it was bought for belongs to the order, not to the instance:
+            renewing can change it, and a machine bought for a year and then renewed for a month is
+            still a prepaid machine. Ask billing for the term and the expiry — they live there, and
+            they are the only two values a renewal moves.
+          type: string
+          enum: [postpaid, prepaid]
       required:
         - id
         - name
@@ -3438,6 +3506,8 @@ components:
         - suspended_at
         - created_at
         - updated_at
+        - term
+        - charge_type
       type: object
     InstanceListResponseBody:
       additionalProperties: false
