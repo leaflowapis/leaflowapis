@@ -3342,11 +3342,26 @@ components:
           description: The address to allocate. Allocated by the platform when omitted
           maxLength: 64
           type: string
+        bandwidth_mbps:
+          description: |-
+            The bandwidth ceiling of this address, in Mbit/s, applied to both directions.
+
+            Required, and there is no "unlimited": an address with no ceiling runs at line rate and is
+            charged nothing for the traffic, while the address itself bills normally — so the invoice
+            looks correct and nothing anywhere reports it.
+
+            It is billed separately from the address, per Mbit/s-hour, and appears as its own line on
+            the order. Changing it later goes through the bandwidth endpoint.
+          format: int64
+          maximum: 1000
+          minimum: 1
+          type: integer
         private_network_id:
           format: uuid
           type: string
       required:
         - private_network_id
+        - bandwidth_mbps
       type: object
     SetBandwidthRequestBody:
       additionalProperties: false
@@ -3548,24 +3563,36 @@ components:
     LaunchInstanceRequestBody:
       additionalProperties: false
       properties:
-        assign_public_ip:
+        bandwidth_mbps:
           description: |-
-            Give this instance a public address, as part of creating it.
+            Give this instance a public address with this much bandwidth, in Mbit/s. Omitted or 0 means
+            no public address.
 
-            The address is on the same order as the instance and its system disk — one purchase with
-            one total — and the three are created together or not at all: if anything fails, the
-            address goes back to the pool and the instance is not created. Asking for the address
-            separately afterwards is still possible, but then the two are separate purchases and a
-            failure in between leaves an instance you cannot reach.
+            The bandwidth is what says whether an address is wanted, rather than a separate flag,
+            because an address with no ceiling would run at line rate and be charged nothing for the
+            traffic — while the address itself bills normally and the invoice looks correct.
 
-            The address is always billed by the hour, even when the instance is bought outright for a
-            term: a public IPv4 is a scarce resource the platform keeps holding for as long as you
-            have it, so it is not something that can be paid for once.
+            The address and its bandwidth are two lines on the same order as the instance and its
+            system disk — one purchase with one total — and everything is created together or not at
+            all: if any step fails, the address goes back to the pool and no instance is created.
+            Asking for an address separately afterwards is still possible, but then they are separate
+            purchases, and a failure in between leaves an instance you cannot reach.
+
+            Both lines are always billed by the hour, even when the instance is bought outright for a
+            term: a public IPv4 is a scarce resource the platform keeps holding for as long as you have
+            it, so it is not something that can be paid for once.
+
+            Which address you get is not a choice here. Use the floating IP endpoints to claim a
+            particular address and bind it, which is what getting a known address back after a
+            migration needs.
 
             Rejected together with `port_id` when that interface already has a floating IP: an
-            interface carries one IPv4, and one IPv4 takes one floating IP. Attach another interface
-            to hold a second address.
-          type: boolean
+            interface carries one IPv4, and one IPv4 takes one floating IP. Attach another interface to
+            hold a second address.
+          format: int64
+          maximum: 1000
+          minimum: 0
+          type: integer
         count:
           description: Number of instances to create; 1 when omitted. Names are numbered automatically for several
           format: int64
