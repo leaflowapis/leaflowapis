@@ -320,8 +320,8 @@ paths:
         look at in exactly the case someone wants to look: a resource was asked for, was not
         delivered, and the question is what happened.
 
-        The list carries no lines. An order has only a handful, but shipping them on every page
-        means carrying data no column shows.
+        Lines come with each order. A list showing only identifiers and amounts is a page nobody can
+        read — recognising one ("which of these was last week's machine") is why it gets opened.
       operationId: list-orders
       tags:
         - BillingAccount
@@ -346,8 +346,8 @@ paths:
     get:
       summary: One order, with its lines
       description: |-
-        Each line names what was asked for and how much of it. This is the only route that carries
-        them.
+        Each line names what was asked for, how much of it, and what it produced. The list route
+        carries lines too; this one exists for a permanent link to a single transaction.
       operationId: get-order
       tags:
         - BillingAccount
