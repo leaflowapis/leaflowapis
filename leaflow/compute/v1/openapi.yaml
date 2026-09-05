@@ -3195,6 +3195,17 @@ components:
     CreateDiskRequestBody:
       additionalProperties: false
       properties:
+        idempotency_key:
+          description: |-
+            "This is the same click". Generate one when the dialog opens — not when it is submitted —
+            and send the same one on every retry of that action.
+
+            Optional, and what happens without it is worth knowing: two identical requests inside the
+            same minute are treated as one, because there is nothing else to tell a double-click apart
+            from a deliberate second order. Sending your own key removes that guess entirely.
+          type: string
+          minLength: 8
+          maxLength: 255
         disk_type_id:
           description: A disk type currently on sale. A withdrawn one is rejected even though its identifier still resolves
           format: uuid
@@ -3563,6 +3574,17 @@ components:
     LaunchInstanceRequestBody:
       additionalProperties: false
       properties:
+        idempotency_key:
+          description: |-
+            "This is the same click". Generate one when the dialog opens — not when it is submitted —
+            and send the same one on every retry of that action.
+
+            Optional, and what happens without it is worth knowing: two identical requests inside the
+            same minute are treated as one, because there is nothing else to tell a double-click apart
+            from a deliberate second order. Sending your own key removes that guess entirely.
+          type: string
+          minLength: 8
+          maxLength: 255
         floating_ip_id:
           description: |-
             Bind a floating IP you already hold, instead of allocating a new one. It must be idle and in
