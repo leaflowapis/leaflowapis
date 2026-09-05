@@ -1328,6 +1328,100 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /account/v1/billing-accounts/{accountKey}/promotion-codes/preview:
+    post:
+      summary: See what a code takes off before committing
+      description: |-
+        Runs the same checks and the same arithmetic that placing the order will run, so the price
+        shown here and the price charged agree. Writing the calculation twice — once for the page and
+        once for the order — means they drift, and the visible form of that drift is a page saying
+        "20 off" while the full amount is taken.
+
+        Nothing is redeemed. The allowance is only consumed when the order is actually placed.
+
+        A code that cannot be used is rejected here with the reason, so the user learns it before
+        filling in the rest of the form rather than at the moment they press buy.
+
+        **Metered orders are rejected.** They have no amount at this point — the money is worked out
+        later from usage. Applying a discount to a nil amount leaves the user believing they saved
+        something while the bill is unchanged.
+      operationId: preview-promotion-code
+      tags:
+        - BillingAccount
+      parameters:
+        - $ref: '#/components/parameters/AccountKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreviewPromotionCodeRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromotionPreview'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/v1/billing-accounts/{accountKey}/vouchers:
+    get:
+      summary: List this account's vouchers
+      description: |-
+        Credit received from campaigns, most recent first. Not the credit ledger — this says which
+        campaign each amount came from, which is the question "where did this 50 come from" that the
+        ledger cannot answer.
+      operationId: list-account-vouchers
+      tags:
+        - BillingAccount
+      parameters:
+        - $ref: '#/components/parameters/AccountKey'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VoucherList'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/v1/billing-accounts/{accountKey}/refunds:
+    get:
+      summary: List this account's refunds
+      description: |-
+        Each refund carries how it was split. A customer asking "I was refunded 100, why is only 60
+        back on my card" is answered here and nowhere else.
+      operationId: list-account-refunds
+      tags:
+        - BillingAccount
+      parameters:
+        - $ref: '#/components/parameters/AccountKey'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountRefundList'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
 components:
   securitySchemes:
     bearerAuth:
@@ -2960,3 +3054,188 @@ components:
       pattern: ^[A-Z]{3}$
       minLength: 3
       maxLength: 3
+    PreviewPromotionCodeRequestBody:
+      type: object
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Case and surrounding whitespace do not matter.
+        project_id:
+          type: string
+          format: uuid
+          description: Which project the order will be placed against — the price depends on its plan.
+        lines:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/PromotionPreviewLine'
+          description: |-
+            The same lines the order will carry. The discount is computed over the ones in scope,
+            not the whole order, so leaving lines out changes the answer.
+      required:
+        - code
+        - project_id
+        - lines
+    PromotionPreviewLine:
+      type: object
+      description: |-
+        One line of the order being previewed. Only what pricing and scope need — this is not the
+        order itself, and carrying the whole order here would mean two places that have to agree on
+        what an order looks like.
+      properties:
+        service:
+          type: string
+          maxLength: 64
+        product_id:
+          type: string
+          maxLength: 128
+        term:
+          type: string
+          maxLength: 32
+          description: |-
+            ISO 8601 duration for a prepaid line. Empty means metered, and a metered line
+            contributes nothing to the discount — it has no amount at this point.
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+      required:
+        - service
+        - product_id
+    PromotionPreview:
+      type: object
+      properties:
+        code:
+          type: string
+          description: The code as stored, upper-cased.
+        name:
+          type: string
+          description: The campaign's name, to show next to the price.
+        kind:
+          type: string
+          enum: [voucher, discount]
+        benefit_amount:
+          type: string
+          description: How much comes off this order, or how much credit is granted.
+        discount_base:
+          type: string
+          description: |-
+            The part of the order the discount applies to. Shown so "why did only 12 come off a 200
+            order" has an answer on the page rather than in a support ticket.
+        original_amount:
+          type: string
+        payable_amount:
+          type: string
+          description: What will actually be charged. This is the number to show as the price.
+        currency:
+          type: string
+      required:
+        - code
+        - kind
+        - benefit_amount
+        - original_amount
+        - payable_amount
+        - currency
+    Voucher:
+      type: object
+      properties:
+        redemption_id:
+          type: string
+          format: uuid
+        promotion_key:
+          type: string
+        name:
+          type: string
+        amount:
+          type: string
+        currency:
+          type: string
+        granted_at:
+          type: string
+          format: date-time
+      required:
+        - redemption_id
+        - promotion_key
+        - amount
+        - currency
+        - granted_at
+    VoucherList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Voucher'
+        total_count:
+          type: integer
+      required:
+        - items
+    AccountRefund:
+      type: object
+      properties:
+        refund_id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+          nullable: true
+        total_amount:
+          type: string
+        currency:
+          type: string
+        state:
+          type: string
+          enum: [pending, settled, partial]
+          description: |-
+            `partial` means some of it is back and some is not. Showing it as "refunded" would have
+            the customer looking for money that has not moved.
+        legs:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountRefundLeg'
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - refund_id
+        - total_amount
+        - currency
+        - state
+        - legs
+        - created_at
+    AccountRefundLeg:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [cash, voucher, balance]
+        amount:
+          type: string
+        currency:
+          type: string
+        state:
+          type: string
+          enum: [pending, done, failed]
+        settled_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - kind
+        - amount
+        - currency
+        - state
+    AccountRefundList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccountRefund'
+        total_count:
+          type: integer
+      required:
+        - items
