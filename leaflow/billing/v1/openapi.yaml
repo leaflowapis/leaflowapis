@@ -1196,16 +1196,19 @@ paths:
       description: |-
         Everything this account holds on a term, across every product.
 
-        ## Nothing here expires on its own
+        ## Every one of these expires
 
-        A term renews for as long as the seat is held: the engine charges the next period, prorates
-        any change to the second, and stops the moment the seat is given up. So there is no renewal
-        to remember and no expiry to warn about — giving it up means deleting the resource, in the
-        console that owns it.
+        A term is paid for once, up front, and buys exactly the period named by `term`. Nothing
+        renews it on its own: `expires_at` is when it runs out, and after that the machine is
+        stopped and — once the retention window is over — released.
 
-        What the next period costs and when it falls due is on the charges route. That is read
-        straight from the engine rather than copied here, because a copy is a second answer that
-        drifts without saying so.
+        This route used to say the opposite. It described an engine that charged the next period by
+        itself for as long as the seat was held, which is how this worked before the money became a
+        single up-front charge. Reading the old text, a customer would have had no reason to renew
+        anything, and the first sign of trouble would have been a stopped machine.
+
+        Turn on `auto_renew` to have billing place the renewal order itself while there is balance
+        to pay for it. That is the only thing that makes a term continue.
 
         ## Metered resources are not here
 
@@ -1231,6 +1234,94 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PrepaidAssetList'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/v1/billing-accounts/{accountKey}/prepaid-assets/{assetId}/renew:
+    post:
+      summary: Buy another period
+      description: |-
+        Extends a term by one more period, paid for out of the account's balance right now.
+
+        **The new expiry is the old one plus the term, not now plus the term.** Renewing three days
+        early would otherwise throw those three days away, and renewing after the expiry would
+        quietly reward the delay. Neither shows up as an error — the date on the account looks
+        self-consistent either way, and only the customer notices.
+
+        `term` does not have to match what was bought originally: a monthly machine can be renewed
+        for a year.
+
+        Refused when the balance does not cover it. The alternative — placing the order and letting
+        the account go negative — turns a renewal the customer chose into a debt they did not.
+      operationId: renew-prepaid-asset
+      tags:
+        - Prepaid
+      parameters:
+        - $ref: '#/components/parameters/AccountKey'
+        - name: assetId
+          in: path
+          required: true
+          description: Which asset, from the prepaid list
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenewRequestBody'
+      responses:
+        '200':
+          description: Renewed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrepaidAsset'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /account/v1/billing-accounts/{accountKey}/prepaid-assets/{assetId}/auto-renew:
+    put:
+      summary: Turn automatic renewal on or off
+      description: |-
+        With it on, billing places the renewal order itself a few days before the period runs out,
+        paying from the account's balance.
+
+        **Not enough balance is not an error here.** The switch only says what to attempt; whether
+        the money is there is settled at renewal time, and the customer is told either way — told it
+        renewed, or told it could not and by when it will expire.
+      operationId: set-prepaid-auto-renew
+      tags:
+        - Prepaid
+      parameters:
+        - $ref: '#/components/parameters/AccountKey'
+        - name: assetId
+          in: path
+          required: true
+          description: Which asset, from the prepaid list
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoRenewRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrepaidAsset'
         default:
           description: Error
           content:
@@ -1861,11 +1952,30 @@ components:
           description: |-
             How long one period buys, as an ISO 8601 duration (P1M, P1Y).
 
-            There is no expiry to report. The engine keeps renewing this for as long as the seat is
-            held, so what runs out is not the term but the customer's decision to keep it. What the
-            next period costs, and when it is charged, is on the charges route — that is the engine's
-            own answer rather than a copy of it.
+            It is paid for once at purchase. Read it next to `expires_at`, which is when the period
+            actually runs out — the two are settled when the order is placed and neither moves on
+            its own.
           type: string
+        expires_at:
+          description: |-
+            When the paid-for period runs out.
+
+            Settled when the order is placed, not when the resource lands, so a purchase paid for
+            online does not get a longer period by being paid later.
+
+            Absent means it was never settled — a row that has not finished being created. It is not
+            "does not expire": everything on this route does.
+          type: string
+          format: date-time
+        auto_renew:
+          description: |-
+            Whether billing places the renewal order itself as the period runs out.
+
+            Off by default, and deliberately so: renewing charges the account, and a charge nobody
+            asked for is worse than an expiry that was warned about. With it on, the renewal is
+            placed only while there is balance to pay for it — when there is not, the customer is
+            told rather than put into debt.
+          type: boolean
         state:
           type: string
           enum: [pending, active, suspended, terminated]
@@ -1882,6 +1992,7 @@ components:
         - product_id
         - quantity
         - term
+        - auto_renew
         - state
         - desired_state
     PrepaidAssetList:
@@ -1924,6 +2035,14 @@ components:
       required:
         - term
         - idempotency_key
+    AutoRenewRequestBody:
+      type: object
+      additionalProperties: false
+      properties:
+        auto_renew:
+          type: boolean
+      required:
+        - auto_renew
     OrderList:
       type: object
       additionalProperties: false
