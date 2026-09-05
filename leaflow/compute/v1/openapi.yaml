@@ -3195,6 +3195,22 @@ components:
     CreateDiskRequestBody:
       additionalProperties: false
       properties:
+        promotion_code:
+          description: |-
+            A promotion code to apply to this order. Case and surrounding whitespace do not matter.
+
+            An unusable code is rejected outright rather than quietly ignored: somebody who typed a
+            code is buying at the discounted price, and letting it through silently means they pay
+            full price expecting the discount, with nothing anywhere saying so.
+
+            The discount applies to the lines the campaign covers, not the whole order — typically
+            the instance type and memory, not the system disk, the address, or traffic. Preview it
+            first at `POST /account/v1/billing-accounts/{accountKey}/promotion-codes/preview` to
+            show the customer what will actually be charged.
+
+            Metered orders reject any code: there is no amount to discount at this point.
+          type: string
+          maxLength: 64
         idempotency_key:
           description: |-
             "This is the same click". Generate one when the dialog opens — not when it is submitted —
@@ -3574,6 +3590,22 @@ components:
     LaunchInstanceRequestBody:
       additionalProperties: false
       properties:
+        promotion_code:
+          description: |-
+            A promotion code to apply to this order. Case and surrounding whitespace do not matter.
+
+            An unusable code is rejected outright rather than quietly ignored: somebody who typed a
+            code is buying at the discounted price, and letting it through silently means they pay
+            full price expecting the discount, with nothing anywhere saying so.
+
+            The discount applies to the lines the campaign covers, not the whole order — typically
+            the instance type and memory, not the system disk, the address, or traffic. Preview it
+            first at `POST /account/v1/billing-accounts/{accountKey}/promotion-codes/preview` to
+            show the customer what will actually be charged.
+
+            Metered orders reject any code: there is no amount to discount at this point.
+          type: string
+          maxLength: 64
         idempotency_key:
           description: |-
             "This is the same click". Generate one when the dialog opens — not when it is submitted —
