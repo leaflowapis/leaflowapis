@@ -1,0 +1,32 @@
+openapi: 3.1.0
+info:
+  title: Leaflow shared types — order handle
+  version: v1
+  description: |-
+    The handle a service returns after creating a billable order. Types only; this document
+    declares no operations.
+paths: {}
+components:
+  schemas:
+    PlacedOrder:
+      type: object
+      additionalProperties: false
+      required:
+        - order_id
+      description: |-
+        A billable order has been created. Read it from the billing API to find out what is
+        owed and whether payment is still required.
+
+        Only the identifier is returned. Amounts and state are not repeated here; the order
+        itself is the single source for them.
+      properties:
+        order_id:
+          type: string
+          format: uuid
+          description: |-
+            Identifies the order. Use it to read the order and, where payment is required,
+            to pay it.
+
+            An order is created even when nothing is owed, such as a plan with no charge or one
+            covered entirely by granted credit. Such an order is already settled, and no
+            payment step applies.
