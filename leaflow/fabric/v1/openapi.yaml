@@ -423,8 +423,8 @@ paths:
                 $ref: '#/components/schemas/Error'
     post:
       summary: Create a private network
-      description: Creates a network, a router and a default security group in one call. The default security group
-        denies all inbound traffic and permits all outbound traffic.
+      description: Starts creation of a network, router and default security group. The returned resource is
+        `provisioning` until all three are ready. Reuse the same idempotency key after an uncertain response.
       operationId: create-private-network
       tags:
         - PrivateNetwork
@@ -1672,8 +1672,10 @@ components:
           type: string
           format: uuid
         status:
+          description: '`provisioning` means provider resources are still being created.'
           type: string
           enum:
+            - provisioning
             - available
             - error
         updated_at:
@@ -1725,6 +1727,11 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+        idempotency_key:
+          description: Reuse this key only when retrying the same private network request.
+          type: string
+          minLength: 8
+          maxLength: 128
         region_id:
           type: string
           format: uuid
@@ -1732,6 +1739,7 @@ components:
         - name
         - region_id
         - cidr
+        - idempotency_key
       additionalProperties: false
     RenamePrivateNetworkRequestBody:
       type: object
