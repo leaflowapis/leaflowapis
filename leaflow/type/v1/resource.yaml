@@ -58,7 +58,8 @@ components:
           minimum: 1
         operation_id:
           type: string
-          format: uuid
+          minLength: 1
+          maxLength: 128
         created_at:
           type: string
           format: date-time
