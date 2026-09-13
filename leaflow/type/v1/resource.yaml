@@ -174,22 +174,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResourceUsage'
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
+        pagination:
+          $ref: ./pagination.yaml#/components/schemas/OffsetPagination
       required:
         - items
-        - page
-        - page_size
+        - pagination
       additionalProperties: false
     ResourceDependencyList:
       type: object
@@ -198,22 +187,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResourceDependency'
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
+        pagination:
+          $ref: ./pagination.yaml#/components/schemas/OffsetPagination
       required:
         - items
-        - page
-        - page_size
+        - pagination
       additionalProperties: false
     Attachment:
       type: object
@@ -269,20 +247,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Attachment'
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
+        pagination:
+          $ref: ./pagination.yaml#/components/schemas/OffsetPagination
       required:
         - items
-        - page
-        - page_size
+        - pagination
       additionalProperties: false
