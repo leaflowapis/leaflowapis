@@ -3,9 +3,10 @@ info:
   title: Leaflow Fabric API
   version: 2.0.0
   description: Fabric resource management. Each request requires an IAM scoped token. The current project comes
-    only from that token. Resource changes are asynchronous; read the resource or Billing order to observe completion.
-    Released tenant resources are retained as history. Location fields contain Fleet IDs. Capacity, upstream quota,
-    unknown capacity and Billing sellable quota failures have distinct error codes.
+    only from that token. Private Network creation returns only when the network is ready to use. Floating IP purchases
+    return a Billing order and complete after payment. Released tenant resources are retained as history. Location fields
+    contain Fleet IDs. Capacity, upstream quota, unknown capacity and Billing sellable quota failures have distinct
+    error codes.
 servers:
   - url: https://fabric.leaflow.cloud
 security:
