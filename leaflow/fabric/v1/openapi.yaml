@@ -423,8 +423,9 @@ paths:
                 $ref: '#/components/schemas/Error'
     post:
       summary: Create a private network
-      description: Starts creation of a network, router and default security group. The returned resource is
-        `provisioning` until all three are ready. Reuse the same idempotency key after an uncertain response.
+      description: Creates a ready-to-use private network. The response is returned only after the network is ready
+        for use. If the client loses the response, repeat this request with the same idempotency key to obtain its
+        final result.
       operationId: create-private-network
       tags:
         - PrivateNetwork
@@ -1671,13 +1672,6 @@ components:
         region_id:
           type: string
           format: uuid
-        status:
-          description: '`provisioning` means provider resources are still being created.'
-          type: string
-          enum:
-            - provisioning
-            - available
-            - error
         updated_at:
           type: string
           format: date-time
@@ -1686,7 +1680,6 @@ components:
         - name
         - region_id
         - cidr
-        - status
         - has_internet_gateway
         - created_at
         - updated_at
