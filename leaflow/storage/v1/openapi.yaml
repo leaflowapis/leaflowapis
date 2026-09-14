@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Leaflow Storage API
-  version: 3.0.0
+  version: 4.0.0
   description: Manages block disks in the current IAM project. A disk purchase creates a Billing order; payment and provisioning continue asynchronously. Location identifiers are owned by Fleet.
 servers:
   - url: https://storage.leaflow.cloud
@@ -340,7 +340,7 @@ components:
     DiskType:
       type: object
       additionalProperties: false
-      required: [id, lookup_key, name, media, region_id, availability_zone_id, min_size_gb, max_size_gb, step_gb, for_system, billing_plan_id]
+      required: [id, lookup_key, name, media, region_id, availability_zone_id, min_size_gb, max_size_gb, step_gb, for_system, product_id, plan_id]
       properties:
         id: {type: string, format: uuid}
         lookup_key: {type: string}
@@ -352,7 +352,8 @@ components:
         max_size_gb: {type: integer, format: int64, minimum: 1}
         step_gb: {type: integer, format: int64, minimum: 1}
         for_system: {type: boolean}
-        billing_plan_id: {type: string, format: uuid}
+        product_id: {type: string, format: uuid}
+        plan_id: {type: string, format: uuid}
     DiskTypeList:
       type: object
       additionalProperties: false
