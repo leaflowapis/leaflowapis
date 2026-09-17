@@ -147,7 +147,7 @@ paths:
   /catalog/v1/products:
     get:
       summary: List catalog products
-      operationId: list-catalog-products
+      operationId: list-products
       tags:
         - catalog
       security: []
@@ -168,7 +168,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CatalogProductList"
+                $ref: "#/components/schemas/ProductList"
         "304":
           $ref: "#/components/responses/NotModified"
         default:
@@ -178,7 +178,7 @@ paths:
       - $ref: "#/components/parameters/ProductId"
     get:
       summary: List catalog plans
-      operationId: list-catalog-plans
+      operationId: list-plans
       tags:
         - catalog
       security: []
@@ -199,7 +199,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CatalogPlanList"
+                $ref: "#/components/schemas/PlanList"
         "304":
           $ref: "#/components/responses/NotModified"
         default:
@@ -212,7 +212,7 @@ paths:
       description: |-
         Public list prices only. An account holding a negotiated agreement may be charged less;
         it is never charged more.
-      operationId: list-catalog-prices
+      operationId: list-prices
       tags:
         - catalog
       security: []
@@ -238,7 +238,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CatalogPriceList"
+                $ref: "#/components/schemas/PriceList"
         "304":
           $ref: "#/components/responses/NotModified"
         default:
@@ -251,7 +251,7 @@ paths:
       description: |-
         Only public price lists are readable here. A list written for a single agreement is not,
         and its identifier cannot be used to reach it.
-      operationId: list-catalog-rates
+      operationId: list-rates
       tags:
         - catalog
       security: []
@@ -287,7 +287,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CatalogRateList"
+                $ref: "#/components/schemas/RateList"
         "304":
           $ref: "#/components/responses/NotModified"
         default:
@@ -2187,7 +2187,7 @@ components:
         resources. Concurrent orders or callbacks may change the result; execution must close admission and recheck.
     Error:
       $ref: ../../type/v1/error.yaml#/components/schemas/Error
-    CatalogProduct:
+    Product:
       type: object
       properties:
         id:
@@ -2204,19 +2204,19 @@ components:
       required:
         - id
         - name
-    CatalogProductList:
+    ProductList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/CatalogProduct"
+            $ref: "#/components/schemas/Product"
         total_count:
           type: integer
           format: int64
       required:
         - items
-    CatalogPlan:
+    Plan:
       type: object
       properties:
         id:
@@ -2237,19 +2237,19 @@ components:
         - id
         - product_id
         - name
-    CatalogPlanList:
+    PlanList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/CatalogPlan"
+            $ref: "#/components/schemas/Plan"
         total_count:
           type: integer
           format: int64
       required:
         - items
-    CatalogPrice:
+    Price:
       type: object
       properties:
         termination_policy:
@@ -2358,19 +2358,19 @@ components:
         - currency
         - type
         - billing_scheme
-    CatalogPriceList:
+    PriceList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/CatalogPrice"
+            $ref: "#/components/schemas/Price"
         total_count:
           type: integer
           format: int64
       required:
         - items
-    CatalogRate:
+    Rate:
       type: object
       properties:
         meter:
@@ -2421,13 +2421,13 @@ components:
         - pricing_model
         - currency
         - effective_from
-    CatalogRateList:
+    RateList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/CatalogRate"
+            $ref: "#/components/schemas/Rate"
         total_count:
           type: integer
           format: int64
