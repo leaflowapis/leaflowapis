@@ -5538,7 +5538,6 @@ components:
     OrderOptions:
       $ref: ../../type/v1/order.yaml#/components/schemas/OrderOptions
       required: []
-      required: []
     PlacedOrder:
       $ref: ../../type/v1/order.yaml#/components/schemas/PlacedOrder
       required: []
