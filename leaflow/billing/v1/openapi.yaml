@@ -3542,6 +3542,13 @@ components:
         - payout
         - adjustment
     Transaction:
+      description: |-
+        A batch of money that has arrived in the account, and how much of it is still unspent.
+
+        It says nothing about how the money got here — that is a top-up, which carries the gateway,
+        the checkout and the outcome. One top-up settles into one batch.
+
+        Only settled money is here. Something still waiting on a gateway is a pending top-up.
       type: object
       properties:
         id:
@@ -3553,48 +3560,22 @@ components:
         type:
           $ref: "#/components/schemas/TransactionType"
         amount:
-          description: Signed. Positive increases the balance, negative reduces
-            it.
+          description: Signed. Positive adds to the balance, negative takes from it.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        remaining_amount:
+          description: How much of this batch has not been spent yet. Zero on negative batches.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
         reason:
-          description: Why the money moved, on a manual adjustment.
           type: string
-        invoice_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        order_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        status:
-          description: |-
-            `pending` is a payment still with the gateway. Only one may be pending against any
-            one invoice or order.
-
-            `failed` covers a payment the gateway refused and one the payer walked away from
-            alike; `failure_reason` says which. There is no separate cancelled state, because
-            what to do next is the same either way — start a new one.
-          type: string
-          enum:
-            - pending
-            - succeeded
-            - failed
         created_at:
           type: string
           format: date-time
-      required:
-        - id
-        - type
-        - amount
-        - currency
-        - status
-        - created_at
+      required: [id, type, amount, remaining_amount, currency, created_at]
+      additionalProperties: false
     TransactionList:
       type: object
       properties:
