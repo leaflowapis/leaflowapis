@@ -4489,7 +4489,9 @@ components:
           type: string
           format: uuid
         name:
-          $ref: ../../type/v1/translations.yaml#/components/schemas/Text
+          type: string
+        name_translations:
+          $ref: ../../type/v1/translations.yaml#/components/schemas/Translations
         percent_off:
           description: 'For a percentage discount, out of one hundred.'
           type: string
