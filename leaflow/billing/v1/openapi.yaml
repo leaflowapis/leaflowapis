@@ -3780,7 +3780,7 @@ components:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
-        destination:
+        cash_destination:
           description: Where the cash went.
           type: string
           enum:
@@ -3849,7 +3849,7 @@ components:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
-        destination:
+        cash_destination:
           description: |-
             Where the cash part would go. `gateway` returns it to the method it was paid
             with; `balance` credits the account instead, which is the answer whenever the cash
@@ -3880,7 +3880,7 @@ components:
       required:
         - refundable_amount
         - currency
-        - destination
+        - cash_destination
         - sources
     UsageCharge:
       type: object
