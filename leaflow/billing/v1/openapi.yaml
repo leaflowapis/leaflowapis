@@ -2844,20 +2844,18 @@ components:
             though no invoice exists for it yet.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        credit:
-          description: Granted credit. Spendable, but not withdrawable.
-          allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        voucher:
-          description: Voucher balance, spendable within each voucher's own
-            scope.
+        granted:
+          description: |-
+            Granted funds still unspent, vouchers included. Spendable within whatever each grant
+            covers, and never withdrawable. Individual grants are listed separately, which is
+            where a single voucher's remaining amount is read.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         spendable:
           description: |-
             `cash` less `accrued` and `held` — what is actually available at checkout. It goes
-            negative when usage has exceeded the balance. Credit and vouchers are shown
-            separately because each can only pay for what it covers.
+            negative when usage has exceeded the balance. Granted funds are shown separately
+            because each grant can only pay for what it covers.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
       required:
@@ -2866,8 +2864,7 @@ components:
         - cash
         - held
         - accrued
-        - credit
-        - voucher
+        - granted
         - spendable
     ProjectBinding:
       type: object
