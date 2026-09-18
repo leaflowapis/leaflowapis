@@ -895,10 +895,11 @@ paths:
         entered. A coupon reached through a code is not listed here.
       operationId: list-account-discounts
       tags:
-        - funds
+        - billing-history
       parameters:
         - $ref: "#/components/parameters/Page"
         - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/AccountIdQuery"
       responses:
         "200":
           description: OK
