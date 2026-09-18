@@ -144,6 +144,56 @@ paths:
                 $ref: "#/components/schemas/ProjectClosurePreview"
         default:
           $ref: "#/components/responses/Error"
+  /catalog/v1/items:
+    get:
+      summary: List what is on sale, with prices
+      description: |-
+        Every sellable thing and what it costs, in one request. A plan appears once per price.
+
+        `currency` is required: a plan has a price in each currency it is sold in, so "what does
+        this cost" has no answer without one.
+
+        Retired prices are left out. Existing subscriptions still reference them, so this is not
+        the place to look up what an existing purchase is paying.
+      operationId: list-catalog-items
+      tags:
+        - catalog
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/IfNoneMatch"
+        - name: currency
+          in: query
+          required: true
+          description: ISO 4217, three uppercase letters.
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 3
+        - name: product_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: type
+          in: query
+          required: false
+          description: Narrows to one payment timing.
+          schema:
+            type: string
+            enum: [metered, prepaid, one_time]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogItemList"
+        "304":
+          description: Not Modified
+        default:
+          $ref: "#/components/responses/Error"
   /catalog/v1/products:
     get:
       summary: List catalog products
@@ -171,6 +221,93 @@ paths:
                 $ref: "#/components/schemas/ProductList"
         "304":
           $ref: "#/components/responses/NotModified"
+        default:
+          $ref: "#/components/responses/Error"
+  /catalog/v1/products/{productId}:
+    parameters:
+      - name: productId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get a service
+      description: |-
+        Resolves an identifier that was stored elsewhere — on an order line, an invoice line, or
+        the terms of a credit — into something that can be displayed.
+      operationId: get-catalog-product
+      tags:
+        - catalog
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "304":
+          description: Not Modified
+        default:
+          $ref: "#/components/responses/Error"
+  /catalog/v1/plans/{planId}:
+    parameters:
+      - name: planId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get a sellable item
+      description: |-
+        Resolves a stored identifier into something that can be displayed. Returns items that are
+        no longer on sale: an existing purchase still refers to one.
+      operationId: get-catalog-plan
+      tags:
+        - catalog
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Plan"
+        "304":
+          description: Not Modified
+        default:
+          $ref: "#/components/responses/Error"
+  /catalog/v1/prices/{priceId}:
+    parameters:
+      - name: priceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get a price
+      description: |-
+        Returns retired prices. An existing subscription still bills at the price it was bought
+        at, so this is how to show what that purchase is paying.
+      operationId: get-catalog-price
+      tags:
+        - catalog
+      parameters:
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Price"
+        "304":
+          description: Not Modified
         default:
           $ref: "#/components/responses/Error"
   /catalog/v1/products/{productId}/plans:
@@ -2206,6 +2343,40 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Product"
+        total_count:
+          type: integer
+          format: int64
+      required:
+        - items
+    CatalogItem:
+      description: |-
+        One sellable thing at one price: the plan, and the price it is sold at in the currency
+        you asked for.
+
+        Listing plans and then asking for each plan's prices returns the same information, but
+        one request per plan. This flattens the two levels, so that a price list renders from a
+        single request.
+
+        A plan appears once per price, so a plan sold monthly and yearly appears twice.
+      type: object
+      properties:
+        product:
+          $ref: "#/components/schemas/ObjectIdentity"
+        plan:
+          $ref: "#/components/schemas/ObjectIdentity"
+        price:
+          $ref: "#/components/schemas/Price"
+      required:
+        - product
+        - plan
+        - price
+    CatalogItemList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CatalogItem"
         total_count:
           type: integer
           format: int64
@@ -4532,6 +4703,53 @@ components:
           format: int64
       required:
         - items
+    ScopeEntry:
+      description: |-
+        One catalogue entry named by a scope, with the name to show for it.
+
+        `excluded` marks an entry the scope rules out: it never qualifies, even when another
+        field includes it.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        name_translations:
+          $ref: ../../type/v1/translations.yaml#/components/schemas/Translations
+        excluded:
+          type: boolean
+      required:
+        - id
+        - excluded
+    ScopePriceEntry:
+      description: |-
+        One price named by a scope. Prices have no name, so the terms are given instead —
+        a scope limited to a price is usually limiting to one billing period.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        type:
+          type: string
+          enum: [metered, prepaid, one_time]
+        period:
+          type: string
+          enum: [none, day, month, year]
+        term:
+          description: How many periods one purchase covers.
+          type: integer
+        unit_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        excluded:
+          type: boolean
+      required:
+        - id
+        - excluded
     Applicability:
       description: |-
         What something may be used for. A field that is absent places no restriction on that
@@ -4540,39 +4758,22 @@ components:
         A line qualifies when it satisfies every field that is set. `min_amount` is then
         measured against **the qualifying lines only**, not the order total.
 
-        An entry listed under `excluded_*` never qualifies, even when another field includes it.
+        Entries carry the name to show for them, so that what a credit covers can be displayed
+        without looking each one up.
       type: object
       properties:
-        product_ids:
+        products:
           type: array
           items:
-            type: string
-            format: uuid
-        excluded_product_ids:
+            $ref: "#/components/schemas/ScopeEntry"
+        plans:
           type: array
           items:
-            type: string
-            format: uuid
-        plan_ids:
+            $ref: "#/components/schemas/ScopeEntry"
+        prices:
           type: array
           items:
-            type: string
-            format: uuid
-        excluded_plan_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        price_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
-        excluded_price_ids:
-          type: array
-          items:
-            type: string
-            format: uuid
+            $ref: "#/components/schemas/ScopePriceEntry"
         price_types:
           type: array
           items:
@@ -4585,7 +4786,11 @@ components:
           description: Restricted to your first purchase of a covered product.
           type: boolean
         min_amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: |-
+            The threshold, measured against the qualifying lines. In the currency of whatever
+            carries these terms.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         min_term_months:
           description: |-
             The shortest term a purchase may have, in months. A purchase with no term, such as
