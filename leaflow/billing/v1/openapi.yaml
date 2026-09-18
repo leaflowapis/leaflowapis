@@ -887,6 +887,27 @@ paths:
                 $ref: "#/components/schemas/TransactionList"
         default:
           $ref: "#/components/responses/Error"
+  /account/v1/discounts:
+    get:
+      summary: List the coupons held on this account
+      description: |-
+        Coupons placed on the account directly, which apply at checkout without a code being
+        entered. A coupon reached through a code is not listed here.
+      operationId: list-account-discounts
+      tags:
+        - funds
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscountList"
+        default:
+          $ref: "#/components/responses/Error"
   /account/v1/credit-grants:
     get:
       summary: List credit grants
@@ -3590,9 +3611,6 @@ components:
             anything on the account.
           allOf:
             - $ref: "#/components/schemas/Applicability"
-        applies_to_summary:
-          description: The restrictions in one sentence, ready to display.
-          type: string
         status:
           type: string
           enum:
@@ -4463,6 +4481,54 @@ components:
         - renew
         - upgrade
         - downgrade
+    Discount:
+      description: A coupon held on this account. It applies at checkout without a code.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          $ref: ../../type/v1/translations.yaml#/components/schemas/Text
+        percent_off:
+          description: 'For a percentage discount, out of one hundred.'
+          type: string
+        amount_off:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        max_discount:
+          description: Caps a percentage discount.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        currency:
+          type: string
+        applies_to:
+          description: |-
+            What it may be used for. Absent means it applies to anything on the account,
+            including setup fees and traffic.
+          allOf:
+            - $ref: "#/components/schemas/Applicability"
+        started_at:
+          type: string
+          format: date-time
+        ended_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - id
+    DiscountList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Discount"
+        total_count:
+          type: integer
+          format: int64
+      required:
+        - items
     Applicability:
       description: |-
         What something may be used for. A field that is absent places no restriction on that
