@@ -156,6 +156,7 @@ paths:
         Retired prices are left out. Existing subscriptions still reference them, so this is not
         the place to look up what an existing purchase is paying.
       operationId: list-catalog-items
+      security: []
       tags:
         - catalog
       parameters:
@@ -237,6 +238,7 @@ paths:
         Resolves an identifier that was stored elsewhere — on an order line, an invoice line, or
         the terms of a credit — into something that can be displayed.
       operationId: get-catalog-product
+      security: []
       tags:
         - catalog
       parameters:
@@ -266,6 +268,7 @@ paths:
         Resolves a stored identifier into something that can be displayed. Returns items that are
         no longer on sale: an existing purchase still refers to one.
       operationId: get-catalog-plan
+      security: []
       tags:
         - catalog
       parameters:
@@ -295,6 +298,7 @@ paths:
         Returns retired prices. An existing subscription still bills at the price it was bought
         at, so this is how to show what that purchase is paying.
       operationId: get-catalog-price
+      security: []
       tags:
         - catalog
       parameters:
