@@ -2108,7 +2108,7 @@ components:
             - order
             - subscription_item
             - active_resource
-            - resource_operation
+            - job
             - subscription_cancellation
             - usage_charge
             - commitment
