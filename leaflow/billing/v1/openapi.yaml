@@ -4428,6 +4428,9 @@ components:
         `operation_not_covered` means the code is limited to certain purchase actions — a
         first-purchase code presented for a renewal, for example.
 
+        `term_not_covered` means the code is limited to certain term lengths. A purchase with
+        no term, such as metered usage, is reported the same way.
+
         `below_minimum` is accompanied by `shortfall`.
       type: string
       enum:
@@ -4440,8 +4443,10 @@ components:
         - currency_mismatch
         - product_not_covered
         - plan_not_covered
+        - price_not_covered
         - price_type_not_covered
         - operation_not_covered
+        - term_not_covered
         - not_first_purchase
         - below_minimum
     PurchaseOperation:
@@ -4465,6 +4470,8 @@ components:
 
         A line qualifies when it satisfies every field that is set. `min_amount` is then
         measured against **the qualifying lines only**, not the order total.
+
+        An entry listed under `excluded_*` never qualifies, even when another field includes it.
       type: object
       properties:
         product_ids:
@@ -4472,7 +4479,27 @@ components:
           items:
             type: string
             format: uuid
+        excluded_product_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
         plan_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        excluded_plan_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        price_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        excluded_price_ids:
           type: array
           items:
             type: string
@@ -4490,6 +4517,14 @@ components:
           type: boolean
         min_amount:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        min_term_months:
+          description: |-
+            The shortest term a purchase may have, in months. A purchase with no term, such as
+            metered usage, never qualifies while this is set.
+          type: integer
+        max_term_months:
+          description: The longest term a purchase may have, in months.
+          type: integer
     Tier:
       type: object
       properties:
