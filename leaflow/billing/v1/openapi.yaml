@@ -1193,33 +1193,6 @@ paths:
                 $ref: "#/components/schemas/CodePreview"
         default:
           $ref: "#/components/responses/Error"
-  /account/v1/codes/redeem:
-    post:
-      summary: Redeem code
-      description: |-
-        A voucher code adds credit to the account. A discount code records the entitlement, which
-        is then applied to the next qualifying purchase.
-
-        A code that has already been redeemed by this account is refused rather than redeemed a
-        second time.
-      operationId: redeem-code
-      tags:
-        - promotions
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CodeRedeem"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CodeRedeemResult"
-        default:
-          $ref: "#/components/responses/Error"
   /api/v1/projects/{projectId}/billing-account:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
@@ -4392,15 +4365,10 @@ components:
           type: boolean
         reason:
           $ref: "#/components/schemas/CodeRejection"
-        type:
-          type: string
-          enum:
-            - voucher
-            - discount
         name:
           type: string
         amount:
-          description: For a voucher, the amount it adds.
+          description: For a fixed-amount discount.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         percent_off:
@@ -4453,7 +4421,6 @@ components:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
       required:
         - valid
-        - type
     CodeRejection:
       description: |-
         Why a code cannot be used. `none` when it can.
@@ -4523,50 +4490,6 @@ components:
           type: boolean
         min_amount:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
-    CodeRedeem:
-      type: object
-      properties:
-        billing_account_id:
-          type: integer
-          format: int64
-        code:
-          type: string
-          minLength: 1
-          maxLength: 64
-        idempotency_key:
-          type: string
-          minLength: 1
-          maxLength: 255
-      required:
-        - billing_account_id
-        - code
-        - idempotency_key
-      additionalProperties: false
-    CodeRedeemResult:
-      type: object
-      properties:
-        type:
-          type: string
-          enum:
-            - voucher
-            - discount
-        credit_grant_id:
-          description: For a voucher, the credit that was added.
-          type:
-            - string
-            - "null"
-          format: uuid
-        amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        currency:
-          type: string
-        message:
-          description: |-
-            For a discount, what will happen — it is applied to the next qualifying purchase
-            rather than added to the balance.
-          type: string
-      required:
-        - type
     Tier:
       type: object
       properties:
