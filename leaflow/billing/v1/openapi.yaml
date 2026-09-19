@@ -1047,54 +1047,6 @@ paths:
                 $ref: "#/components/schemas/CreditGrantList"
         default:
           $ref: "#/components/responses/Error"
-  /account/v1/allocations:
-    get:
-      summary: List allocations
-      description: |-
-        Give `source_id` to follow one top-up or grant through to everything it paid for. Give
-        `target_id` to see which sources paid for one line of an invoice.
-
-        Give `source_type` on its own to separate what cash paid for from what granted credit
-        paid for.
-      operationId: list-allocations
-      tags:
-        - billing-history
-      parameters:
-        - $ref: "#/components/parameters/Page"
-        - $ref: "#/components/parameters/PageSize"
-        - $ref: "#/components/parameters/AccountIdQuery"
-        - name: source_type
-          in: query
-          required: false
-          description:
-            "`transaction` is money paid in, `credit_grant` is granted credit
-            or a voucher."
-          schema:
-            type: string
-            enum:
-              - transaction
-              - credit_grant
-        - name: source_id
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
-        - name: target_id
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AllocationList"
-        default:
-          $ref: "#/components/responses/Error"
   /account/v1/refunds:
     get:
       summary: List refunds
@@ -2859,13 +2811,9 @@ components:
           format: int64
         currency:
           type: string
-        cash:
+        balance:
           description: Funds paid in and not yet spent. This is the part that
-            can be refunded.
-          allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        held:
-          description: Reserved by orders that have not completed.
+            can be refunded. It goes negative when the account owes.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         accrued:
@@ -2874,7 +2822,7 @@ components:
             though no invoice exists for it yet.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        granted:
+        credits:
           description: |-
             Granted funds still unspent, vouchers included. Spendable within whatever each grant
             covers, and never withdrawable. Individual grants are listed separately, which is
@@ -2883,18 +2831,17 @@ components:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         spendable:
           description: |-
-            `cash` less `accrued` and `held` — what is actually available at checkout. It goes
-            negative when usage has exceeded the balance. Granted funds are shown separately
-            because each grant can only pay for what it covers.
+            `balance` less `accrued` — what is actually available at checkout. It goes negative
+            when usage has exceeded the balance. Credits are shown separately because each grant
+            can only pay for what it covers.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
       required:
         - billing_account_id
         - currency
-        - cash
-        - held
+        - balance
         - accrued
-        - granted
+        - credits
         - spendable
     ProjectBinding:
       type: object
@@ -3560,8 +3507,8 @@ components:
       description: |-
         What moved the money. These are the events that change the account's cash balance.
 
-        Charges for usage and amounts reserved by orders are not here: usage appears among the
-        charges and on invoices, and a reservation appears as an allocation.
+        Charges for usage are not here: they appear among the charges and on invoices. Nor is
+        what an order drew from the balance — the order itself records that.
       type: string
       enum:
         - topup
@@ -3677,62 +3624,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CreditGrant"
-        total_count:
-          type: integer
-          format: int64
-      required:
-        - items
-    Allocation:
-      type: object
-      properties:
-        id:
-          type: string
-          format: uuid
-        source_type:
-          type: string
-          enum:
-            - transaction
-            - credit_grant
-        source_id:
-          type: string
-          format: uuid
-        target_type:
-          type: string
-          enum:
-            - hold
-            - order_item
-            - invoice_item
-        target_id:
-          type: string
-          format: uuid
-        amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        currency:
-          type: string
-        allocated_at:
-          type: string
-          format: date-time
-        reversed_at:
-          type:
-            - string
-            - "null"
-          format: date-time
-      required:
-        - id
-        - source_type
-        - source_id
-        - target_type
-        - target_id
-        - amount
-        - currency
-        - allocated_at
-    AllocationList:
-      type: object
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Allocation"
         total_count:
           type: integer
           format: int64
