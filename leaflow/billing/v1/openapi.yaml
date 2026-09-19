@@ -1277,6 +1277,35 @@ paths:
                 $ref: "#/components/schemas/SubscriptionItemList"
         default:
           $ref: "#/components/responses/Error"
+  /account/v1/subscription-items/{itemId}/renewal-prices:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: List the terms this item can be renewed for
+      description: |-
+        Every term on offer with what it costs, in one request: a renewal form needs the whole
+        ladder to render, and asking once per term is a request per row.
+
+        Prices agreed for this account are reflected. The term this item already bills at is
+        marked `current`: renewing for it is not affected by a later price change, while any
+        other term is bought at today's price.
+      operationId: list-renewal-prices
+      tags:
+        - subscriptions
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenewalPriceList"
+        default:
+          $ref: "#/components/responses/Error"
   /account/v1/subscription-items/{itemId}/renew:
     parameters:
       - $ref: "#/components/parameters/ItemId"
@@ -4288,14 +4317,72 @@ components:
           format: int64
       required:
         - items
+    RenewalPrice:
+      type: object
+      properties:
+        price_id:
+          type: string
+          format: uuid
+        term:
+          description: How many periods one renewal covers.
+          type: integer
+        period:
+          type: string
+          enum: [day, month, year]
+        amount:
+          description: What renewing for this term costs, for the quantity held.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        currency:
+          type: string
+        current:
+          description: |-
+            The term this item already bills at. Renewing for it uses the price bought
+            originally, so a later price change does not affect it.
+          type: boolean
+      required:
+        - price_id
+        - term
+        - period
+        - current
+    RenewalPriceList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RenewalPrice"
+      required:
+        - items
     RenewRequest:
       type: object
       properties:
         periods:
-          description: How many further periods to buy.
+          description: |-
+            How many further periods to buy, each at the price this item already bills at.
+
+            Buying twelve monthly periods is not the same as buying one yearly term: a longer
+            term is usually sold at a lower price, and that price is only reached by naming the
+            term. Use `term` and `period` for that.
           type: integer
           default: 1
           minimum: 1
+        term:
+          description: |-
+            Renew for a term of this length instead, at the price currently sold for it. Give
+            `period` with it.
+
+            Leaving both out renews at the price this item already bills at, which a later price
+            change does not affect. Naming a term that differs from the current one is a fresh
+            choice, so it is bought at today's price. Naming the current term changes nothing.
+
+            List the terms on offer with the renewal prices operation.
+          type: integer
+          minimum: 1
+        period:
+          description: The unit `term` counts in.
+          type: string
+          enum: [day, month, year]
         payment_method_id:
           type: string
           format: uuid
