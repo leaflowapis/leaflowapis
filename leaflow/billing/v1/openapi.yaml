@@ -27,41 +27,6 @@ tags:
   - name: projects
     description: What one project has spent, and who pays for it.
 paths:
-  /account/v1/commitments:
-    get:
-      operationId: ListCommitments
-      summary: List account commercial commitments
-      tags:
-        - contracts
-      parameters:
-        - in: query
-          name: billing_account_id
-          required: true
-          schema:
-            type: integer
-            minimum: 1
-        - in: query
-          name: page
-          schema:
-            type: integer
-            minimum: 1
-        - in: query
-          name: page_size
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-      responses:
-        "200":
-          description: Commitments including original payment schedules.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CommitmentList"
-        default:
-          $ref: "#/components/responses/Error"
-      security:
-        - accountAuth: []
   /api/v1/projects/{projectId}/closure-preview:
     get:
       summary: Preview project closure
@@ -2052,139 +2017,6 @@ components:
     projectAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
   schemas:
-    CommitmentPeriod:
-      type: object
-      required:
-        - id
-        - sequence
-        - period_start
-        - period_end
-        - due_at
-        - amount
-      properties:
-        id:
-          type: string
-          format: uuid
-        sequence:
-          type: integer
-          minimum: 1
-        period_start:
-          type: string
-          format: date-time
-        period_end:
-          type: string
-          format: date-time
-        due_at:
-          type: string
-          format: date-time
-        amount:
-          type: string
-        invoice_item_id:
-          type: string
-          format: uuid
-        finalized_at:
-          type: string
-          format: date-time
-        eligible_amount:
-          type: string
-        amount_due:
-          type: string
-        waived_at:
-          type: string
-          format: date-time
-        waiver_reason:
-          type: string
-    Commitment:
-      type: object
-      required:
-        - id
-        - billing_account_id
-        - currency
-        - type
-        - status
-        - description
-        - terms_reference
-        - effective_from
-        - effective_to
-        - release_policy
-        - periods
-      properties:
-        id:
-          type: string
-          format: uuid
-        billing_account_id:
-          type: integer
-        currency:
-          type: string
-        type:
-          type: string
-          enum:
-            - fixed_amount
-            - minimum_spend
-        status:
-          type: string
-          enum:
-            - draft
-            - active
-            - completed
-            - terminated
-        description:
-          type: string
-        terms_reference:
-          type: string
-        effective_from:
-          type: string
-          format: date-time
-        effective_to:
-          type: string
-          format: date-time
-        release_policy:
-          type: string
-          enum:
-            - retain_until_term
-            - release_with_obligation
-        contract_id:
-          type: string
-          format: uuid
-        origin_order_item_id:
-          type: string
-          format: uuid
-        origin_project_id:
-          type: string
-          format: uuid
-        accepted_at:
-          type: string
-          format: date-time
-        accepted_by:
-          type: string
-        eligibility_policy_version:
-          type: string
-        terminated_at:
-          type: string
-          format: date-time
-        termination_reason:
-          type: string
-        periods:
-          type: array
-          items:
-            $ref: "#/components/schemas/CommitmentPeriod"
-      description:
-        Account-owned commercial obligation. Project removal does not waive
-        payment. Minimum-spend activation requires a defined, reproducible eligibility
-        policy; drafts do not authorize collection.
-    CommitmentList:
-      type: object
-      required:
-        - items
-        - total_count
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/Commitment"
-        total_count:
-          type: integer
-          format: int64
     TerminationPolicy:
       type: string
       enum:
@@ -2276,7 +2108,6 @@ components:
             - job
             - subscription_cancellation
             - usage_charge
-            - commitment
         id:
           type: string
           format: uuid
@@ -2634,7 +2465,7 @@ components:
         - items
     QuoteLine:
       description: |-
-        Identify a price directly, or select a price for a plan. Account quotes apply applicable contract prices.
+        Identify a price directly, or select a price for a plan.
       type: object
       properties:
         price_id:
