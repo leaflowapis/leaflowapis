@@ -372,6 +372,24 @@ paths:
                 $ref: "#/components/schemas/Quote"
         default:
           $ref: "#/components/responses/Error"
+  /account/v1/currencies:
+    get:
+      summary: List currencies accounts can be opened in
+      description: |-
+        The currencies a new billing account can be opened in. A retired currency is not listed,
+        although accounts already opened in it keep working. Not paged: the set is a few rows.
+      operationId: list-currencies
+      tags:
+        - accounts
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrencyList"
+        default:
+          $ref: "#/components/responses/Error"
   /account/v1/billing-accounts:
     get:
       summary: List billing accounts
@@ -1909,6 +1927,39 @@ components:
         - currency
         - status
         - created_at
+    Currency:
+      description: A currency a billing account can be opened in.
+      type: object
+      additionalProperties: false
+      required: [code, exponent, name, minimum_top_up]
+      properties:
+        code:
+          description: ISO 4217 alpha-3, uppercase.
+          type: string
+          minLength: 3
+          maxLength: 3
+        exponent:
+          description: Decimal places of the currency, the ISO 4217 minor unit.
+          type: integer
+          format: int32
+          minimum: 0
+          maximum: 4
+        name:
+          type: string
+          minLength: 1
+          maxLength: 64
+        minimum_top_up:
+          description: The smallest top-up accepted. Zero means no lower bound.
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+    CurrencyList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Currency"
     BillingAccountCreate:
       type: object
       properties:
