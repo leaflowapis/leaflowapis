@@ -19,9 +19,10 @@ jobs:
           python3 - <<'PY'
           import pathlib, sys, yaml
           bad = []
-          specs = sorted(pathlib.Path(".").glob("leaflow/*/*/openapi.yaml"))
+          # 子包比服务多一层：leaflow/<服务>/<子包>/<版本>/openapi.yaml。
+          specs = sorted(pathlib.Path(".").glob("leaflow/**/openapi.yaml"))
           if not specs:
-              sys.exit("一份契约都没有——目录结构应为 leaflow/<服务>/<版本>/openapi.yaml")
+              sys.exit("一份契约都没有——目录结构应为 leaflow/<服务>[/<子包>]/<版本>/openapi.yaml")
           for spec in specs:
               try:
                   doc = yaml.safe_load(spec.read_text(encoding="utf-8"))

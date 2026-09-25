@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
-  title: Leaflow Billing API
-  version: 2.0.0
+  title: Leaflow Billing Project API
+  version: 1.0.0
   description: |-
     What one project has spent and bought, and the billing account linked to it.
 security:
@@ -408,7 +408,7 @@ paths:
 components:
   securitySchemes:
     scopedTokenAuth:
-      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+      $ref: ../../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
   schemas:
     TerminationPolicy:
       type: string
@@ -485,7 +485,7 @@ components:
         A cancellation request for the original purchase. scheduled_at is the intended time; effective_at
         is the confirmed end of service. The request alone does not stop metering or issue a refund.
     Error:
-      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+      $ref: ../../../type/v1/error.yaml#/components/schemas/Error
     Product:
       type: object
       properties:
@@ -612,10 +612,10 @@ components:
       properties:
         tax_amount:
           description: Tax included in the account quote. Absent in public catalogue estimates.
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         tax_included_amount:
           description: Tax already included in the displayed price.
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         index:
           description: Which line of the request this answers.
           type: integer
@@ -655,7 +655,7 @@ components:
         plan_name:
           type: string
         unit_amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         quantity:
           description: |-
             The quantity actually priced. When `duration_seconds` is given, it is the requested
@@ -664,7 +664,7 @@ components:
         amount:
           description: Not rounded. Round only for display.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
       required:
@@ -701,25 +701,25 @@ components:
             subscription already carries is reflected here. Contains tax only where the price
             itself includes it.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         discount_amount:
           description: The reduction from a discount the account holds.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         tax_amount:
           description: Tax on the discounted amount.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         tax_included_amount:
           description: The part of `tax_amount` already contained in `amount`.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         total:
           description: |-
             What renewing would charge: `amount` less `discount_amount`, plus `tax_amount`, less
             `tax_included_amount`.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
       required:
         - index
         - subscription_id
@@ -752,7 +752,7 @@ components:
             total that silently left the unpriced lines out would read as a smaller bill rather than
             an incomplete one — the per-line `priced` flag is easy to skip, a missing total is not.
           oneOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
             - type: "null"
         currency:
           type: string
@@ -782,7 +782,7 @@ components:
             it is what will be available at checkout rather than the balance shown in the
             billing centre. It goes negative when usage has exceeded the balance.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         status:
           description: |-
             `active` — nothing is owed. `past_due` — the account owes money and resources are
@@ -865,9 +865,9 @@ components:
             covered.
           type: string
         unit_amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
         invoice_id:
@@ -910,7 +910,7 @@ components:
           description: Present only when grouped by resource.
           type: string
         amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
       required:
@@ -927,7 +927,7 @@ components:
           description: The sum over the whole period, not only the page
             returned.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
         total_count:
@@ -1338,13 +1338,13 @@ components:
         quantity:
           type: string
         unit_amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         gross_amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         discount_amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         amount:
-          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
         period_start:

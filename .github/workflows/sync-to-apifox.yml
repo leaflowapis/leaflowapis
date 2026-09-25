@@ -68,7 +68,11 @@ jobs:
           trap 'rm -rf "${tmp_dir}"' EXIT
 
           while IFS= read -r spec; do
-            service="$(cut -d/ -f2 <<<"${spec}")"
+            # leaflow/<service>[/<subpackage>]/<version>/openapi.yaml. The subpackage is part of
+            # the name: billing/catalog and billing/account are separate contracts, and a name
+            # cut at the first segment would give both the same temporary files.
+            service="$(dirname "$(dirname "${spec#leaflow/}")")"
+            service="${service//\//-}"
             project_name="$(
               awk '
                 /^info:[[:space:]]*$/ { in_info = 1; next }
@@ -153,4 +157,4 @@ jobs:
               .data.counters
               | "Synced endpoints: created=\(.endpointCreated // 0), updated=\(.endpointUpdated // 0), failed=\(.endpointFailed // 0); schemas: created=\(.schemaCreated // 0), updated=\(.schemaUpdated // 0), failed=\(.schemaFailed // 0)"
             ' "${response_file}"
-          done < <(find leaflow -mindepth 3 -maxdepth 3 -name openapi.yaml -print | sort)
+          done < <(find leaflow -mindepth 3 -maxdepth 4 -name openapi.yaml -print | sort)
