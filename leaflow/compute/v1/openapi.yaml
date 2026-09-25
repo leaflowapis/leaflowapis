@@ -286,8 +286,9 @@ paths:
   /api/v1/disk-types:
     get:
       summary: List disk types on sale
-      description: Only disk types currently on sale are listed. A withdrawn one disappears from here and can no
-        longer be bought, while the disks already on it keep working and can still be resized.
+      description: 'Only disk types currently on sale are listed, both system disk types and data disk types;
+        `for_system` narrows the list to one of the two. A withdrawn one disappears from here and can no longer be
+        bought, while the disks already on it keep working and can still be resized.'
       operationId: list-disk-types
       tags:
       - Catalog
@@ -299,6 +300,13 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: for_system
+        in: query
+        required: false
+        description: '`true` lists only system disk types and `false` only data disk types. Both are listed when
+          omitted.'
+        schema:
+          type: boolean
       responses:
         '200':
           description: OK
@@ -3775,7 +3783,8 @@ components:
       properties:
         disk_type_id:
           description: May differ from the availability zone of the source disk, but must be in the same region.
-            It has to be on sale — restoring creates a new disk, so a withdrawn type is rejected here as well
+            It has to be a data disk type on sale — restoring creates a new data disk, so a withdrawn type or a
+            system disk type is rejected here as well
           type: string
           format: uuid
           maxLength: 64
@@ -3928,6 +3937,11 @@ components:
         id:
           type: string
           format: uuid
+        for_system:
+          description: 'True for a system disk type, the one chosen as `boot_disk.disk_type_id` when creating an
+            instance from an image. A system disk type cannot be used to create a data disk, and a data disk type
+            cannot be used for a system disk.'
+          type: boolean
         iops_at_min_size:
           description: 'IOPS a disk of `min_size_gb` gets. Null when this type is not rate-limited.
 
@@ -4016,6 +4030,7 @@ components:
       - id
       - name
       - media
+      - for_system
       - region_id
       - availability_zone_id
       - min_size_gb
@@ -4292,8 +4307,8 @@ components:
       type: object
       properties:
         disk_type_id:
-          description: A disk type currently on sale. A withdrawn one is rejected even though its identifier still
-            resolves
+          description: A data disk type currently on sale, one whose `for_system` is false. A withdrawn one is
+            rejected even though its identifier still resolves
           type: string
           format: uuid
           maxLength: 64
@@ -6015,6 +6030,8 @@ components:
       type: object
       properties:
         disk_type_id:
+          description: A system disk type on sale in the availability zone of the instance, one whose `for_system`
+            is true
           type: string
           format: uuid
         size_gb:
