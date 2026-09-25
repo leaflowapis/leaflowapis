@@ -492,6 +492,28 @@ paths:
                 $ref: "#/components/schemas/AccountBalance"
         default:
           $ref: "#/components/responses/Error"
+  /account/v1/billing-accounts/{accountId}/payment-options:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+    get:
+      summary: List payment options
+      description: |-
+        Lists the payment gateways and methods that currently accept payment in this account's currency, the
+        preferred gateway first. Top-ups and invoice payments must name a gateway and method listed here;
+        others are refused. An empty list means no online payment is available for this account. Not paged: the
+        set is a few rows.
+      operationId: list-payment-options
+      tags:
+        - payments
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentOptionList"
+        default:
+          $ref: "#/components/responses/Error"
   /account/v1/projects:
     get:
       summary: List projects linked to billing accounts
@@ -590,7 +612,9 @@ paths:
   /account/v1/top-ups:
     get:
       summary: List top ups
-      description: Lists only the authenticated user's top-ups. Includes pending and failed attempts; no invoice is created for a top-up.
+      description: |-
+        Lists only the authenticated user's top-ups. Includes pending, failed and canceled attempts; no invoice is
+        created for a top-up. Items carry no `action`; read a pending top-up with get-top-up to continue its payment.
       operationId: list-top-ups
       tags:
         - payments
@@ -641,7 +665,13 @@ paths:
           format: uuid
     get:
       summary: Get top up
-      description: Reads a top-up owned by the authenticated user, including its outcome and the part of it not yet spent. It is not an invoice.
+      description: |-
+        Reads a top-up owned by the authenticated user, including its outcome and the part of it not yet spent.
+        It is not an invoice.
+
+        While the top-up is pending, the answer includes the customer's next step as the payment gateway
+        currently reports it, so that a payment interrupted by a closed page can be continued. When the gateway
+        cannot be reached, the top-up is returned without `action`; read it again later.
       operationId: get-top-up
       tags:
         - payments
@@ -652,6 +682,46 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TopUp"
+        default:
+          $ref: "#/components/responses/Error"
+  /account/v1/top-ups/{topUpId}/cancel:
+    parameters:
+      - name: topUpId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Cancel top up
+      description: |-
+        Withdraws a pending top-up owned by the authenticated user at the payment gateway. It becomes
+        `canceled` with `cancellation_reason` `requested_by_customer`, and no money is collected for it. Canceling a
+        top-up that is already canceled returns it unchanged.
+
+        If the gateway has already collected the payment, nothing is withdrawn and the top-up is returned
+        as `succeeded` with the balance increased. Check `status` in the answer rather than assuming the
+        cancellation took effect.
+
+        Fails with 409 and BILLING_TOPUP_NOT_CANCELABLE when the top-up has already succeeded or failed,
+        with `status` naming that outcome, and while the gateway is processing the payment and can no
+        longer withdraw it, with `status` set to `pending`; read the top-up again later in that case.
+      operationId: cancel-top-up
+      tags:
+        - payments
+      responses:
+        "200":
+          description: The top-up after the request, canceled or succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopUp"
+        "409":
+          description: The top-up already has another outcome or can no longer be withdrawn.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         default:
           $ref: "#/components/responses/Error"
   /account/v1/payment-methods:
@@ -2158,15 +2228,23 @@ components:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         status:
           description: |-
-            `pending` until the payment gateway confirms. The balance increases on `succeeded`.
+            `pending` until the payment gateway reaches a result. The balance increases on `succeeded`.
 
-            Unknown channel outcomes remain pending. Failed means the channel has confirmed that
-            this attempt did not collect money; a browser redirect is not proof of payment.
+            `failed` means the gateway declined the payment. `canceled` means the attempt was withdrawn
+            without collecting money; `cancellation_reason` says why. Unknown gateway outcomes remain
+            `pending`, and a browser redirect is not proof of payment.
+
+            `failed` and `canceled` are final. If the gateway nevertheless collects payment for such an
+            attempt, the amount is credited as a separate `succeeded` top-up.
           type: string
           enum:
             - pending
             - succeeded
             - failed
+            - canceled
+        cancellation_reason:
+          description: Why the top-up was withdrawn. Present with `canceled`.
+          $ref: '#/components/schemas/PaymentCancellationReason'
         payment_gateway:
           description: Which payment gateway collected it.
           type: string
@@ -2185,10 +2263,13 @@ components:
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         failure_reason:
-          description: Why it did not go through. Present with `failed`.
+          description: Why the gateway declined it. Present with `failed`.
           type: string
         action:
-          description: Present when the original top-up still needs customer interaction. Completing it does not replace confirmation of receipt.
+          description: |-
+            The customer's next step while the top-up is `pending` and the gateway still awaits them. Returned
+            by create-top-up and get-top-up as the gateway currently reports it; absent from list-top-ups and
+            once the top-up has a result. Completing it does not replace confirmation of receipt.
           $ref: '#/components/schemas/PaymentAction'
         created_at:
           type: string
@@ -2273,6 +2354,53 @@ components:
         total_count:
           type: integer
           format: int64
+      required:
+        - items
+    PaymentCancellationReason:
+      description: |-
+        Why a gateway payment was withdrawn. `abandoned` means the customer did not complete it within the time
+        allowed for payment. `requested_by_customer` means the customer canceled it.
+      type: string
+      enum:
+        - abandoned
+        - requested_by_customer
+    PaymentOption:
+      description: A payment gateway that accepts payment in the account's currency, with the methods it accepts.
+      type: object
+      properties:
+        payment_gateway:
+          description: The value to send as `payment_gateway`.
+          type: string
+        methods:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentOptionMethod"
+      required:
+        - payment_gateway
+        - methods
+      additionalProperties: false
+    PaymentOptionMethod:
+      type: object
+      properties:
+        method_type:
+          description: The value to send as `method_type`, such as card, wechat_pay or alipay.
+          type: string
+        reusable:
+          description: |-
+            Whether a method of this type can be saved with create-payment-method-setup and charged later
+            without the customer present. Methods that are not reusable are paid anew each time.
+          type: boolean
+      required:
+        - method_type
+        - reusable
+      additionalProperties: false
+    PaymentOptionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PaymentOption"
       required:
         - items
     PaymentMethod:
@@ -2741,10 +2869,21 @@ components:
         credit_grant:
           $ref: '#/components/schemas/ObjectIdentity'
         refund_id: {type: string, format: uuid}
-        status: {type: string, enum: [pending, succeeded, failed]}
+        status:
+          description: |-
+            `failed` means the operation did not succeed; for a gateway payment, that the gateway declined it.
+            `canceled` means a gateway payment was withdrawn without collecting money; an invoice it was meant
+            to pay remains open for another payment.
+          type: string
+          enum: [pending, succeeded, failed, canceled]
+        cancellation_reason:
+          description: Why the payment was withdrawn. Present with `canceled`.
+          $ref: '#/components/schemas/PaymentCancellationReason'
         payment_gateway: {type: string}
         method_type: {type: string}
-        failure_reason: {type: string}
+        failure_reason:
+          description: Why it failed. Present with `failed`.
+          type: string
         settled_at: {type: string, format: date-time}
         id:
           type: string
