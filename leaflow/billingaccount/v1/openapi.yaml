@@ -30,9 +30,6 @@ tags:
   - name: promotions
     description: |-
       Promotion code terms and purchase applicability previews.
-  - name: projects
-    description: |-
-      Project billing information and commercial requirements before project deletion.
   - name: plans
     description: Sellable plans.
   - name: products
@@ -40,47 +37,6 @@ tags:
   - name: rate-cards
     description: Shared rate cards and pricing rules.
 paths:
-  /account/v1/projects/{projectId}/closure-preview:
-    get:
-      summary: Preview project closure
-      description:
-        Lists outstanding orders, subscriptions, metering and unfinished operations. Reports the next action
-        and timing for each item. This read never performs cleanup or creates a closure request. Charges already
-        incurred remain owed by the billing account that was linked when they occurred and do not prevent closure.
-        Historical invoices and account-level purchases are retained. Billing approval alone does not prove that
-        technical resources are absent.
-      operationId: get-account-project-closure-preview
-      tags:
-        - projects
-      parameters:
-        - name: projectId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-        - name: page
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-      responses:
-        "200":
-          description: Closure assessment
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectClosurePreview"
-        default:
-          $ref: "#/components/responses/Error"
   /api/v1/prices:
     get:
       summary: List what is on sale, with prices
@@ -1489,95 +1445,6 @@ components:
       description:
         A cancellation request for the original purchase. scheduled_at is the intended time; effective_at
         is the confirmed end of service. The request alone does not stop metering or issue a refund.
-    ProjectClosureItem:
-      type: object
-      required:
-        - type
-        - id
-        - disposition
-        - reason_code
-        - actions
-      properties:
-        type:
-          type: string
-          enum:
-            - order
-            - subscription
-            - active_resource
-            - job
-            - cancellation_request
-        id:
-          type: string
-          format: uuid
-        product_id:
-          $ref: '#/components/schemas/ProductID'
-        resource_id:
-          type: string
-        disposition:
-          type: string
-          enum:
-            - action_required
-            - waiting
-            - blocked
-        reason_code:
-          type: string
-        actions:
-          type: array
-          items:
-            type: string
-            enum:
-              - cancel_order
-              - wait
-              - release_resource
-              - cancel_subscription
-              - disable_auto_renew
-              - configure_terms
-              - resolve_failure
-        earliest_termination_at:
-          type: string
-          format: date-time
-        refund_amount:
-          type: string
-          description: Known refund amount as a decimal string. Absent means a separate quote is required, not zero.
-        currency:
-          type: string
-        cancellation:
-          $ref: "#/components/schemas/CancellationRequest"
-      description:
-        One purchase, metered resource or resource operation that has not finished. action_required identifies a
-        supported next step, not authorization to destroy a resource. Items for the same resource must be considered
-        together.
-    ProjectClosurePreview:
-      type: object
-      required:
-        - project_id
-        - evaluated_at
-        - can_close
-        - items
-        - total_count
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        evaluated_at:
-          type: string
-          format: date-time
-        can_close:
-          type: boolean
-          description:
-            True only when the full Billing result, across all pages, has no outstanding items. Technical
-            services must independently confirm that all resources are gone.
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/ProjectClosureItem"
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
-      description:
-        Read-only, paginated assessment. Does not cancel orders, stop renewals, refund payments or release
-        resources. Concurrent orders or callbacks may change the result; execution must close admission and recheck.
     Error:
       $ref: ../../type/v1/error.yaml#/components/schemas/Error
     Product:
