@@ -2126,6 +2126,13 @@ components:
             the account can pay with rather than a withdrawable amount. due is reported separately and is not subtracted.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        restricted_credits:
+          description: |-
+            The part of currently valid credit that only pays for what its restrictions allow, such as a single
+            service, a billing type or a first purchase. The rest of the valid credit pays for anything on the account.
+            Included in credits and therefore in total.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         credit_groups:
           description: |-
             Currently valid, unspent credit grouped by permitted use. Restrictions and
@@ -2147,6 +2154,7 @@ components:
         - balance
         - credits
         - total
+        - restricted_credits
         - credit_groups
         - due
     CreditGroup:
