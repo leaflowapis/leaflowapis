@@ -2119,6 +2119,13 @@ components:
             credits balance does not imply that due is zero.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        total:
+          description: |-
+            balance plus credits, the sum shown as the account's funds. Credits count at their recorded remaining
+            amount, including restricted grants that only pay for what they allow, so total is an upper bound of what
+            the account can pay with rather than a withdrawable amount. due is reported separately and is not subtracted.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         credit_groups:
           description: |-
             Currently valid, unspent credit grouped by permitted use. Restrictions and
@@ -2139,6 +2146,7 @@ components:
         - currency
         - balance
         - credits
+        - total
         - credit_groups
         - due
     CreditGroup:
