@@ -981,7 +981,18 @@ paths:
       - $ref: "#/components/parameters/SubscriptionId"
     post:
       summary: Renew subscription
-      description: Purchases prepaid periods from paid_until using the agreed recurring amount. A changed interval selects a current price and freezes new terms on the order, applied only after fulfillment. Existing paid periods keep their value. Save order_id before submitting and query the order after an unknown outcome; duplicate creation conflicts.
+      description: |-
+        Purchases prepaid periods from paid_until using the agreed recurring amount, and pays for them at
+        once. A changed interval selects a current price and freezes new terms on the order, applied
+        only after fulfillment. Existing paid periods keep their value.
+
+        Without `payment_method_id`, the renewal is paid from credit grants and the balance as
+        `use_credits` and `use_balance` allow; when they cannot pay it all, the renewal is refused with
+        `BILLING_INSUFFICIENT_FUNDS` and no order is left. To pay another way, create a renewal order
+        and pay its invoice instead.
+
+        Save order_id before submitting and query the order after an unknown outcome; duplicate
+        creation conflicts.
       operationId: renew-subscription
       tags:
         - subscriptions
