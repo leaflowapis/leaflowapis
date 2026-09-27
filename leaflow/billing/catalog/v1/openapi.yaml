@@ -399,11 +399,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Product"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Plan:
       type: object
       properties:
@@ -438,11 +438,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Plan"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Price:
       type: object
       properties:
@@ -557,11 +557,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Price"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Rate:
       type: object
       properties:
@@ -620,11 +620,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Rate"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     QuoteLine:
       description: |-
         Identify a price directly, or select a price for a plan. For each resource give its ID or lookup key, never both. Lookup keys require product_id.

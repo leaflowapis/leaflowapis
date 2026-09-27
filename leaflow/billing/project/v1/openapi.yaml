@@ -845,10 +845,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Cancellation"
-        total_count:
-          type: integer
-          format: int64
-      required: [items]
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
+      required:
+        - items
+        - pagination
     CancellationRequest:
       type: object
       required:
@@ -1342,11 +1343,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/UsageCharge"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     SpendRow:
       type: object
       properties:
@@ -1381,13 +1382,13 @@ components:
             - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
         - total
         - currency
+        - pagination
     SubscriptionList:
       type: object
       properties:
@@ -1395,11 +1396,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Subscription"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Subscription:
       type: object
       description: An independently billed purchase. Fixed renewals use the agreed recurring_amount and interval; already paid periods retain their original value. Technical state belongs to the owning service.
@@ -1584,11 +1585,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ActiveResource"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     OrderStatus:
       type: string
       description: |-
@@ -1724,11 +1725,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Order"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     PaidWith:
       type: object
       description: |-
@@ -1870,11 +1871,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OrderItem"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Allowance:
       type: object
       properties:
@@ -1953,11 +1954,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Allowance"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Entitlement:
       type: object
       properties:
@@ -1988,11 +1989,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Entitlement"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     InvoiceSummary:
       type: object
       description: Purchase-related invoice amounts, without account contact details or payment methods. Absent on an order with no immediate invoice.

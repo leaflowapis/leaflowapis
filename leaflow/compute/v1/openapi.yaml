@@ -55,6 +55,8 @@ paths:
             description: Return only the backups of this disk
             type: string
             format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -294,7 +296,7 @@ paths:
       parameters:
         - name: region_id
           in: query
-          required: true
+          required: false
           explode: false
           schema:
             type: string
@@ -307,6 +309,8 @@ paths:
             omitted."
           schema:
             type: boolean
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -374,6 +378,7 @@ paths:
       parameters:
         - name: region_id
           in: query
+          required: false
           description: Return only the images of this region
           explode: false
           schema:
@@ -385,21 +390,8 @@ paths:
           explode: false
           schema:
             $ref: "#/components/schemas/ImageVisibility"
-        - name: page
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -621,26 +613,13 @@ paths:
       parameters:
         - name: region_id
           in: query
-          required: true
+          required: false
           explode: false
           schema:
             type: string
             format: uuid
-        - name: page
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -660,6 +639,9 @@ paths:
       operationId: list-regions
       tags:
         - Catalog
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -689,6 +671,8 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -714,6 +698,7 @@ paths:
       parameters:
         - name: region_id
           in: query
+          required: false
           explode: false
           schema:
             type: string
@@ -725,6 +710,8 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -967,6 +954,9 @@ paths:
       operationId: list-floating-ips
       tags:
         - FloatingIP
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -1198,21 +1188,8 @@ paths:
             description: A label to filter by, written as `key:value`
             type: string
             maxLength: 128
-        - name: page
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -1866,21 +1843,8 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: page
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2051,21 +2015,8 @@ paths:
           schema:
             type: string
             format: uuid
-        - name: page
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2169,21 +2120,8 @@ paths:
             description: Return a single kind of operation; the value matches the operation id of the endpoint
             type: string
             maxLength: 64
-        - name: page
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2203,6 +2141,9 @@ paths:
       operationId: list-ports
       tags:
         - Port
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2277,11 +2218,14 @@ paths:
       parameters:
         - name: region_id
           in: query
+          required: false
           description: Returns every region when omitted
           explode: false
           schema:
             type: string
             format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2497,6 +2441,8 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2590,6 +2536,8 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2712,6 +2660,7 @@ paths:
       parameters:
         - name: region_id
           in: query
+          required: false
           explode: false
           schema:
             type: string
@@ -2723,6 +2672,8 @@ paths:
           schema:
             description: Return only the security groups of this private network
             type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2859,6 +2810,8 @@ paths:
           schema:
             type: string
             format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -2949,6 +2902,8 @@ paths:
             description: Return only the snapshots of this disk
             type: string
             format: uuid
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -3122,26 +3077,13 @@ paths:
       parameters:
         - name: region_id
           in: query
-          required: true
+          required: false
           explode: false
           schema:
             type: string
             format: uuid
-        - name: page
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
-            maximum: 200
-            default: 50
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -3175,19 +3117,8 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
       parameters:
-        - name: limit
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 200
-            default: 50
-        - name: offset
-          in: query
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
     post:
       operationId: create-peering
       tags:
@@ -3304,6 +3235,18 @@ components:
   securitySchemes:
     scopedTokenAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  parameters:
+    Page:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, format: int64, minimum: 1, default: 1 }
+    PageSize:
+      name: page_size
+      in: query
+      required: false
+      schema:
+        { type: integer, format: int64, minimum: 1, maximum: 200, default: 50 }
   schemas:
     PeeringResource:
       type: object
@@ -3353,9 +3296,12 @@ components:
             $ref: "#/components/schemas/PeeringResource"
         total:
           type: integer
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
         - total
+        - pagination
       additionalProperties: false
     CreatePeeringRequestBody:
       type: object
@@ -3494,8 +3440,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/BackupResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     CreateBackupRequestBody:
       type: object
@@ -3835,8 +3784,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/DiskTypeResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     ImageVisibility:
       description:
@@ -4004,22 +3956,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ImageResource"
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
-        - page
-        - page_size
+        - pagination
       additionalProperties: false
     InstanceTypeResource:
       type: object
@@ -4111,22 +4052,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InstanceTypeResource"
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
-        - page
-        - page_size
+        - pagination
       additionalProperties: false
     RegionResource:
       type: object
@@ -4158,8 +4088,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/RegionResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     ZoneResource:
       type: object
@@ -4187,8 +4120,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/ZoneResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     DiskListResponseBody:
       type: object
@@ -4199,8 +4135,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/DiskResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     CreateDiskRequestBody:
       type: object
@@ -4415,8 +4354,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/FloatingIPResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     AllocateFloatingIPRequestBody:
       type: object
@@ -4716,22 +4658,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InstanceResource"
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
-        - page
-        - page_size
+        - pagination
       additionalProperties: false
     LaunchInstanceRequestBody:
       type: object
@@ -5106,8 +5037,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/PortResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     AttachPortRequestBody:
       type: object
@@ -5194,22 +5128,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OperationLogResource"
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
-        - page
-        - page_size
+        - pagination
       additionalProperties: false
     CreatePortRequestBody:
       type: object
@@ -5333,8 +5256,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/PrivateNetworkResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     CreatePrivateNetworkRequestBody:
       type: object
@@ -5421,8 +5347,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/RouteResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     CreateRouteRequestBody:
       type: object
@@ -5484,8 +5413,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/SubnetResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     CreateSubnetRequestBody:
       type: object
@@ -5548,8 +5480,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/SecurityGroupResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     CreateSecurityGroupRequestBody:
       type: object
@@ -5629,8 +5564,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/SecurityRuleResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     CreateSecurityRuleRequestBody:
       type: object
@@ -5789,8 +5727,11 @@ components:
             - "null"
           items:
             $ref: "#/components/schemas/SnapshotResource"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
       additionalProperties: false
     CreateSnapshotRequestBody:
       type: object
@@ -6061,20 +6002,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/DiskAttachment"
-        page:
-          type: integer
-          format: int64
-        page_size:
-          type: integer
-          format: int64
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
-        - page
-        - page_size
-        - total_count
+        - pagination
       additionalProperties: false
     PortAttachment:
       type: object
@@ -6137,20 +6069,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PortAttachment"
-        page:
-          type: integer
-          format: int64
-        page_size:
-          type: integer
-          format: int64
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
-        - page
-        - page_size
-        - total_count
+        - pagination
       additionalProperties: false
     LaunchInstanceResponseBody:
       type: object
@@ -6213,22 +6136,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/IPv4PoolResource"
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
-        - page
-        - page_size
+        - pagination
       additionalProperties: false
     IPv4Binding:
       type: object

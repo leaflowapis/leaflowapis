@@ -35,10 +35,13 @@ paths:
       summary: List currencies accounts can be opened in
       description: |-
         The currencies a new billing account can be opened in. A retired currency is not listed,
-        although accounts already opened in it keep working. Not paged: the set is a few rows.
+        although accounts already opened in it keep working. Results are paginated.
       operationId: list-currencies
       tags:
         - accounts
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -179,11 +182,14 @@ paths:
       description: |-
         Lists the payment gateways and methods that currently accept payment in this account's currency, the
         preferred gateway first. Top-ups and invoice payments must name a gateway and method listed here;
-        others are refused. An empty list means no online payment is available for this account. Not paged: the
-        set is a few rows.
+        others are refused. An empty result means no online payment is available for this account.
+        Results are paginated.
       operationId: list-payment-options
       tags:
         - payments
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -1084,6 +1090,9 @@ paths:
       operationId: list-renewal-prices
       tags:
         - subscriptions
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
       responses:
         "200":
           description: OK
@@ -1813,10 +1822,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Cancellation"
-        total_count:
-          type: integer
-          format: int64
-      required: [items]
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
+      required:
+        - items
+        - pagination
     CancellationRequest:
       type: object
       required:
@@ -2045,12 +2055,16 @@ components:
     CurrencyList:
       type: object
       additionalProperties: false
-      required: [items]
+      required:
+        - items
+        - pagination
       properties:
         items:
           type: array
           items:
             $ref: "#/components/schemas/Currency"
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
     BillingAccountCreate:
       type: object
       properties:
@@ -2112,11 +2126,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BillingAccount"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     AccountBalance:
       description: |-
         Account balance, credits, and unpaid charges are reported separately.
@@ -2275,11 +2289,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProjectBillingInfo"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     ProjectBillingInfoSet:
       type: object
       properties:
@@ -2446,11 +2460,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TopUp"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     PaymentCancellationReason:
       description: |-
         Why a gateway payment was withdrawn. `abandoned` means the customer did not complete it within the time
@@ -2496,8 +2510,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PaymentOption"
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     PaymentMethod:
       type: object
       properties:
@@ -2542,11 +2559,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PaymentMethod"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     PaymentMethodSetup:
       type: object
       properties:
@@ -2951,11 +2968,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Invoice"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     InvoiceItem:
       type: object
       properties:
@@ -3041,11 +3058,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InvoiceItem"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     TransactionType:
       description: topup adds to the balance; payment settles an invoice; refund returns original funds; payout withdraws from the balance; adjustment changes the balance with an audit reason.
       type: string
@@ -3140,11 +3157,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Transaction"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     CreditGrant:
       type: object
       properties:
@@ -3199,11 +3216,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/CreditGrant"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Refund:
       type: object
       properties:
@@ -3339,11 +3356,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Refund"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     UsageCharge:
       type: object
       properties:
@@ -3427,11 +3444,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/UsageCharge"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     SubscriptionList:
       type: object
       properties:
@@ -3439,11 +3456,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Subscription"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Subscription:
       type: object
       description: An independently billed purchase. Fixed renewals use the agreed recurring_amount and interval; already paid periods retain their original value. Technical state belongs to the owning service.
@@ -3597,8 +3614,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RenewalPrice"
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     RenewRequest:
       type: object
       properties:
@@ -3813,11 +3833,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Order"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     PaidWith:
       type: object
       description: |-
@@ -4033,11 +4053,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Discount"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     PriceOption:
       description: |-
         A price's display terms, including retired prices referenced by an applicability list.
@@ -4228,11 +4248,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/OrderItem"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Allowance:
       type: object
       properties:
@@ -4311,11 +4331,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Allowance"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     Entitlement:
       type: object
       properties:
@@ -4346,11 +4366,11 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Entitlement"
-        total_count:
-          type: integer
-          format: int64
+        pagination:
+          $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
+        - pagination
     InvoiceSummary:
       type: object
       description: Purchase-related invoice amounts, without account contact details or payment methods. Absent on an order with no immediate invoice.
