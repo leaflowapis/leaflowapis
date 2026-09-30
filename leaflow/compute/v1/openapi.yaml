@@ -1187,8 +1187,8 @@ paths:
         released.
 
 
-        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the address or for its bandwidth,
-        including a pay-as-you-go subscription. `meta.resource_id` names the floating IP. It is released by canceling
+        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the address, including a
+        pay-as-you-go subscription. `meta.resource_id` names the floating IP. It is released by canceling
         the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its
         `release_subscription_ids`."
       operationId: release-floating-ip
@@ -4037,7 +4037,7 @@ components:
         status:
           description:
             "`provisioning` while the backup is taken, then `available`. `failed` means the backup was not
-            created."
+            created. `missing` means the backup no longer exists in the cloud."
           type: string
           enum:
             - provisioning
@@ -4045,6 +4045,7 @@ components:
             - deleted
             - failed
             - error
+            - missing
         operation:
           description: The operation in progress on this backup, or null when none is.
           readOnly: true
@@ -4198,7 +4199,7 @@ components:
           description:
             "`pending` until the order is accepted, with no storage allocated; `provisioning` while the disk is
             created; then `available`, or `in_use` once attached. `failed` means the disk was not created;
-            `failure_reason` states why."
+            `failure_reason` states why. `missing` means the disk no longer exists in the cloud."
           type: string
           enum:
             - pending
@@ -4208,6 +4209,7 @@ components:
             - deleted
             - failed
             - error
+            - missing
         order_id:
           type:
             - string
@@ -4468,8 +4470,9 @@ components:
         status:
           description:
             "Only `available` images can install instances. A public image is always `available`; a private
-            image is `pending` until its order is accepted, then goes through `provisioning` and `uploading` while
-            it is captured. `failed` means the capture produced no image; `failure_reason` states why."
+            image is `pending` until its order is accepted, then goes through `provisioning` and `uploading`
+            while it is captured. `failed` means the capture produced no image; `failure_reason` states why.
+            `missing` means a private image no longer exists in the cloud."
           type: string
           enum:
             - pending
@@ -4479,6 +4482,7 @@ components:
             - deleted
             - failed
             - error
+            - missing
         failure:
           description: Details of why the capture failed; non-empty only when `status` is `failed`
           type:
@@ -4869,8 +4873,8 @@ components:
     FloatingIPResource:
       description: |-
         One purchased public IP resource, including its bandwidth configuration. Bandwidth has no
-        separate Compute resource ID. Billing may split fees internally; read the order for the
-        commercial breakdown. Changing bandwidth updates this same resource, not another allocation.
+        separate Compute resource ID; one subscription pays for the address and its bandwidth.
+        Changing bandwidth updates this same resource, not another allocation.
       type: object
       properties:
         address:
@@ -4893,7 +4897,8 @@ components:
         status:
           description:
             "`pending` until the order is accepted, with no address allocated; `provisioning` while the address
-            is allocated; then `available`. `failed` means no address was allocated; `failure_reason` states why."
+            is allocated; then `available`. `failed` means no address was allocated; `failure_reason` states
+            why. `missing` means the address no longer exists in the cloud."
           type: string
           enum:
             - pending
@@ -4903,6 +4908,7 @@ components:
             - failed
             - error
             - unknown
+            - missing
         order_id:
           type:
             - string
@@ -4922,9 +4928,9 @@ components:
           format: uuid
         release_subscription_ids:
           description:
-            "The complete subscription set a cancellation through Billing has to cover to release this floating
-            IP, including any internal fee components. Subscriptions that have ended are not listed, and the
-            list is empty when no subscription pays for any of them."
+            "The subscription a cancellation through Billing has to cover to release this floating IP. A
+            subscription that has ended is not listed, and the list is empty when no subscription pays for the
+            floating IP."
           type: array
           items:
             type: string
@@ -5163,8 +5169,9 @@ components:
           description:
             "`pending` until the order is accepted: no virtual machine exists and addresses are null.
             `provisioning` while the instance is created, then `active`. `failed` means the instance was not
-            created; `failure_reason` states why. The other values are the state last observed in the cloud; an
-            operation in progress appears in `operation`, not here."
+            created; `failure_reason` states why. `missing` means the virtual machine no longer exists in the
+            cloud. The other values are the state last observed in the cloud; an operation in progress appears
+            in `operation`, not here."
           type: string
           enum:
             - pending
@@ -5180,6 +5187,7 @@ components:
             - failed
             - error
             - unknown
+            - missing
         subnet_id:
           type:
             - string
@@ -5188,16 +5196,6 @@ components:
         updated_at:
           type: string
           format: date-time
-        power_state:
-          type: string
-          enum:
-            - no_state
-            - running
-            - paused
-            - shutdown
-            - crashed
-            - suspended
-            - unknown
         generation:
           type: integer
           format: int64
@@ -5301,7 +5299,6 @@ components:
         - created_at
         - updated_at
         - order_id
-        - power_state
         - generation
         - restrictions
         - order_item_id
@@ -5664,12 +5661,14 @@ components:
             - $ref: "#/components/schemas/PortAttachment"
             - type: "null"
         status:
+          description: "`missing` means the interface no longer exists in the cloud."
           type: string
           enum:
             - pending
             - available
             - error
             - unknown
+            - missing
         generation:
           type: integer
           format: int64
@@ -5891,13 +5890,16 @@ components:
           type: string
           format: uuid
         status:
-          description: Only `available` accepts new instances, interfaces and floating IPs
+          description:
+            "Only `available` accepts new instances, interfaces and floating IPs. `missing` means the network no
+            longer exists in the cloud."
           type: string
           enum:
             - pending
             - available
             - error
             - unknown
+            - missing
         updated_at:
           type: string
           format: date-time
@@ -6326,6 +6328,22 @@ components:
             until a replacement quota is activated. Null when no purchase has been recorded.
           type: [string, "null"]
           format: uuid
+        billing:
+          description:
+            The billing choice of the associated quota purchase, as given when it was bought. A change of an
+            existing purchase has to give the same choice. Null when no purchase has been recorded.
+          anyOf:
+            - $ref: "#/components/schemas/BillingChoice"
+            - type: "null"
+        release_subscription_ids:
+          description:
+            "The subscription a cancellation through Billing has to cover to release this snapshot quota. A
+            subscription that has ended is not listed, and the list is empty when no subscription pays for the
+            quota."
+          type: array
+          items:
+            type: string
+            format: uuid
         pending_limit:
           description: Target count awaiting checkout or activation; null when no purchase is pending.
           type: [integer, "null"]
@@ -6362,6 +6380,8 @@ components:
         - available
         - order_id
         - subscription_id
+        - billing
+        - release_subscription_ids
         - pending_limit
         - pending_order_id
         - failure_reason
@@ -6431,7 +6451,7 @@ components:
           description:
             "`pending` once a quota slot is reserved, `provisioning` while the snapshot is taken, then
             `available`. `failed` means the snapshot was not created; its slot is released once no snapshot data
-            remains."
+            remains. `missing` means the snapshot no longer exists in the cloud."
           type: string
           enum:
             - pending
@@ -6440,6 +6460,7 @@ components:
             - deleted
             - failed
             - error
+            - missing
         operation:
           description: The operation in progress on this snapshot, or null when none is.
           readOnly: true
@@ -6691,6 +6712,15 @@ components:
             - string
             - "null"
           format: uuid
+        release_subscription_ids:
+          description:
+            "The subscription a cancellation through Billing has to cover to release this backup service. A
+            subscription that has ended is not listed, and the list is empty when no subscription pays for the
+            service."
+          type: array
+          items:
+            type: string
+            format: uuid
         retained_capacity_gib:
           description: The total `capacity_gib` of the backups retained in this region.
           type: integer
@@ -6721,6 +6751,7 @@ components:
         - failure_reason
         - order_id
         - subscription_id
+        - release_subscription_ids
         - retained_capacity_gib
         - prepaid_capacity_gib
         - pricing
@@ -6793,12 +6824,15 @@ components:
             - string
             - "null"
           format: uuid
-        paid_until:
-          description: The end of the current paid term; null until the pack is active.
-          type:
-            - string
-            - "null"
-          format: date-time
+        release_subscription_ids:
+          description:
+            "The subscription a cancellation through Billing has to cover to release this capacity pack. A
+            subscription that has ended is not listed, and the list is empty when no subscription pays for the
+            pack."
+          type: array
+          items:
+            type: string
+            format: uuid
         created_at:
           type: string
           format: date-time
@@ -6810,7 +6844,7 @@ components:
         - failure_reason
         - order_id
         - subscription_id
-        - paid_until
+        - release_subscription_ids
         - created_at
       additionalProperties: false
     BackupCapacityPackListResponseBody:
@@ -7500,7 +7534,9 @@ components:
             - $ref: "#/components/schemas/Pricing"
             - type: "null"
         bandwidth_pricing:
-          description: How the bandwidth of an address from this pool is billed, per Mbit/s, with the same billing choice as the address. Null when the project has no billing account.
+          description:
+            How the bandwidth of an address from this pool is billed, per Mbit/s. It is bought in the same
+            purchase as the address, with the same billing choice. Null when the project has no billing account.
           readOnly: true
           anyOf:
             - $ref: "#/components/schemas/Pricing"
@@ -7574,9 +7610,7 @@ components:
         - unbound_at
         - released_at
     ReleaseSetItem:
-      description:
-        One subscription of a release set and the resource it pays for. Multiple internal billing components
-        may refer to the same floating IP; they do not create independent bandwidth resources.
+      description: One subscription of a release set and the resource it pays for.
       type: object
       properties:
         subscription_id:

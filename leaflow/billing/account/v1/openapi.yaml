@@ -2433,6 +2433,7 @@ components:
             anything on the account.
           allOf:
             - $ref: "#/components/schemas/Applicability"
+        first_purchase_only: { type: boolean, description: "Restricted to your first purchase of anything it applies to." }
         amount:
           $ref: ../../../type/v1/money.yaml#/components/schemas/Money
       required:
@@ -3387,6 +3388,7 @@ components:
             anything on the account.
           allOf:
             - $ref: "#/components/schemas/Applicability"
+        first_purchase_only: { type: boolean, description: "Restricted to your first purchase of anything it applies to." }
         status:
           type: string
           enum:
@@ -4175,6 +4177,7 @@ components:
             including setup fees and traffic.
           allOf:
             - $ref: "#/components/schemas/Applicability"
+        first_purchase_only: { type: boolean, description: "Restricted to your first purchase of anything it applies to." }
         started_at:
           type: string
           format: date-time
@@ -4228,6 +4231,7 @@ components:
           type: integer
         unit_amount:
           $ref: ../../../type/v1/money.yaml#/components/schemas/Money
+        active: { type: boolean, description: "False once the price is archived. It still applies to purchases already made at this price." }
       required:
         - product
         - plan
@@ -4237,10 +4241,12 @@ components:
         - billing_scheme
         - unit_quantity
         - id
+        - active
     Applicability:
       description: |-
-        Product, plan and price lists form a union; three empty lists permit every item.
-        Other conditions apply together. Entries always include their display fields.
+        Anything not excluded that matches an inclusion, or anything not excluded when no inclusion is
+        given, subject to the billing type, operation and term conditions. Entries always include their
+        display fields; archived plans and prices stay listed with active set to false.
       type: object
       properties:
         products:
@@ -4250,7 +4256,7 @@ components:
         plans:
           type: array
           items:
-            $ref: "#/components/schemas/ObjectIdentity"
+            $ref: "#/components/schemas/ApplicablePlan"
         prices:
           type: array
           items:
@@ -4263,9 +4269,6 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PurchaseOperation"
-        first_purchase_only:
-          description: Restricted to your first purchase of a covered product.
-          type: boolean
         min_term_months:
           description: |-
             The shortest term a purchase may have, in months. A purchase with no term, such as
@@ -4274,6 +4277,33 @@ components:
         max_term_months:
           description: The longest term a purchase may have, in months.
           type: integer
+        excluded_products:
+          type: array
+          items:
+            $ref: "#/components/schemas/Product"
+        excluded_plans:
+          type: array
+          items:
+            $ref: "#/components/schemas/ApplicablePlan"
+        excluded_prices:
+          type: array
+          items:
+            $ref: "#/components/schemas/PriceOption"
+    ApplicablePlan:
+      description: A plan it refers to. active is false once the plan is archived; it still applies to subscriptions already on this plan.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        active:
+          type: boolean
+      required:
+        - id
+        - name
+        - active
     OrderItem:
       type: object
       description: |-
