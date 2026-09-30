@@ -53,6 +53,21 @@ components:
           - type: 'null'
         currency:
           type: string
+        proration_date:
+          description: |-
+            Changes only; null otherwise. The instant the change is priced from. Pass it with the change so the
+            order is priced from the same instant.
+          type:
+          - string
+          - 'null'
+          format: date-time
+        refundable_amount:
+          description: |-
+            Changes that lower the price only; null otherwise. What the change would return to the original
+            payment sources, including the tax paid on it. total is zero for such a change.
+          oneOf:
+          - $ref: ./money.yaml#/components/schemas/Money
+          - type: 'null'
       required:
       - lines
       - subtotal
@@ -61,11 +76,13 @@ components:
       - total
       - estimated_usage_amount
       - currency
+      - proration_date
+      - refundable_amount
       additionalProperties: false
     QuotedLine:
       description: |-
         One calculated purchase line. Fixed purchase amounts are rounded as checkout rounds them.
-        When priced is false, price_id and every monetary field are null. A priced line without an
+        When priced is false, every monetary field is null. A priced line without an
         immediate charge has zero amounts; an unavailable unit price remains null.
       type: object
       properties:
@@ -78,13 +95,6 @@ components:
           enum:
           - none
           - no_price
-        price_id:
-          description: The price selected, including when the request left the choice to the service. Order with this
-            price.
-          type:
-          - string
-          - 'null'
-          format: uuid
         plan_name:
           type: string
         unit_amount:
@@ -136,7 +146,6 @@ components:
       required:
       - priced
       - unpriced_reason
-      - price_id
       - plan_name
       - unit_amount
       - quantity

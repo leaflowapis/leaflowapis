@@ -16,11 +16,42 @@ info:
     ## Conventions
 
 
-    - **Operations are asynchronous.** Purchases, such as creating an instance or a disk and resizing, return
-    before any work starts. A resource created by a purchase does not exist before the order's invoice is paid;
-    when the order has no immediate invoice, creation starts without waiting. A purchased change, such as a resize,
-    is applied after the same point. Once created, a resource passes through intermediate states such as `provisioning`.
-    Track provisioning through the returned task. Resource reads return the latest observed state.
+    - **Purchases.** A purchase that creates resources returns them together with a PlacedOrder. They are
+    readable at once and start as `pending`: the order has not been accepted, nothing exists in the cloud, no
+    inventory such as an address is held, and fields known only after allocation, such as addresses, are null.
+    Once Billing accepts the order, a resource becomes `provisioning` and then reaches its usual status, such as
+    `active` or `available`. When the order is declined, canceled or expires, or creation fails, the resource ends
+    `failed` and `failure_reason` states why; the charge for a resource that failed after acceptance is refunded.
+    Read the order in Billing for checkout and payment progress.
+
+    - **Pricing.** Catalog items, such as instance types, disk types and public IP pools, carry `pricing`: the
+    prepaid and postpaid options Billing offers for them, in the currency of the project's current billing account,
+    or null when the project has no billing account. They are list amounts before promotion codes, not a checkout
+    guarantee. A purchase chooses one option with `billing`, which applies to all of its components. Every purchase
+    and change has a quote operation beside it, at the same path followed by `/quote`, which returns what checkout
+    would collect without ordering anything.
+
+    - **Checkout.** Omit `checkout` for automatic checkout, which pays from eligible credit grants and balance
+    when the order is placed; insufficient funds refuse the request with HTTP 422 `BILLING_INSUFFICIENT_FUNDS`,
+    and nothing is created. With `checkout.mode` set to `deferred`, the resources are
+    returned `pending` and nothing is created until checkout is confirmed and paid through Billing. An order whose
+    total is zero, such as a postpaid purchase with nothing due now, completes checkout at placement in either mode
+    and proceeds to provisioning.
+
+    - **Operations.** Requests such as starting, stopping, attaching or deleting return HTTP 202 with the resource
+    as it is when the request is accepted. While an operation runs, the resource's `operation` field names it; the
+    field is null once the operation has finished, and the resource then shows the result. A resource with an
+    operation in progress refuses another operation with HTTP 409 `COMPUTE_RESOURCE_BUSY`; an operation involving
+    two resources, such as attaching a disk, is refused when either has one. A purchased change, such as a resize,
+    is an operation from the moment its order is placed until it is applied or its order is canceled, including
+    while it awaits checkout. Renaming and replacing labels or notes
+    are not operations and are accepted at any time.
+
+    - **Billing relationships.** A purchased resource records its `order_id`, `order_item_id` and
+    `subscription_id`. The subscription is `pending` until the order is accepted, `provisioning` while the resource
+    is created, and `active` once it is delivered. Bandwidth is a property of its floating IP, not a separate
+    resource. Snapshots use a purchased per-region count quota, and backups are metered on the region's backup
+    service; neither has an order or subscription of its own.
 
     - **Availability zones.** A disk and an instance must reside in the same availability zone to be attached.
     Instance types and disk types are each bound to one availability zone, so choosing a type determines the
@@ -82,12 +113,13 @@ paths:
         Disks attached to a running instance, including system disks, can be backed up.
 
 
-        The duration depends on the amount of data. The backup is not complete when this endpoint returns; track
-        the returned task.
+        No order is placed. The backup is metered on the backup service of the disk's region by its `capacity_gib`
+        for as long as it is retained, until it is deleted; see `get-backup-service`. Refused with 409
+        `BACKUP_SERVICE_NOT_ACTIVE` and `meta.region_id` when that service is not active.
 
 
-        The backup is billed for its size, at the backup price of its region. Obtain a price with `create-backup-quote`
-        first."
+        Returns the backup while it is taken; the duration depends on the amount of data. Read the backup until it
+        is `available` or `failed`."
       operationId: create-backup
       tags:
         - Backup
@@ -98,48 +130,14 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateBackupRequestBody"
       responses:
-        "201":
-          description: Created
+        "202":
+          description: The backup was accepted and is being taken.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/backups/quote:
-    post:
-      summary: Quote a backup
-      description:
-        "Prices the backup `create-backup` would order for the same disk, without ordering anything.
-        Nothing is reserved and nothing is recorded, so this may be called as often as required.
-
-
-        The quantity priced is the size of the disk. When `price_id` is omitted, a price of the region's backup
-        offering is selected; the returned line names it, and that `price_id` is the one to order with.
-
-
-        Prices may change between quoting and ordering. An order is charged at the price in effect when it is placed,
-        so a quote should be refreshed before a final confirmation is shown."
-      operationId: create-backup-quote
-      tags:
-        - Backup
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateBackupQuoteRequestBody"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PurchaseQuote"
+                $ref: "#/components/schemas/BackupResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -150,8 +148,7 @@ paths:
     get:
       summary: Retrieve a backup
       description:
-        Queries the current state of the backup, which makes it slower but more accurate than the list
-        endpoint. Use it to poll creation progress.
+        Returns the stored state of the backup; it does not query the cloud. Use it to poll creation progress.
       operationId: get-backup
       tags:
         - Backup
@@ -209,12 +206,8 @@ paths:
     delete:
       summary: Delete a backup
       description:
-        "Independent of the source disk: deletion succeeds whether or not that disk still exists.
-
-
-        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the backup, including a pay-as-you-go
-        subscription. `meta.resource_id` names the backup. It is released by canceling the subscriptions listed in
-        `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`."
+        "Independent of the source disk: deletion succeeds whether or not that disk still exists. Metering of the
+        backup ends once it is deleted."
       operationId: delete-backup
       tags:
         - Backup
@@ -227,17 +220,13 @@ paths:
             format: uuid
       responses:
         "409":
-          description: The deletion was refused.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/Conflict"
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: Deletion was accepted. The backup shows the `delete` operation until it is deleted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/BackupResource"
         default:
           description: Error
           content:
@@ -252,8 +241,8 @@ paths:
 
 
         The target disk type may belong to another availability zone of the same region, and its capacity must not
-        be smaller than the backup. The disk cannot be attached until the restore completes; track the returned
-        task."
+        be smaller than the backup. Returns the new disk as `pending` with its order; it cannot be attached until it
+        is `available`."
       operationId: restore-backup
       tags:
         - Backup
@@ -271,12 +260,55 @@ paths:
             schema:
               $ref: "#/components/schemas/RestoreBackupRequestBody"
       responses:
-        "201":
-          description: Created
+        "202":
+          description: The new disk and its order were created; restoration has not started.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
+                $ref: "#/components/schemas/CreateDiskResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/backups/{backupId}/restore/quote:
+    parameters:
+      - name: backupId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Quote restoring from a backup
+      description:
+        "Prices what `restore-backup` would order for the same request, without ordering or creating anything; nothing is
+        reserved or recorded. Billing evaluates applicable account discounts and tax as for automatic checkout.
+        `total` is what automatic checkout would collect before credit grants and balance; give it as
+        `checkout.expected_amount` to be refused rather than charged a different amount. `estimated_usage_amount`
+        projects postpaid usage over one month of 730 hours and is not collected at checkout. A request the purchase
+        would refuse is refused the same way. Prices may change, so quote again before final confirmation."
+      operationId: create-backup-restore-quote
+      tags:
+        - Backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RestoreBackupQuoteRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -413,10 +445,11 @@ paths:
         is released.
 
 
-        **The image reflects the moment the capture started. Later changes to the instance are not included.**
+        **The image reflects the moment the capture started. Later changes to the instance are not included.** The
+        image is returned as `pending` with its order, and the capture starts only once the order is accepted.
 
 
-        The capture has two phases, reported by the status of the image:
+        The capture then has two phases, reported by the status of the image:
 
 
         - `provisioning` — the system disk is being read, usually for tens of seconds. The instance remains usable
@@ -435,8 +468,8 @@ paths:
         The instance can be started, stopped and used normally during the capture, but cannot be released.
 
 
-        The image is billed for the storage it occupies, at the private image price of its region. Obtain a price with
-        `create-image-quote` first."
+        The image is billed for the storage it occupies, as the region's `private_image_pricing` shows. Obtain a quote
+        with `create-image-quote` first."
       operationId: create-image
       tags:
         - Image
@@ -447,12 +480,14 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateImageRequestBody"
       responses:
-        "201":
-          description: Created
+        "202":
+          description: The private image and its order were created; the capture has not started.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
+                $ref: "#/components/schemas/CreateImageResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -463,17 +498,12 @@ paths:
     post:
       summary: Quote capturing an instance as a private image
       description:
-        "Prices the capture `create-image` would order for the same instance, without ordering anything.
-        Nothing is reserved and nothing is recorded, so this may be called as often as required.
-
-
-        The quantity priced is the size of the system disk, which is the most the image can occupy. When `price_id`
-        is omitted, a price of the region's private image offering is selected; the returned line names it, and that
-        `price_id` is the one to order with.
-
-
-        Prices may change between quoting and ordering. An order is charged at the price in effect when it is placed,
-        so a quote should be refreshed before a final confirmation is shown."
+        "Prices the capture `create-image` would order for the same instance, without ordering anything;
+        nothing is reserved or recorded. The quantity priced is the size of the system disk, which is the most the
+        image can occupy, with the option chosen in `billing`. Billing evaluates applicable account discounts and tax
+        as for automatic checkout. `total` is what automatic checkout would collect before credit grants and balance;
+        give it as `checkout.expected_amount` to be refused rather than charged a different amount. Prices may
+        change, so quote again before final confirmation."
       operationId: create-image-quote
       tags:
         - Image
@@ -489,7 +519,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseQuote"
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -501,7 +533,7 @@ paths:
       summary: Retrieve an image
       description:
         "Returns a public image, or a private image of this project; any other image is reported as not
-        found. Use this endpoint to poll capture progress. When `status` is `error`, `failure` states the reason."
+        found. Use this endpoint to poll capture progress. When `status` is `failed`, `failure_reason` states why."
       operationId: get-image
       tags:
         - Image
@@ -566,7 +598,8 @@ paths:
         Deletion is rejected while instances created from the image still exist, as they need it in order to be rebuilt.
 
 
-        An image whose capture has not finished can be deleted; the capture is aborted.
+        An image whose capture has not finished can be deleted; the capture is aborted. This is the one operation
+        accepted while the `create` operation is in progress.
 
 
         Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the image, including a
@@ -584,17 +617,13 @@ paths:
             format: uuid
       responses:
         "409":
-          description: The deletion was refused.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/Conflict"
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: Deletion was accepted. The image shows the `delete` operation until it is deleted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/ImageResource"
         default:
           description: Error
           content:
@@ -745,12 +774,48 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateDiskRequestBody"
       responses:
-        "201":
-          description: Created
+        "202":
+          description: The disk and its order were created; the disk does not exist in the cloud yet.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
+                $ref: "#/components/schemas/CreateDiskResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/disks/quote:
+    post:
+      summary: Quote creating a disk
+      description:
+        "Prices what `create-disk` would order for the same request, without ordering or creating anything; nothing is
+        reserved or recorded. Billing evaluates applicable account discounts and tax as for automatic checkout.
+        `total` is what automatic checkout would collect before credit grants and balance; give it as
+        `checkout.expected_amount` to be refused rather than charged a different amount. `estimated_usage_amount`
+        projects postpaid usage over one month of 730 hours and is not collected at checkout. A request the purchase
+        would refuse is refused the same way. Prices may change, so quote again before final confirmation."
+      operationId: create-disk-quote
+      tags:
+        - Disk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateDiskQuoteRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -761,8 +826,7 @@ paths:
     get:
       summary: Retrieve a disk
       description:
-        Queries the current state of the disk, which makes it slower but more accurate than the list
-        endpoint.
+        Returns the stored state of the disk; it does not query the cloud.
       operationId: get-disk
       tags:
         - Disk
@@ -839,17 +903,13 @@ paths:
             format: uuid
       responses:
         "409":
-          description: The deletion was refused.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/Conflict"
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: Deletion was accepted. The disk shows the `delete` operation until it is deleted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/DiskResource"
         default:
           description: Error
           content:
@@ -860,8 +920,12 @@ paths:
     post:
       summary: Resize a disk
       description:
-        "Capacity can only be increased; shrinking is not supported. The resize is not complete when
-        this endpoint returns; track the returned task, then extend the file system inside the instance.
+        "Capacity can only be increased; shrinking is not supported. Returns the disk with the order for the
+        resize, which keeps the disk's billing mode and period. The disk shows the `resize` operation until the
+        resize is applied or its order is canceled, including while the order awaits checkout, so other operations
+        and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The disk keeps its current size until
+        the resize is applied; once `size_gb` shows the new size, extend the file system inside the instance. If the
+        order is not accepted or the resize fails, the disk keeps its size and the order shows the outcome.
 
 
         **An attached data disk whose performance scales with its size must be detached before it is resized.**
@@ -893,12 +957,54 @@ paths:
             schema:
               $ref: "#/components/schemas/ResizeDiskRequestBody"
       responses:
+        "202":
+          description: The disk and the order for the resize; the new size is not yet in effect.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResizeDiskResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/disks/{diskId}/resize/quote:
+    parameters:
+      - name: diskId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Quote resizing a disk
+      description:
+        "Prices the change `resize-disk` would order, as of now, without ordering or changing anything. A change that
+        raises the price has the charge for the rest of the paid period as `total`; one that lowers it has a zero
+        `total` and the refund as `refundable_amount`. Give the returned `proration_date` with the change, and for
+        automatic checkout `total` as `checkout.expected_amount`. A request the change would refuse is refused the
+        same way. Prices may change, so quote again before final confirmation."
+      operationId: create-disk-resize-quote
+      tags:
+        - Disk
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResizeDiskQuoteRequestBody"
+      responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -918,7 +1024,7 @@ paths:
         return to an earlier point in time, or to keep the existing disk, create a new disk from the snapshot instead.
 
 
-        The revert is not complete when this endpoint returns; poll the retrieve endpoint."
+        The disk shows the `revert` operation until the revert is complete."
       operationId: revert-disk
       tags:
         - Disk
@@ -937,11 +1043,13 @@ paths:
               $ref: "#/components/schemas/RevertDiskRequestBody"
       responses:
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: The revert was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/DiskResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -977,6 +1085,11 @@ paths:
         part of this call.
 
 
+        Returns the floating IP as `pending` with its order; `address` is null until the address is allocated after
+        the order is accepted. A requested `address` is not held while pending; if it is no longer available then,
+        the floating IP ends `failed` with `provisioning_failed` and its charge is refunded.
+
+
         IPv6 is not requested through this endpoint. IPv6 addresses are assigned to instances by the private network;
         enable IPv6 on that network instead.
 
@@ -993,12 +1106,48 @@ paths:
             schema:
               $ref: "#/components/schemas/AllocateFloatingIPRequestBody"
       responses:
-        "201":
-          description: Created
+        "202":
+          description: The floating IP and its order were created; no address is allocated yet.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
+                $ref: "#/components/schemas/AllocateFloatingIPResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/floating-ips/quote:
+    post:
+      summary: Quote allocating a floating IP
+      description:
+        "Prices what `allocate-floating-ip` would order for the same request, without ordering or creating anything; nothing is
+        reserved or recorded. Billing evaluates applicable account discounts and tax as for automatic checkout.
+        `total` is what automatic checkout would collect before credit grants and balance; give it as
+        `checkout.expected_amount` to be refused rather than charged a different amount. `estimated_usage_amount`
+        projects postpaid usage over one month of 730 hours and is not collected at checkout. A request the purchase
+        would refuse is refused the same way. Prices may change, so quote again before final confirmation."
+      operationId: create-floating-ip-quote
+      tags:
+        - FloatingIP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AllocateFloatingIPQuoteRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1034,7 +1183,8 @@ paths:
     delete:
       summary: Release a floating IP
       description:
-        "Releases the floating IP after unbinding it. Completion is reported by the returned task.
+        "Releases the floating IP after unbinding it. The floating IP shows the `delete` operation until it is
+        released.
 
 
         Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the address or for its bandwidth,
@@ -1053,11 +1203,7 @@ paths:
             format: uuid
       responses:
         "409":
-          description: The deletion was refused.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1065,17 +1211,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "202":
-          description: The release has been accepted.
+          description: The release was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/FloatingIPResource"
   /api/v1/floating-ips/{floatingIpId}/bandwidth:
     put:
       summary: Set the bandwidth limit
       description:
-        "The limit applies to inbound and outbound traffic alike. The new limit is not in effect when
-        this endpoint returns; track the returned task.
+        "Changes the bandwidth of this floating IP through an order that keeps its billing mode and period; no
+        separate bandwidth resource is created. The limit applies to inbound and outbound traffic alike. The floating
+        IP shows the `set_bandwidth` operation until the change is applied or its order is canceled, including while
+        the order awaits checkout, so other operations and a second change are refused with `COMPUTE_RESOURCE_BUSY`
+        meanwhile. The current limit stays in effect until the change is applied. If the order is not accepted or the
+        change fails, `bandwidth_mbps` keeps its value and the order shows the outcome.
 
 
         While the address is bound to an instance, the limit must not exceed the `max_bandwidth_mbps` of that instance's
@@ -1096,14 +1246,56 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SetBandwidthRequestBody"
+              $ref: "#/components/schemas/SetFloatingIPBandwidthRequestBody"
+      responses:
+        "202":
+          description: The floating IP and the order for the change; the new limit is not yet in effect.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetFloatingIPBandwidthResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/floating-ips/{floatingIpId}/bandwidth/quote:
+    parameters:
+      - name: floatingIpId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Quote changing the bandwidth limit
+      description:
+        "Prices the change `set-floating-ip-bandwidth` would order, as of now, without ordering or changing anything. A change that
+        raises the price has the charge for the rest of the paid period as `total`; one that lowers it has a zero
+        `total` and the refund as `refundable_amount`. Give the returned `proration_date` with the change, and for
+        automatic checkout `total` as `checkout.expected_amount`. A request the change would refuse is refused the
+        same way. Prices may change, so quote again before final confirmation."
+      operationId: create-floating-ip-bandwidth-quote
+      tags:
+        - FloatingIP
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetFloatingIPBandwidthQuoteRequestBody"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1113,6 +1305,7 @@ paths:
   /api/v1/floating-ips/{floatingIpId}/binding:
     put:
       summary: Bind a floating IP to a network interface
+      description: The floating IP shows the `bind` operation until the binding is confirmed.
       operationId: bind-floating-ip
       tags:
         - FloatingIP
@@ -1130,12 +1323,14 @@ paths:
             schema:
               $ref: "#/components/schemas/BindFloatingIPRequestBody"
       responses:
-        "200":
-          description: OK
+        "202":
+          description: The binding was accepted.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/FloatingIPResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1144,7 +1339,9 @@ paths:
                 $ref: "#/components/schemas/Error"
     delete:
       summary: Unbind a floating IP
-      description: The address remains held by the project and simply no longer points at any network interface.
+      description:
+        The address remains held by the project and simply no longer points at any network interface. The floating
+        IP shows the `unbind` operation until the change is confirmed.
       operationId: unbind-floating-ip
       tags:
         - FloatingIP
@@ -1156,12 +1353,14 @@ paths:
             type: string
             format: uuid
       responses:
-        "200":
-          description: OK
+        "202":
+          description: The unbinding was accepted.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/FloatingIPResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1172,8 +1371,7 @@ paths:
     get:
       summary: List instances
       description:
-        Every instance in the project, newest first. This endpoint does not query backend state; for
-        the accurate state of one instance, use the retrieve endpoint.
+        Every instance in the project, newest first, in their stored state.
       operationId: list-instances
       tags:
         - Instance
@@ -1206,21 +1404,29 @@ paths:
     post:
       summary: Create instances
       description:
-        "Creates a Billing order, including for metered pricing. The price must belong to the resource’s
-        Billing Plan; applicable contract pricing is resolved by Billing. The instances are created after the order's
-        invoice is paid, or without waiting when the order has no immediate invoice. Do not submit a new purchase
-        after paying. After an uncertain response, look the order up
-        before submitting again.
+        "Creates a Billing order, including for metered pricing, and returns one `pending` instance per requested
+        instance with the order. `billing` applies to the instance, its system disk and its floating IP alike. A
+        pending instance has no virtual machine, system disk or address, and is not metered.
+
+
+        Creation starts once Billing accepts the order: the instance becomes `provisioning`, then `active`. With
+        automatic checkout, insufficient funds refuse the request and nothing is created. With deferred checkout and
+        an amount due, the instances stay `pending` until checkout is confirmed and paid through Billing; a canceled or expired order
+        leaves them `failed` with `order_canceled` or `order_expired`. Do not submit another creation request after
+        paying. After an uncertain response, look the order up before submitting again.
 
 
         Exactly one of image_id or boot_disk_id is required, and exactly one of port_id or subnet_id.
-        Existing ports, boot disks or floating IPs require count=1. Image boots require boot_disk; existing disks retain
-        their own subscription. Instances, disks and public IPs keep their own subscription items on the same order.
+        Existing ports, boot disks or floating IPs require count=1. They are not held while the instance is pending;
+        if one is no longer usable when the order is accepted, the instance ends `failed` with `provisioning_failed`.
+        Image boots require boot_disk; existing disks retain their own subscription. Instances, disks and public IPs
+        keep their own subscription items on the same order.
 
 
-        A request for several instances is all or nothing: if any instance cannot be created, every instance of that
-        request is released, the order fails, and any payment for it is refunded. Each instance is named after this
-        request with a number appended, and each has its own task.
+        Instances of one request succeed or fail individually. Each instance, with its system disk, network interface
+        and floating IP, is created or fails as a whole. Instances that were created are kept; each failed instance
+        ends `failed` with `provisioning_failed`, its part of the order is refunded, and the order then ends
+        `partially_completed`. Each instance is named after this request with a number appended.
 
 
         The network is checked before the order is created, and a request it refuses orders and charges nothing.
@@ -1239,11 +1445,47 @@ paths:
               $ref: "#/components/schemas/LaunchInstanceRequestBody"
       responses:
         "202":
-          description: Accepted
+          description: The instances and their order were created; no instance exists in the cloud yet.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/LaunchInstanceResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/instances/quote:
+    post:
+      summary: Quote creating instances
+      description:
+        "Prices what `launch-instance` would order for the same request, without ordering or creating anything; nothing is
+        reserved or recorded. Billing evaluates applicable account discounts and tax as for automatic checkout.
+        `total` is what automatic checkout would collect before credit grants and balance; give it as
+        `checkout.expected_amount` to be refused rather than charged a different amount. `estimated_usage_amount`
+        projects postpaid usage over one month of 730 hours and is not collected at checkout. A request the purchase
+        would refuse is refused the same way. Prices may change, so quote again before final confirmation."
+      operationId: create-instance-quote
+      tags:
+        - Instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LaunchInstanceQuoteRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1254,8 +1496,7 @@ paths:
     get:
       summary: Retrieve an instance
       description:
-        Queries the current state of the instance, which makes it slower but more accurate than the list
-        endpoint. Use it to poll creation progress.
+        Returns the stored state of the instance; it does not query the cloud. Use it to poll creation progress.
       operationId: get-instance
       tags:
         - Instance
@@ -1341,17 +1582,13 @@ paths:
             format: uuid
       responses:
         "409":
-          description: The deletion was refused.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/Conflict"
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: Release was accepted. The instance shows the `delete` operation until it is released.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/InstanceResource"
         default:
           description: Error
           content:
@@ -1381,7 +1618,7 @@ paths:
         Three conditions must hold; the instance is unreachable otherwise:
 
 
-        - it is `running`
+        - it is `active`
 
         - a floating IP is bound to it, since this endpoint connects over the public internet
 
@@ -1620,6 +1857,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ResetPasswordResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1638,16 +1877,15 @@ paths:
         does not wait for the operating system to shut down, so **unwritten data is lost**.
 
 
-        A forced reboot is accepted while the instance is already `rebooting`, which is the way out of a soft reboot
-        the instance never carried out. Every other endpoint refuses an instance in a transient state, and a second
-        soft reboot is refused as well.
+        A forced reboot is accepted while a soft reboot is in progress, which is the way out of a soft reboot the
+        instance never carried out. Any other request for an operation, including a second soft reboot, is refused
+        with `COMPUTE_RESOURCE_BUSY` while the reboot is in progress.
 
 
         An instance suspended by the platform must be unsuspended first.
 
 
-        This endpoint returns immediately and the `status` it returns is the transient `rebooting`. Poll the instance
-        until it settles at `running`."
+        The instance shows the `reboot` operation until the reboot has finished."
       operationId: reboot-instance
       tags:
         - Instance
@@ -1666,11 +1904,13 @@ paths:
               $ref: "#/components/schemas/RebootInstanceRequestBody"
       responses:
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: The reboot was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/InstanceResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1686,7 +1926,10 @@ paths:
 
         The image this instance already runs is accepted even after the platform has withdrawn it, since rebuilding
         is the only way back into an instance broken from the inside. Any *other* withdrawn image is rejected with
-        `IMAGE_RETIRED`, which is a change of image and therefore a new order."
+        `IMAGE_RETIRED`, which is a change of image and therefore a new order.
+
+
+        The instance shows the `rebuild` operation until the rebuild has finished."
       operationId: rebuild-instance
       tags:
         - Instance
@@ -1704,12 +1947,14 @@ paths:
             schema:
               $ref: "#/components/schemas/RebuildInstanceRequestBody"
       responses:
-        "200":
-          description: OK
+        "202":
+          description: The rebuild was accepted. The instance shows the `rebuild` operation until it has finished.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/RebuildInstanceResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1720,15 +1965,18 @@ paths:
     post:
       summary: Resize an instance
       description:
-        "Creates a Billing change order, including for metered pricing. The price must belong to the Billing
-        Plan of the target instance type; applicable contract pricing is resolved by Billing. The resize is applied
-        after the order's invoice is paid, or without waiting when the order has no immediate invoice. Do not submit
-        a new purchase after paying. After an uncertain response, look the order up
-        before submitting again.
+        "Creates a Billing change order, including for metered pricing, and returns the instance with the order.
+        The instance keeps its billing mode and period, priced with the target type's matching option; a target type
+        without that option is refused with 409 `BILLING_OPTION_UNAVAILABLE`. Do not submit a new purchase after
+        paying. After an uncertain response, look the order up before submitting again.
 
 
-        The new instance type takes effect, and is billed from then on, when the returned task succeeds. A completed
-        resize is final and cannot be reverted; to return to the previous type, submit another resize."
+        The instance shows the `resize` operation until the resize is applied or its order is canceled, including
+        while the order awaits checkout, so other operations and a second resize are refused with
+        `COMPUTE_RESOURCE_BUSY` meanwhile. It keeps its current type until the resize is applied; the new type takes
+        effect, and is billed from then on, when `instance_type_id` shows it. If the order is not accepted or the resize fails, the instance keeps its current
+        type and the order shows the outcome. A completed resize is final and cannot be reverted; to return to the
+        previous type, submit another resize."
       operationId: resize-instance
       tags:
         - Instance
@@ -1747,11 +1995,53 @@ paths:
               $ref: "#/components/schemas/ResizeInstanceRequestBody"
       responses:
         "202":
-          description: Accepted
+          description: The instance and the order for the resize; the new type is not yet in effect.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
+                $ref: "#/components/schemas/ResizeInstanceResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/instances/{instanceId}/resize/quote:
+    parameters:
+      - name: instanceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Quote resizing an instance
+      description:
+        "Prices the change `resize-instance` would order, as of now, without ordering or changing anything. A change that
+        raises the price has the charge for the rest of the paid period as `total`; one that lowers it has a zero
+        `total` and the refund as `refundable_amount`. Give the returned `proration_date` with the change, and for
+        automatic checkout `total` as `checkout.expected_amount`. A request the change would refuse is refused the
+        same way. Prices may change, so quote again before final confirmation."
+      operationId: create-instance-resize-quote
+      tags:
+        - Instance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResizeInstanceQuoteRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1762,9 +2052,8 @@ paths:
     post:
       summary: Start an instance
       description:
-        "Records the desired power state. An in-flight shutdown is allowed to finish before a subsequent
-        start. Outstanding restrictions can prevent starting. A stopped instance keeps its disks, network attachments
-        and sellable quota. Inspect operation, task_state, power_state and observed_at to determine completion."
+        "Outstanding restrictions can prevent starting. The instance shows the `start` operation until it is
+        running or the start has failed."
       operationId: start-instance
       tags:
         - Instance
@@ -1777,11 +2066,13 @@ paths:
             format: uuid
       responses:
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: The start was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/InstanceResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1798,9 +2089,8 @@ paths:
     post:
       summary: Stop an instance
       description:
-        "Records the desired power state. An in-flight shutdown is allowed to finish before a subsequent
-        start. Outstanding restrictions can prevent starting. A stopped instance keeps its disks, network attachments
-        and sellable quota. Inspect operation, task_state, power_state and observed_at to determine completion."
+        "A stopped instance keeps its disks, network attachments and sellable quota. The instance shows the
+        `stop` operation until it is stopped or the stop has failed."
       operationId: stop-instance
       tags:
         - Instance
@@ -1813,11 +2103,13 @@ paths:
             format: uuid
       responses:
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: The stop was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/InstanceResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1861,8 +2153,9 @@ paths:
     post:
       summary: Attach a disk
       description:
-        "The disk must be in the same region and availability zone as the instance. Partition it and
-        mount the file system inside the instance once it is attached."
+        "The disk must be in the same region and availability zone as the instance. Returns the disk; the
+        instance shows the `attach_disk` operation and the disk the `attach` operation until the attachment is
+        confirmed. Partition the disk and mount the file system inside the instance once it is attached."
       operationId: attach-disk
       tags:
         - Attachment
@@ -1881,11 +2174,13 @@ paths:
               $ref: "#/components/schemas/AttachDiskRequestBody"
       responses:
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: The attachment was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/DiskResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1902,7 +2197,11 @@ paths:
 
         The disk the instance boots from cannot be detached, whether it is the system disk bought with the instance
         or a disk the instance was created from with `boot_disk_id`. Such a request is refused with
-        `INSTANCE_BOOT_DISK_LOCKED` and creates no task; releasing the instance is what frees that disk."
+        `INSTANCE_BOOT_DISK_LOCKED` and changes nothing; releasing the instance is what frees that disk.
+
+
+        Returns the disk; the instance shows the `detach_disk` operation and the disk the `detach` operation until
+        the disk is detached."
       operationId: detach-disk
       tags:
         - Attachment
@@ -1921,11 +2220,13 @@ paths:
             format: uuid
       responses:
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: The detachment was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/DiskResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -1936,8 +2237,8 @@ paths:
     post:
       summary: Bind a floating IP to an instance
       description:
-        Changes the public IP binding on the instance's primary network interface. The returned task
-        tracks confirmation of the binding change.
+        Changes the public IP binding on the instance's primary network interface. The instance shows the
+        `bind_floating_ip` operation until the binding is confirmed.
       operationId: attach-instance-floating-ip
       tags:
         - Attachment
@@ -1961,12 +2262,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "200":
-          description: The current floating IP binding
+        "202":
+          description: The binding was accepted.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/FloatingIPResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
   /api/v1/instances/{instanceId}/floating-ips/{floatingIpId}:
     delete:
       summary: Unbind the floating IP of an instance
@@ -1993,15 +2296,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-        "200":
-          description: The current floating IP binding
+        "202":
+          description: The unbinding was accepted.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/FloatingIPResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
       description:
-        Changes the public IP binding on the instance's primary network interface. The returned task
-        tracks confirmation of the binding change.
+        Changes the public IP binding on the instance's primary network interface. The instance shows the
+        `unbind_floating_ip` operation until the change is confirmed.
   /api/v1/instances/{instanceId}/ports:
     get:
       summary: List the network interfaces of an instance
@@ -2032,6 +2337,9 @@ paths:
                 $ref: "#/components/schemas/Error"
     post:
       summary: Attach a network interface
+      description:
+        Returns the network interface; the instance shows the `attach_port` operation and the interface the
+        `attach` operation until the attachment is confirmed.
       operationId: attach-port
       tags:
         - Attachment
@@ -2050,11 +2358,13 @@ paths:
               $ref: "#/components/schemas/AttachPortRequestBody"
       responses:
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: The attachment was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/PortResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -2064,7 +2374,12 @@ paths:
   /api/v1/instances/{instanceId}/ports/{portId}:
     delete:
       summary: Detach a network interface
-      description: "The primary network interface cannot be detached; the instance would lose its network address."
+      description:
+        "The primary network interface cannot be detached; the instance would lose its network address.
+
+
+        Returns the network interface; the instance shows the `detach_port` operation and the interface the `detach`
+        operation until it is detached."
       operationId: detach-port
       tags:
         - Attachment
@@ -2083,11 +2398,13 @@ paths:
             format: uuid
       responses:
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: The detachment was accepted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/PortResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -2172,8 +2489,8 @@ paths:
             schema:
               $ref: "#/components/schemas/CreatePortRequestBody"
       responses:
-        "201":
-          description: Created
+        "202":
+          description: The network interface was accepted and is being created.
           content:
             application/json:
               schema:
@@ -2201,8 +2518,14 @@ paths:
             type: string
             format: uuid
       responses:
-        "204":
-          description: No Content
+        "202":
+          description: Deletion was accepted. The network interface shows the `delete` operation until it is deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -2254,8 +2577,8 @@ paths:
             schema:
               $ref: "#/components/schemas/CreatePrivateNetworkRequestBody"
       responses:
-        "201":
-          description: Created
+        "202":
+          description: The private network was accepted and is being created.
           content:
             application/json:
               schema:
@@ -2340,8 +2663,14 @@ paths:
             type: string
             format: uuid
       responses:
-        "204":
-          description: No Content
+        "202":
+          description: Release was accepted. The private network shows the `delete` operation until it is released.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivateNetworkResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -2394,12 +2723,14 @@ paths:
             type: string
             format: uuid
       responses:
-        "200":
-          description: OK
+        "202":
+          description: Enabling IPv6 was accepted.
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/IPv6ResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -2420,8 +2751,14 @@ paths:
             type: string
             format: uuid
       responses:
-        "204":
-          description: No Content
+        "202":
+          description: Disabling IPv6 was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IPv6ResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -2887,6 +3224,347 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/regions/{regionId}/snapshot-quota:
+    parameters:
+      - name: regionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get regional snapshot quota
+      description: |-
+        The snapshot count quota for the authenticated project in this region. Counts simultaneous
+        snapshot holdings, not lifetime create calls or storage bytes. Without an active purchase,
+        limit and available are zero; existing holdings, if any, still appear in used.
+
+        pending and provisioning creations reserve a slot. Snapshots being deleted or whose cleanup
+        is uncertain retain their slots until absence or deletion is confirmed. available is
+        max(limit - used, 0) while active, and zero when creation is not permitted; additional
+        creation is refused while the quota is inactive, suspended or exhausted.
+
+        Canceling the quota's subscription through Billing is refused while any snapshot exists in
+        the region: the cancellation fails with SNAPSHOT_QUOTA_IN_USE. Reclaiming the quota for
+        non-payment deletes its snapshots, as for other reclaimed resources.
+      operationId: get-snapshot-quota
+      tags: [Snapshot]
+      responses:
+        "200":
+          description: Current effective quota, occupied slots and any pending purchase.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotQuota"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      summary: Set regional snapshot quota
+      description: |-
+        Purchases or changes the maximum number of snapshots this project may hold in this region.
+        limit is the target total, not an additional number of slots or a consumable create allowance.
+        billing chooses one of the quota's pricing options; a change of an existing purchase keeps its
+        billing mode and period, and billing must name that option. The purchased quantity is this count.
+
+        Returns the quota with the order. pending_limit records the target while the current limit stays
+        in force; the new limit applies once the order is accepted and the quota is activated. Snapshots
+        create no further orders or subscriptions, and deleting one frees a slot without refunding the
+        quota purchase.
+
+        Repeating the same target and billing choice while its purchase is pending returns the same order. A
+        conflicting pending purchase is refused with SNAPSHOT_QUOTA_CHANGE_PENDING. An already effective
+        identical target and billing choice returns its existing purchase without charging again; renewing its
+        term is a separate Billing renewal operation. A requested limit below used is refused with
+        409 SNAPSHOT_QUOTA_IN_USE, with meta.used and meta.limit. A change never deletes snapshots.
+      operationId: set-snapshot-quota
+      tags: [Snapshot]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSnapshotQuotaRequestBody"
+            example:
+              limit: 20
+              billing:
+                mode: prepaid
+                period:
+                  unit: month
+                  count: 1
+              checkout:
+                mode: deferred
+      responses:
+        "202":
+          description: The quota purchase was recorded; the requested limit may not yet be effective.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SetSnapshotQuotaResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/regions/{regionId}/snapshot-quota/quote:
+    parameters:
+      - name: regionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Quote setting the regional snapshot quota
+      description:
+        "Prices what `set-snapshot-quota` would order, including a change of an existing purchase as of now, for the same request, without ordering or creating anything; nothing is
+        reserved or recorded. Billing evaluates applicable account discounts and tax as for automatic checkout.
+        `total` is what automatic checkout would collect before credit grants and balance; give it as
+        `checkout.expected_amount` to be refused rather than charged a different amount. `estimated_usage_amount`
+        projects postpaid usage over one month of 730 hours and is not collected at checkout. A request the purchase
+        would refuse is refused the same way. Prices may change, so quote again before final confirmation."
+      operationId: create-snapshot-quota-quote
+      tags:
+        - Snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetSnapshotQuotaQuoteRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/regions/{regionId}/backup-service:
+    parameters:
+      - name: regionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get the backup service of a region
+      description:
+        "The backup service of the authenticated project in this region. Backups can be created only while it
+        is `active`. Each hour, Compute covers retained backup capacity up to the total `capacity_gib` of the capacity
+        packs active in the region and meters only the excess on this service's subscription, per GiB-hour.
+
+
+        Canceling the service's subscription through Billing is refused while any backup is retained in the region:
+        the cancellation fails with `BACKUP_SERVICE_IN_USE`. Delete the backups first. Capacity packs are canceled
+        separately, under their own refund terms. Reclaiming the service for non-payment deletes its backups."
+      operationId: get-backup-service
+      tags:
+        - Backup
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupService"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Activate the backup service in a region
+      description:
+        "Purchases the backup service for this project and region. The service itself has no charge; backups
+        are billed under it postpaid, by retained capacity. It takes no billing choice. Returns the service as
+        `pending` with its order; it becomes `active` once the order is accepted.
+
+
+        Refused with 409 `BACKUP_SERVICE_EXISTS` while an activation is pending or the service is active or
+        suspended."
+      operationId: create-backup-service
+      tags:
+        - Backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBackupServiceRequestBody"
+      responses:
+        "202":
+          description: The backup service and its order were created; the service is not active yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateBackupServiceResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/regions/{regionId}/backup-service/quote:
+    parameters:
+      - name: regionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Quote activating the backup service
+      description:
+        "Prices what `create-backup-service` would order for the same request, without ordering or creating anything; nothing is
+        reserved or recorded. Billing evaluates applicable account discounts and tax as for automatic checkout.
+        `total` is what automatic checkout would collect before credit grants and balance; give it as
+        `checkout.expected_amount` to be refused rather than charged a different amount. `estimated_usage_amount`
+        projects postpaid usage over one month of 730 hours and is not collected at checkout. A request the purchase
+        would refuse is refused the same way. Prices may change, so quote again before final confirmation."
+      operationId: create-backup-service-quote
+      tags:
+        - Backup
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/regions/{regionId}/backup-capacity-packs:
+    parameters:
+      - name: regionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: List backup capacity packs
+      description: The capacity packs of the authenticated project in this region, newest first, including ended ones.
+      operationId: list-backup-capacity-packs
+      tags:
+        - Backup
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BackupCapacityPackListResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Buy a backup capacity pack
+      description:
+        "Purchases a capacity pack, prepaid backup capacity for this project and region bought by month or year:
+        `billing` must be prepaid with a period, as offered in the backup service's `capacity_pack_pricing`. Compute
+        applies the coverage: each hour, retained backup capacity up to the total `capacity_gib` of the packs active
+        in the region is covered, and Compute meters only the excess on the backup service's subscription. A pack is
+        not a Billing allowance or credit; Billing takes its order and payment and handles its renewal and
+        cancellation through the pack's subscription.
+
+
+        Returns the pack as `pending` with its order; it applies once the order is accepted. Refused with 409
+        `BACKUP_SERVICE_NOT_ACTIVE` and `meta.region_id` when the region's backup service is not active."
+      operationId: create-backup-capacity-pack
+      tags:
+        - Backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBackupCapacityPackRequestBody"
+      responses:
+        "202":
+          description: The pack and its order were created; the pack does not apply yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateBackupCapacityPackResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/regions/{regionId}/backup-capacity-packs/quote:
+    parameters:
+      - name: regionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      summary: Quote buying a backup capacity pack
+      description:
+        "Prices what `create-backup-capacity-pack` would order for the same request, without ordering or creating anything; nothing is
+        reserved or recorded. Billing evaluates applicable account discounts and tax as for automatic checkout.
+        `total` is what automatic checkout would collect before credit grants and balance; give it as
+        `checkout.expected_amount` to be refused rather than charged a different amount. `estimated_usage_amount`
+        projects postpaid usage over one month of 730 hours and is not collected at checkout. A request the purchase
+        would refuse is refused the same way. Prices may change, so quote again before final confirmation."
+      operationId: create-backup-capacity-pack-quote
+      tags:
+        - Backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBackupCapacityPackQuoteRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/snapshots:
     get:
       summary: List snapshots
@@ -2928,7 +3606,18 @@ paths:
         **A snapshot of a system disk cannot be used to revert that system disk**: reverting requires the disk to
         be detached, and a system disk cannot be detached. It can be used to create a new data disk. To preserve
         and restore an entire system, use a private image; for a copy that crosses availability zones and survives
-        deletion of the disk, use a backup."
+        deletion of the disk, use a backup.
+
+
+        Snapshot slots are purchased separately for this project and the source disk's region. This operation
+        reserves one available slot and returns the snapshot as `pending`; it places no order and charges nothing.
+        `pending` and `provisioning` snapshots occupy slots, so concurrent requests cannot exceed the purchased limit.
+        Read the snapshot until it is `available` or `failed`.
+
+
+        Refused with SNAPSHOT_QUOTA_EXCEEDED when no slot is available. meta.region_id, meta.limit and meta.used
+        identify the applicable quota. A failed creation releases its slot only after any snapshot data has
+        been confirmed absent or removed."
       operationId: create-snapshot
       tags:
         - Snapshot
@@ -2939,12 +3628,12 @@ paths:
             schema:
               $ref: "#/components/schemas/CreateSnapshotRequestBody"
       responses:
-        "201":
-          description: Created
+        "202":
+          description: The snapshot record was created within the existing quota; snapshot data may not yet exist.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PurchaseResult"
+                $ref: "#/components/schemas/SnapshotResource"
         default:
           description: Error
           content:
@@ -3010,9 +3699,8 @@ paths:
                 $ref: "#/components/schemas/Error"
     delete:
       description:
-        "Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the snapshot, including a
-        pay-as-you-go subscription. `meta.resource_id` names the snapshot. It is released by canceling the subscriptions
-        listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`."
+        "Deletes this snapshot without canceling the project's snapshot quota purchase. A snapshot has no
+        individual Billing subscription. Its slot stays occupied until the deletion is confirmed."
       summary: Delete a snapshot
       operationId: delete-snapshot
       tags:
@@ -3026,43 +3714,15 @@ paths:
             format: uuid
       responses:
         "409":
-          description: The deletion was refused.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
+          $ref: "#/components/responses/Conflict"
         "202":
-          description: The action was accepted. Wait for the returned task to finish.
+          description: Deletion was accepted. The snapshot shows the `delete` operation until it is deleted.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Task"
+                $ref: "#/components/schemas/SnapshotResource"
         default:
           description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/tasks/{taskId}:
-    get:
-      operationId: get-task
-      summary: Get a requested action
-      parameters:
-        - name: taskId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: The task.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Task"
-        default:
-          description: The request could not be completed.
           content:
             application/json:
               schema:
@@ -3184,6 +3844,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PeeringResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -3204,6 +3866,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PeeringResource"
+        "409":
+          $ref: "#/components/responses/Conflict"
         default:
           description: Error
           content:
@@ -3247,6 +3911,18 @@ components:
       required: false
       schema:
         { type: integer, format: int64, minimum: 1, maximum: 200, default: 50 }
+  responses:
+    Conflict:
+      description: |-
+        The request conflicts with the current state of a resource or offering it involves. `COMPUTE_RESOURCE_BUSY`
+        means a resource has an operation in progress: `meta.resource_type`, such as `instance` or `floating_ip`, and
+        `meta.resource_id` name it, and `meta.operation` is the type of that operation, as in its `operation` field.
+        Retry once it has finished. Other codes, such as `BILLING_OPTION_UNAVAILABLE`, are described where they
+        apply.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     PeeringResource:
       type: object
@@ -3267,7 +3943,6 @@ components:
             - pending_acceptance
             - provisioning
             - active
-            - deleting
             - deleted
             - rejected
             - error
@@ -3276,6 +3951,12 @@ components:
           format: date-time
         failure_code:
           type: string
+        operation:
+          description: The operation in progress on this peering, or null when none is.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/PeeringOperation"
+            - type: "null"
       required:
         - id
         - name
@@ -3286,6 +3967,7 @@ components:
         - accepter_network_id
         - status
         - created_at
+        - operation
       additionalProperties: false
     PeeringListResponseBody:
       type: object
@@ -3320,6 +4002,9 @@ components:
       $ref: ../../type/v1/error.yaml#/components/schemas/Error
       required: []
     BackupResource:
+      description:
+        A copy of a disk, metered on the backup service of its region by `capacity_gib` for as long as it is
+        retained. It has no order or subscription of its own.
       type: object
       properties:
         created_at:
@@ -3339,62 +4024,32 @@ components:
             than this
           type: integer
           format: int64
+        capacity_gib:
+          description:
+            "The capacity metered for this backup, in GiB: the size of the source disk when the backup was taken.
+            Usage is this capacity multiplied by the time the backup is retained."
+          type: integer
+          format: int64
         source_disk_id:
           description: The disk this backup was taken from. The backup remains usable after that disk is deleted
           type: string
           format: uuid
         status:
+          description:
+            "`provisioning` while the backup is taken, then `available`. `failed` means the backup was not
+            created."
           type: string
           enum:
             - provisioning
             - available
-            - restoring
-            - deleting
+            - deleted
+            - failed
             - error
-        order_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        price_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        subscription_item_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        release_subscription_ids:
-          description:
-            "The subscriptions a cancellation through Billing has to cover to release this backup: its own.
-            Subscriptions that have ended are not listed, and the list is empty when no subscription pays for any of
-            them."
-          type: array
-          items:
-            type: string
-            format: uuid
-        release_set:
-          description:
-            "The subscriptions of `release_subscription_ids`, in the same order, each with the resource it
-            pays for, so that each line of a cancellation can name what it releases."
-          type: array
-          items:
-            $ref: "#/components/schemas/ReleaseSetItem"
-        access_state:
-          type:
-            - string
-            - "null"
-          enum:
-            - pending
-            - enabled
-            - suspended
-            - reclaimed
-            - null
-        task:
+        operation:
+          description: The operation in progress on this backup, or null when none is.
+          readOnly: true
           anyOf:
-            - $ref: "#/components/schemas/Task"
+            - $ref: "#/components/schemas/BackupOperation"
             - type: "null"
         generation:
           type: integer
@@ -3414,17 +4069,12 @@ components:
         - source_disk_id
         - name
         - size_gb
+        - capacity_gib
         - status
         - region_id
         - source_availability_zone_id
         - created_at
-        - order_id
-        - price_id
-        - subscription_item_id
-        - release_subscription_ids
-        - release_set
-        - access_state
-        - task
+        - operation
         - generation
         - observed_at
       additionalProperties: false
@@ -3453,31 +4103,9 @@ components:
           type: string
           minLength: 1
           maxLength: 128
-        price_id:
-          type: string
-          format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
       required:
         - disk_id
         - name
-        - price_id
-        - order
-      additionalProperties: false
-    CreateBackupQuoteRequestBody:
-      description: The fields of `CreateBackupRequestBody` that decide the price
-      type: object
-      properties:
-        disk_id:
-          description: The disk that would be backed up
-          type: string
-          format: uuid
-        price_id:
-          description: A price of the region's backup offering. One is selected when omitted
-          type: string
-          format: uuid
-      required:
-        - disk_id
       additionalProperties: false
     RenameBackupRequestBody:
       type: object
@@ -3511,16 +4139,14 @@ components:
           type: integer
           format: int64
           minimum: 0
-        price_id:
-          type: string
-          format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
       required:
         - disk_type_id
         - name
-        - price_id
-        - order
+        - billing
       additionalProperties: false
     DiskResource:
       type: object
@@ -3569,38 +4195,40 @@ components:
             - "null"
           format: int64
         status:
+          description:
+            "`pending` until the order is accepted, with no storage allocated; `provisioning` while the disk is
+            created; then `available`, or `in_use` once attached. `failed` means the disk was not created;
+            `failure_reason` states why."
           type: string
           enum:
+            - pending
             - provisioning
             - available
-            - attaching
             - in_use
-            - detaching
-            - resizing
-            - reverting
-            - restoring
-            - releasing
-            - deleting
+            - deleted
+            - failed
             - error
         order_id:
           type:
             - string
             - "null"
           format: uuid
-        price_id:
+        order_item_id:
+          description: The Billing order item for this resource.
           type:
             - string
             - "null"
           format: uuid
-        subscription_item_id:
-          type:
-            - string
-            - "null"
+        subscription_id:
+          description: |-
+            The Billing subscription associated with this resource. It may still be pending; its
+            presence does not imply delivery or metering. Null when no subscription is associated.
+          type: [string, "null"]
           format: uuid
         release_subscription_ids:
           description:
-            "The subscriptions a cancellation through Billing has to cover to release this disk: its own
-            and those of its snapshots. A system disk is released only with its instance, so for a system disk the
+            "The subscriptions a cancellation through Billing has to cover to release this disk: its own.
+            Snapshots have no individual subscriptions. A system disk is released only with its instance, so for a system disk the
             list is that of the instance. Subscriptions that have ended are not listed, and the list is empty when no
             subscription pays for any of them."
           type: array
@@ -3624,9 +4252,24 @@ components:
             - suspended
             - reclaimed
             - null
-        task:
+        failure_reason:
+          description:
+            Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation failed
+            after the order was accepted, and the charge for this disk is refunded.
+          type:
+            - string
+            - "null"
+          enum:
+            - order_declined
+            - order_canceled
+            - order_expired
+            - provisioning_failed
+            - null
+        operation:
+          description: The operation in progress on this disk, or null when none is.
+          readOnly: true
           anyOf:
-            - $ref: "#/components/schemas/Task"
+            - $ref: "#/components/schemas/DiskOperation"
             - type: "null"
         attachment:
           anyOf:
@@ -3653,12 +4296,13 @@ components:
         - status
         - created_at
         - order_id
-        - price_id
-        - subscription_item_id
+        - order_item_id
+        - subscription_id
         - release_subscription_ids
         - release_set
         - access_state
-        - task
+        - failure_reason
+        - operation
         - generation
         - observed_at
       additionalProperties: false
@@ -3739,21 +4383,12 @@ components:
             - integer
             - "null"
           format: int64
-        product_id:
-          description: Billing Product ID. Null when no Product is assigned; otherwise `compute`.
-          type:
-            - string
-            - "null"
-        plan_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        snapshot_plan_id:
-          type:
-            - string
-            - "null"
-          format: uuid
+        pricing:
+          description: How a disk of this type can be bought, per GiB. Null when the project has no billing account.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
       required:
         - id
         - name
@@ -3768,9 +4403,7 @@ components:
         - iops_at_max_size
         - throughput_at_min_size
         - throughput_at_max_size
-        - product_id
-        - plan_id
-        - snapshot_plan_id
+        - pricing
       additionalProperties: false
     DiskTypeListResponseBody:
       type: object
@@ -3835,16 +4468,19 @@ components:
         status:
           description:
             "Only `available` images can install instances. A public image is always `available`; a private
-            image goes through `provisioning` and `uploading` while it is captured."
+            image is `pending` until its order is accepted, then goes through `provisioning` and `uploading` while
+            it is captured. `failed` means the capture produced no image; `failure_reason` states why."
           type: string
           enum:
+            - pending
             - provisioning
             - uploading
             - available
-            - deleting
+            - deleted
+            - failed
             - error
         failure:
-          description: Reason the capture failed; non-empty only when `status` is `error`
+          description: Details of why the capture failed; non-empty only when `status` is `failed`
           type:
             - string
             - "null"
@@ -3870,15 +4506,17 @@ components:
             - string
             - "null"
           format: uuid
-        price_id:
+        order_item_id:
+          description: The Billing order item for this resource.
           type:
             - string
             - "null"
           format: uuid
-        subscription_item_id:
-          type:
-            - string
-            - "null"
+        subscription_id:
+          description: |-
+            The Billing subscription associated with this resource. It may still be pending; its
+            presence does not imply delivery or metering. Null when no subscription is associated.
+          type: [string, "null"]
           format: uuid
         release_subscription_ids:
           description:
@@ -3906,9 +4544,24 @@ components:
             - suspended
             - reclaimed
             - null
-        task:
+        failure_reason:
+          description:
+            Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation failed
+            after the order was accepted, and the charge for this image is refunded.
+          type:
+            - string
+            - "null"
+          enum:
+            - order_declined
+            - order_canceled
+            - order_expired
+            - provisioning_failed
+            - null
+        operation:
+          description: The operation in progress on this image, or null when none is.
+          readOnly: true
           anyOf:
-            - $ref: "#/components/schemas/Task"
+            - $ref: "#/components/schemas/ImageOperation"
             - type: "null"
         generation:
           type: integer
@@ -3937,12 +4590,13 @@ components:
         - source_instance_id
         - created_at
         - order_id
-        - price_id
-        - subscription_item_id
+        - order_item_id
+        - subscription_id
         - release_subscription_ids
         - release_set
         - access_state
-        - task
+        - failure_reason
+        - operation
         - generation
         - observed_at
       additionalProperties: false
@@ -4017,16 +4671,12 @@ components:
         vcpus:
           type: integer
           format: int64
-        product_id:
-          description: Billing Product ID. Null when no Product is assigned; otherwise `compute`.
-          type:
-            - string
-            - "null"
-        plan_id:
-          type:
-            - string
-            - "null"
-          format: uuid
+        pricing:
+          description: How an instance of this type can be bought, per instance. Null when the project has no billing account.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
       required:
         - id
         - name
@@ -4039,8 +4689,7 @@ components:
         - max_bandwidth_mbps
         - network_egress_kbps
         - network_ingress_kbps
-        - plan_id
-        - product_id
+        - pricing
       additionalProperties: false
     InstanceTypeListResponseBody:
       type: object
@@ -4070,11 +4719,18 @@ components:
         id:
           type: string
           format: uuid
+        private_image_pricing:
+          description: How private image storage in this region is billed, per GiB. Null when the project has no billing account.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
       required:
         - code
         - name
         - country_code
         - id
+        - private_image_pricing
       additionalProperties: false
     RegionListResponseBody:
       type: object
@@ -4160,17 +4816,15 @@ components:
           description: Restore from this snapshot. When given, the capacity need only be no smaller than the snapshot
           type: string
           format: uuid
-        price_id:
-          type: string
-          format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
       required:
         - disk_type_id
         - name
         - size_gb
-        - price_id
-        - order
+        - billing
       additionalProperties: false
     RenameDiskRequestBody:
       type: object
@@ -4190,15 +4844,17 @@ components:
           type: integer
           format: int64
           minimum: 1
-        price_id:
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+        proration_date:
+          description:
+            The `proration_date` of this change's quote, so that the order is priced from the same instant. Defaults
+            to the time of the request; it must be a whole second, not in the future and at most 10 minutes old,
+            otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
-          format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
+          format: date-time
       required:
         - size_gb
-        - price_id
-        - order
       additionalProperties: false
     RevertDiskRequestBody:
       type: object
@@ -4211,10 +4867,15 @@ components:
         - snapshot_id
       additionalProperties: false
     FloatingIPResource:
+      description: |-
+        One purchased public IP resource, including its bandwidth configuration. Bandwidth has no
+        separate Compute resource ID. Billing may split fees internally; read the order for the
+        commercial breakdown. Changing bandwidth updates this same resource, not another allocation.
       type: object
       properties:
         address:
-          type: string
+          description: The allocated public address. Null until the address is allocated.
+          type: [string, "null"]
         bandwidth_mbps:
           type:
             - integer
@@ -4230,11 +4891,16 @@ components:
           type: string
           format: uuid
         status:
+          description:
+            "`pending` until the order is accepted, with no address allocated; `provisioning` while the address
+            is allocated; then `available`. `failed` means no address was allocated; `failure_reason` states why."
           type: string
           enum:
             - pending
+            - provisioning
             - available
-            - deleting
+            - deleted
+            - failed
             - error
             - unknown
         order_id:
@@ -4242,20 +4908,22 @@ components:
             - string
             - "null"
           format: uuid
-        price_id:
+        order_item_id:
+          description: The Billing order item for this resource.
           type:
             - string
             - "null"
           format: uuid
-        subscription_item_id:
-          type:
-            - string
-            - "null"
+        subscription_id:
+          description: |-
+            The Billing subscription associated with this resource. It may still be pending; its
+            presence does not imply delivery or metering. Null when no subscription is associated.
+          type: [string, "null"]
           format: uuid
         release_subscription_ids:
           description:
-            "The subscriptions a cancellation through Billing has to cover to release this address: the
-            subscriptions of the address and of its bandwidth. Subscriptions that have ended are not listed, and the
+            "The complete subscription set a cancellation through Billing has to cover to release this floating
+            IP, including any internal fee components. Subscriptions that have ended are not listed, and the
             list is empty when no subscription pays for any of them."
           type: array
           items:
@@ -4278,35 +4946,25 @@ components:
             - suspended
             - reclaimed
             - null
-        task:
-          anyOf:
-            - $ref: "#/components/schemas/Task"
-            - type: "null"
-        bandwidth_order_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        bandwidth_price_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        bandwidth_subscription_item_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        bandwidth_access_state:
+        failure_reason:
+          description:
+            Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation failed
+            after the order was accepted, and the charge for this floating IP is refunded.
           type:
             - string
             - "null"
           enum:
-            - pending
-            - enabled
-            - suspended
-            - reclaimed
+            - order_declined
+            - order_canceled
+            - order_expired
+            - provisioning_failed
             - null
+        operation:
+          description: The operation in progress on this floating IP, or null when none is.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/FloatingIPOperation"
+            - type: "null"
         generation:
           type: integer
           format: int64
@@ -4328,19 +4986,16 @@ components:
         - bandwidth_mbps
         - created_at
         - order_id
-        - price_id
-        - subscription_item_id
+        - order_item_id
+        - subscription_id
         - release_subscription_ids
         - release_set
         - access_state
-        - task
+        - failure_reason
+        - operation
         - generation
         - observed_at
         - binding
-        - bandwidth_order_id
-        - bandwidth_price_id
-        - bandwidth_subscription_item_id
-        - bandwidth_access_state
       additionalProperties: false
     FloatingIPListResponseBody:
       type: object
@@ -4376,9 +5031,11 @@ components:
             looks correct and nothing anywhere reports it.
 
 
-            It is billed separately from the address, per Mbit/s-hour, and appears as its own line on
+            It is part of this floating IP purchase and is billed as the pool''s `bandwidth_pricing` shows,
 
-            the order. Changing it later goes through the bandwidth endpoint.'
+            with the purchase''s billing choice. Changing it later updates the
+
+            same floating IP through its bandwidth endpoint, not an independent bandwidth resource.'
           type: integer
           format: int64
           minimum: 1
@@ -4389,39 +5046,38 @@ components:
         ipv4_pool_id:
           type: string
           format: uuid
-        price_id:
-          type: string
-          format: uuid
-        bandwidth_price_id:
-          type: string
-          format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
       required:
         - private_network_id
         - bandwidth_mbps
         - ipv4_pool_id
-        - price_id
-        - bandwidth_price_id
-        - order
+        - billing
       additionalProperties: false
-    SetBandwidthRequestBody:
+    SetFloatingIPBandwidthRequestBody:
+      description: |-
+        Change bandwidth on the floating IP identified by the path. This is a configuration change
+        of that purchase, not an independent bandwidth purchase. Checkout is handled by Billing.
       type: object
       properties:
-        mbps:
+        bandwidth_mbps:
           description: Applied to both directions
           type: integer
           format: int64
           minimum: 1
-        price_id:
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+        proration_date:
+          description:
+            The `proration_date` of this change's quote, so that the order is priced from the same instant. Defaults
+            to the time of the request; it must be a whole second, not in the future and at most 10 minutes old,
+            otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
-          format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
+          format: date-time
       required:
-        - mbps
-        - price_id
-        - order
+        - bandwidth_mbps
       additionalProperties: false
     BindFloatingIPRequestBody:
       type: object
@@ -4504,10 +5160,15 @@ components:
           type: string
           format: uuid
         status:
+          description:
+            "`pending` until the order is accepted: no virtual machine exists and addresses are null.
+            `provisioning` while the instance is created, then `active`. `failed` means the instance was not
+            created; `failure_reason` states why. The other values are the state last observed in the cloud; an
+            operation in progress appears in `operation`, not here."
           type: string
           enum:
             - pending
-            - building
+            - provisioning
             - active
             - stopped
             - paused
@@ -4515,8 +5176,8 @@ components:
             - shelved
             - shelved_offloaded
             - rescued
-            - deleting
             - deleted
+            - failed
             - error
             - unknown
         subnet_id:
@@ -4527,12 +5188,6 @@ components:
         updated_at:
           type: string
           format: date-time
-        desired_state:
-          type: string
-          enum:
-            - running
-            - stopped
-            - deleted
         power_state:
           type: string
           enum:
@@ -4543,13 +5198,6 @@ components:
             - crashed
             - suspended
             - unknown
-        task_state:
-          type: string
-          minLength: 1
-          maxLength: 128
-          description:
-            Current provider task, such as scheduling, networking, block_device_mapping or spawning.
-            none means no task; unknown tasks remain observable and do not imply failure.
         generation:
           type: integer
           format: int64
@@ -4563,29 +5211,47 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/InstanceRestriction"
-        task:
+        failure_reason:
+          description:
+            Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation failed
+            after the order was accepted, and the charge for this instance is refunded.
+          type:
+            - string
+            - "null"
+          enum:
+            - order_declined
+            - order_canceled
+            - order_expired
+            - provisioning_failed
+            - null
+        operation:
+          description: The operation in progress on this instance, or null when none is.
+          readOnly: true
           anyOf:
-            - $ref: "#/components/schemas/Task"
+            - $ref: "#/components/schemas/InstanceOperation"
             - type: "null"
         order_id:
           type:
             - string
             - "null"
           format: uuid
-        price_id:
+        order_item_id:
+          description: The Billing order item for this resource.
           type:
             - string
             - "null"
           format: uuid
-        subscription_item_id:
-          type:
-            - string
-            - "null"
+        subscription_id:
+          description: |-
+            The Billing subscription associated with this resource. It may still be pending; its
+            presence does not imply delivery or metering. Null when no subscription is associated.
+          type: [string, "null"]
           format: uuid
         release_subscription_ids:
           description:
             "The subscriptions a cancellation through Billing has to cover to release this instance: its
-            own, those of the disks deleted with it, and those of the snapshots of those disks. Subscriptions that
+            own and those of the disks deleted with it. Snapshots are cleaned up with their source disk without
+            canceling the project's snapshot quota. Subscriptions that
             have ended are not listed, and the list is empty when no subscription pays for any of them."
           type: array
           items:
@@ -4635,17 +5301,16 @@ components:
         - created_at
         - updated_at
         - order_id
-        - desired_state
         - power_state
-        - task_state
         - generation
         - restrictions
-        - price_id
-        - subscription_item_id
+        - order_item_id
+        - subscription_id
         - release_subscription_ids
         - release_set
         - access_state
-        - task
+        - failure_reason
+        - operation
         - observed_at
       additionalProperties: false
     InstanceListResponseBody:
@@ -4755,11 +5420,10 @@ components:
           description: Create the primary network interface in this subnet. Exactly one of this and `port_id`
           type: string
           format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
-        price_id:
-          type: string
-          format: uuid
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
         boot_disk:
           $ref: "#/components/schemas/NewBootDisk"
         floating_ip:
@@ -4767,8 +5431,7 @@ components:
       required:
         - name
         - instance_type_id
-        - order
-        - price_id
+        - billing
       additionalProperties: false
     SetInstanceLabelsRequestBody:
       type: object
@@ -4940,15 +5603,17 @@ components:
           type: string
           format: uuid
           maxLength: 64
-        order:
-          $ref: "#/components/schemas/OrderOptions"
-        price_id:
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+        proration_date:
+          description:
+            The `proration_date` of this change's quote, so that the order is priced from the same instant. Defaults
+            to the time of the request; it must be a whole second, not in the future and at most 10 minutes old,
+            otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
-          format: uuid
+          format: date-time
       required:
         - instance_type_id
-        - order
-        - price_id
       additionalProperties: false
     AttachDiskRequestBody:
       type: object
@@ -5003,7 +5668,6 @@ components:
           enum:
             - pending
             - available
-            - deleting
             - error
             - unknown
         generation:
@@ -5015,6 +5679,12 @@ components:
             - string
             - "null"
           format: date-time
+        operation:
+          description: The operation in progress on this network interface, or null when none is.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/PortOperation"
+            - type: "null"
       required:
         - id
         - private_network_id
@@ -5024,6 +5694,7 @@ components:
         - status
         - generation
         - observed_at
+        - operation
       additionalProperties: false
     PortListResponseBody:
       type: object
@@ -5168,16 +5839,14 @@ components:
           type: string
           minLength: 1
           maxLength: 128
-        price_id:
-          type: string
-          format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
       required:
         - instance_id
         - name
-        - price_id
-        - order
+        - billing
       additionalProperties: false
     CreateImageQuoteRequestBody:
       description: The fields of `CreateImageRequestBody` that decide the price
@@ -5187,12 +5856,11 @@ components:
           description: The instance whose system disk would be captured
           type: string
           format: uuid
-        price_id:
-          description: A price of the region's private image offering. One is selected when omitted
-          type: string
-          format: uuid
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
       required:
         - instance_id
+        - billing
       additionalProperties: false
     RenameImageRequestBody:
       type: object
@@ -5228,12 +5896,17 @@ components:
           enum:
             - pending
             - available
-            - deleting
             - error
             - unknown
         updated_at:
           type: string
           format: date-time
+        operation:
+          description: The operation in progress on this private network, or null when none is.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/PrivateNetworkOperation"
+            - type: "null"
       required:
         - id
         - name
@@ -5243,6 +5916,7 @@ components:
         - has_internet_gateway
         - created_at
         - updated_at
+        - operation
       additionalProperties: false
     PrivateNetworkListResponseBody:
       type: object
@@ -5607,7 +6281,126 @@ components:
         - direction
         - ethertype
       additionalProperties: false
+    SnapshotQuota:
+      description: |-
+        Snapshot count capacity for the authenticated project and one region, projected from its
+        effective quota purchase and Compute's actual holdings. This is not a Billing Allowance:
+        creation occupies capacity and confirmed deletion releases it rather than consuming a grant.
+        Pending purchases never increase effective capacity before commercial acceptance and activation.
+      type: object
+      properties:
+        region_id:
+          type: string
+          format: uuid
+        status:
+          description: |-
+            inactive has no purchase; pending is a first purchase whose order has not been accepted;
+            provisioning is a first purchase being activated; active permits creation within available
+            capacity; suspended refuses new creation; failed means the first purchase failed, as
+            failure_reason states. A pending change keeps the current status and limit until it is applied.
+          type: string
+          enum: [inactive, pending, provisioning, active, suspended, failed]
+        limit:
+          description: Effective maximum concurrent snapshot count. Zero until the first purchase is activated.
+          type: integer
+          format: int64
+          minimum: 0
+        used:
+          description: Held and reserved snapshot slots, including pending creation and unconfirmed cleanup.
+          type: integer
+          format: int64
+          minimum: 0
+        available:
+          description: max(limit - used, 0), or zero while creation is not permitted.
+          type: integer
+          format: int64
+          minimum: 0
+        order_id:
+          description: The order establishing the currently associated quota purchase, including an initial pending purchase.
+          type: [string, "null"]
+          format: uuid
+        subscription_id:
+          description: |-
+            The quota purchase's Billing subscription, not an individual snapshot subscription.
+            May still be pending on an initial purchase; an existing subscription remains associated
+            until a replacement quota is activated. Null when no purchase has been recorded.
+          type: [string, "null"]
+          format: uuid
+        pending_limit:
+          description: Target count awaiting checkout or activation; null when no purchase is pending.
+          type: [integer, "null"]
+          format: int64
+          minimum: 1
+        pending_order_id:
+          description: Order for the pending initial purchase or change; null when none is pending.
+          type: [string, "null"]
+          format: uuid
+        failure_reason:
+          description: |-
+            Why the first purchase failed; null unless status is failed. A failed change leaves the current
+            limit in force and clears pending_limit; its order shows the outcome.
+          type:
+            - string
+            - "null"
+          enum:
+            - order_declined
+            - order_canceled
+            - order_expired
+            - provisioning_failed
+            - null
+        pricing:
+          description: How snapshot quota in this region can be bought, per snapshot slot. Null when the project has no billing account.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
+      required:
+        - region_id
+        - status
+        - limit
+        - used
+        - available
+        - order_id
+        - subscription_id
+        - pending_limit
+        - pending_order_id
+        - failure_reason
+        - pricing
+      additionalProperties: false
+    SetSnapshotQuotaRequestBody:
+      type: object
+      properties:
+        limit:
+          description: Desired total concurrent snapshot count for this project and region, not additional slots.
+          type: integer
+          format: int64
+          minimum: 1
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+        proration_date:
+          description:
+            The `proration_date` of this change's quote, so that the order is priced from the same instant. Defaults
+            to the time of the request; it must be a whole second, not in the future and at most 10 minutes old,
+            otherwise the request is refused with `BILLING_CHANGE_INVALID`.
+          type: string
+          format: date-time
+      required: [limit, billing]
+      additionalProperties: false
+    SetSnapshotQuotaResponseBody:
+      type: object
+      properties:
+        snapshot_quota:
+          $ref: "#/components/schemas/SnapshotQuota"
+        order:
+          $ref: "#/components/schemas/PlacedOrder"
+      required: [snapshot_quota, order]
+      additionalProperties: false
     SnapshotResource:
+      description:
+        A snapshot, created within this project's purchased regional snapshot quota. It has no order, price
+        or Billing subscription of its own.
       type: object
       properties:
         availability_zone_id:
@@ -5635,57 +6428,23 @@ components:
           type: integer
           format: int64
         status:
+          description:
+            "`pending` once a quota slot is reserved, `provisioning` while the snapshot is taken, then
+            `available`. `failed` means the snapshot was not created; its slot is released once no snapshot data
+            remains."
           type: string
           enum:
+            - pending
             - provisioning
             - available
-            - restoring
-            - deleting
+            - deleted
+            - failed
             - error
-        order_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        price_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        subscription_item_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        release_subscription_ids:
-          description:
-            "The subscriptions a cancellation through Billing has to cover to release this snapshot: its
-            own. Subscriptions that have ended are not listed, and the list is empty when no subscription pays for any
-            of them."
-          type: array
-          items:
-            type: string
-            format: uuid
-        release_set:
-          description:
-            "The subscriptions of `release_subscription_ids`, in the same order, each with the resource it
-            pays for, so that each line of a cancellation can name what it releases."
-          type: array
-          items:
-            $ref: "#/components/schemas/ReleaseSetItem"
-        access_state:
-          type:
-            - string
-            - "null"
-          enum:
-            - pending
-            - enabled
-            - suspended
-            - reclaimed
-            - null
-        task:
+        operation:
+          description: The operation in progress on this snapshot, or null when none is.
+          readOnly: true
           anyOf:
-            - $ref: "#/components/schemas/Task"
+            - $ref: "#/components/schemas/SnapshotOperation"
             - type: "null"
         generation:
           type: integer
@@ -5705,13 +6464,7 @@ components:
         - availability_zone_id
         - region_id
         - created_at
-        - order_id
-        - price_id
-        - subscription_item_id
-        - release_subscription_ids
-        - release_set
-        - access_state
-        - task
+        - operation
         - generation
         - observed_at
       additionalProperties: false
@@ -5731,6 +6484,9 @@ components:
         - pagination
       additionalProperties: false
     CreateSnapshotRequestBody:
+      description: |-
+        Create one snapshot using existing project-and-region count quota. The region is taken from
+        disk_id. Purchase or adjust quota separately; this request has no checkout or price selection.
       type: object
       properties:
         disk_id:
@@ -5740,16 +6496,9 @@ components:
           type: string
           minLength: 1
           maxLength: 128
-        price_id:
-          type: string
-          format: uuid
-        order:
-          $ref: "#/components/schemas/OrderOptions"
       required:
         - disk_id
         - name
-        - price_id
-        - order
       additionalProperties: false
     RenameSecurityGroupRequestBody:
       type: object
@@ -5771,31 +6520,685 @@ components:
       required:
         - name
       additionalProperties: false
-    OrderOptions:
-      $ref: ../../type/v1/order.yaml#/components/schemas/OrderOptions
-      required: []
-    PlacedOrder:
-      $ref: ../../type/v1/order.yaml#/components/schemas/PlacedOrder
-      required: []
-    PurchaseQuote:
-      $ref: ../../type/v1/order.yaml#/components/schemas/PurchaseQuote
-      required: []
-    PurchaseResult:
+    Pricing:
       description:
-        Identifies the Compute task and the Billing order of a purchase. Work on the purchase starts after
-        the order's invoice is paid, or without waiting when the order has no immediate invoice. Track the task for
-        completion.
+        How a catalog item can be bought, calculated by Billing in the currency of the project's current billing
+        account. These are list amounts before promotion codes, not a checkout guarantee; quote a purchase for its
+        exact total.
       type: object
       properties:
-        task_id:
+        currency:
+          type: string
+        options:
+          description: One entry per way the item can be bought. Empty when it cannot be bought in this currency.
+          type: array
+          items:
+            $ref: "#/components/schemas/PricingOption"
+      required:
+        - currency
+        - options
+      additionalProperties: false
+    PricingOption:
+      description: One way to buy an item. Choose it by giving its `mode` and `period` as `billing`.
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+            - prepaid
+            - postpaid
+        period:
+          description: The term of a prepaid option; null for postpaid.
+          anyOf:
+            - $ref: "#/components/schemas/BillingPeriod"
+            - type: "null"
+        quantity_unit:
+          description:
+            "What the amounts are for: one `item`, such as an instance or an address; one `gib` of size or
+            capacity; one `mbps` of bandwidth; or one `snapshot` slot."
+          type: string
+          enum:
+            - item
+            - gib
+            - mbps
+            - snapshot
+        amount:
+          description: Prepaid only; null for postpaid. The amount for one period, per quantity unit.
+          type:
+            - string
+            - "null"
+        monthly_amount:
+          description: Prepaid only; null for postpaid. `amount` spread over the months of the period.
+          type:
+            - string
+            - "null"
+        saving_percent:
+          description:
+            Prepaid only. How much lower `monthly_amount` is than that of the shortest prepaid period of the same
+            item, as a decimal percentage. Null for that shortest period and for postpaid.
+          type:
+            - string
+            - "null"
+        unit_amount:
+          description: Postpaid only; null for prepaid. The amount for one `unit` of time, per quantity unit.
+          type:
+            - string
+            - "null"
+        unit:
+          description: Postpaid only; null for prepaid. The time unit of `unit_amount`.
+          type:
+            - string
+            - "null"
+          enum:
+            - hour
+            - null
+        termination:
+          description:
+            "What canceling does under this option: `immediate` ends the service at once, with any refund
+            following the option's terms; `period_end` ends it at the end of the paid period."
+          type: string
+          enum:
+            - immediate
+            - period_end
+      required:
+        - mode
+        - period
+        - quantity_unit
+        - amount
+        - monthly_amount
+        - saving_percent
+        - unit_amount
+        - unit
+        - termination
+      additionalProperties: false
+    BillingPeriod:
+      type: object
+      properties:
+        unit:
+          type: string
+          enum:
+            - month
+            - year
+        count:
+          type: integer
+          format: int64
+          minimum: 1
+      required:
+        - unit
+        - count
+      additionalProperties: false
+    BillingChoice:
+      description:
+        "How to pay for a purchase: one of the options in the items' `pricing`. `prepaid` requires `period` and
+        `postpaid` refuses it, with HTTP 400. The choice applies to every component of the purchase; a component
+        without that option is refused with 409 `BILLING_OPTION_UNAVAILABLE`, and `meta.component` names it."
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+            - prepaid
+            - postpaid
+        period:
+          $ref: "#/components/schemas/BillingPeriod"
+      required:
+        - mode
+      additionalProperties: false
+    BackupService:
+      description:
+        The backup service of a project in one region. Retained backup capacity beyond what active capacity packs
+        cover is metered on it.
+      type: object
+      properties:
+        region_id:
           type: string
           format: uuid
-          description: The Compute task that carries out the purchase.
+        status:
+          description:
+            "`inactive` has never been activated or its subscription has ended; `pending` awaits acceptance of its
+            order; `provisioning` is being activated; `active` accepts new backups; `suspended` refuses new backups
+            and keeps existing ones; `failed` means the activation failed, as `failure_reason` states."
+          type: string
+          enum:
+            - inactive
+            - pending
+            - provisioning
+            - active
+            - suspended
+            - failed
+        failure_reason:
+          description:
+            Why the purchase failed; null unless `status` is `failed`. `provisioning_failed` means it failed after
+            the order was accepted, and its charge is refunded.
+          type:
+            - string
+            - "null"
+          enum:
+            - order_declined
+            - order_canceled
+            - order_expired
+            - provisioning_failed
+            - null
+        order_id:
+          description: The order that activated the service; null before an activation is requested.
+          type:
+            - string
+            - "null"
+          format: uuid
+        subscription_id:
+          description: The Billing subscription that backup usage is billed under; null before an activation is requested.
+          type:
+            - string
+            - "null"
+          format: uuid
+        retained_capacity_gib:
+          description: The total `capacity_gib` of the backups retained in this region.
+          type: integer
+          format: int64
+          minimum: 0
+        prepaid_capacity_gib:
+          description:
+            The total `capacity_gib` of the active capacity packs in this region; this much retained capacity is
+            covered each hour.
+          type: integer
+          format: int64
+          minimum: 0
+        pricing:
+          description: The postpaid usage price of backups in this region. Null when the project has no billing account.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
+        capacity_pack_pricing:
+          description: The prepaid options of capacity packs in this region, per GiB. Null when the project has no billing account.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
+      required:
+        - region_id
+        - status
+        - failure_reason
+        - order_id
+        - subscription_id
+        - retained_capacity_gib
+        - prepaid_capacity_gib
+        - pricing
+        - capacity_pack_pricing
+      additionalProperties: false
+    CreateBackupServiceRequestBody:
+      type: object
+      properties:
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+      additionalProperties: false
+    CreateBackupServiceResponseBody:
+      type: object
+      properties:
+        backup_service:
+          $ref: "#/components/schemas/BackupService"
         order:
           $ref: "#/components/schemas/PlacedOrder"
       required:
-        - task_id
+        - backup_service
         - order
+      additionalProperties: false
+    BackupCapacityPack:
+      description:
+        Prepaid backup capacity for one region, sold by Compute and bought for a term through its own Billing
+        subscription. Compute applies its coverage to backup usage; it is not a Billing allowance or credit.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        region_id:
+          type: string
+          format: uuid
+        capacity_gib:
+          type: integer
+          format: int64
+          minimum: 1
+        status:
+          description:
+            "`pending` awaits acceptance of its order; `provisioning` is being applied; `active` covers backup
+            capacity; `ended` no longer does because its subscription has ended; `failed` means the purchase failed,
+            as `failure_reason` states."
+          type: string
+          enum:
+            - pending
+            - provisioning
+            - active
+            - ended
+            - failed
+        failure_reason:
+          description:
+            Why the purchase failed; null unless `status` is `failed`. `provisioning_failed` means it failed after
+            the order was accepted, and its charge is refunded.
+          type:
+            - string
+            - "null"
+          enum:
+            - order_declined
+            - order_canceled
+            - order_expired
+            - provisioning_failed
+            - null
+        order_id:
+          type: string
+          format: uuid
+        subscription_id:
+          description: The pack's Billing subscription, through which it is renewed or canceled.
+          type:
+            - string
+            - "null"
+          format: uuid
+        paid_until:
+          description: The end of the current paid term; null until the pack is active.
+          type:
+            - string
+            - "null"
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - region_id
+        - capacity_gib
+        - status
+        - failure_reason
+        - order_id
+        - subscription_id
+        - paid_until
+        - created_at
+      additionalProperties: false
+    BackupCapacityPackListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BackupCapacityPack"
+        pagination:
+          $ref: "../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    CreateBackupCapacityPackRequestBody:
+      type: object
+      properties:
+        capacity_gib:
+          type: integer
+          format: int64
+          minimum: 1
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+      required:
+        - capacity_gib
+        - billing
+      additionalProperties: false
+    CreateBackupCapacityPackResponseBody:
+      type: object
+      properties:
+        backup_capacity_pack:
+          $ref: "#/components/schemas/BackupCapacityPack"
+        order:
+          $ref: "#/components/schemas/PlacedOrder"
+      required:
+        - backup_capacity_pack
+        - order
+      additionalProperties: false
+    LaunchInstanceQuoteRequestBody:
+      description: The request of `launch-instance`, without `checkout`.
+      type: object
+      properties:
+        floating_ip_id:
+          description:
+            "Bind a floating IP you already hold, instead of allocating a new one. It must be idle and
+            in
+
+            the same region.
+
+
+            Mutually exclusive with `bandwidth_mbps`: an address you already hold has its own bandwidth
+
+            ceiling, set when it was allocated, and changing it is a separate operation.
+
+
+            Like `bandwidth_mbps`, this happens **inside the creation**: if binding fails, no instance is
+
+            created. Binding afterwards is still possible from the instance page, but then it is two
+
+            operations and a failure in between leaves an instance you cannot reach.
+
+
+            Only one instance can be created when it is used — one address binds to one interface."
+          type: string
+          format: uuid
+        count:
+          description: Number of instances to create; 1 when omitted. Names are numbered automatically for several
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 20
+          default: 1
+        generate_password:
+          description: Have the platform generate a random password, returned only in this response
+          type: boolean
+        boot_disk_id:
+          description:
+            Boot a disk you already have instead of installing an image. The disk must be available,
+            unattached, and in the same availability zone as the instance type. Exactly one of this and `image_id`
+          type: string
+          format: uuid
+        image_id:
+          description:
+            A public image currently on sale, or an available private image of this project. Exactly one
+            of this and `boot_disk_id`
+          type: string
+          format: uuid
+          maxLength: 64
+        instance_type_id:
+          description:
+            An instance type currently on sale. A withdrawn one is rejected even though its identifier
+            still resolves
+          type: string
+          format: uuid
+          maxLength: 64
+        login_username:
+          description:
+            The account the disk lets you log in as. Required with `boot_disk_id`, and rejected without
+            it since an image states its own
+          type: string
+          maxLength: 32
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        password:
+          description:
+            The password to set, on the login account and on root. Only the SSH public keys of the project
+            are used when omitted
+          type: string
+          maxLength: 128
+        port_id:
+          description:
+            Use an existing network interface, which may already have a floating IP bound. Exactly one
+            of this and `subnet_id`; only one instance can be created when it is used
+          type: string
+          format: uuid
+        security_group_ids:
+          description:
+            Required when a primary network interface is created, at least one; the default security
+            group is not applied automatically. Ignored together with `port_id`, as the security groups of that
+            interface were fixed when it was created
+          type:
+            - array
+            - "null"
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+        subnet_id:
+          description: Create the primary network interface in this subnet. Exactly one of this and `port_id`
+          type: string
+          format: uuid
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+        boot_disk:
+          $ref: "#/components/schemas/NewBootDisk"
+        floating_ip:
+          $ref: "#/components/schemas/NewFloatingIP"
+      required:
+        - name
+        - instance_type_id
+        - billing
+      additionalProperties: false
+    CreateDiskQuoteRequestBody:
+      description: The request of `create-disk`, without `checkout`.
+      type: object
+      properties:
+        disk_type_id:
+          description:
+            A data disk type currently on sale, one whose `for_system` is false. A withdrawn one is
+            rejected even though its identifier still resolves
+          type: string
+          format: uuid
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        size_gb:
+          type: integer
+          format: int64
+          minimum: 1
+        snapshot_id:
+          description: Restore from this snapshot. When given, the capacity need only be no smaller than the snapshot
+          type: string
+          format: uuid
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+      required:
+        - disk_type_id
+        - name
+        - size_gb
+        - billing
+      additionalProperties: false
+    RestoreBackupQuoteRequestBody:
+      description: The request of `restore-backup`, without `checkout`.
+      type: object
+      properties:
+        disk_type_id:
+          description:
+            May differ from the availability zone of the source disk, but must be in the same region.
+            It has to be a data disk type on sale — restoring creates a new data disk, so a withdrawn type or a
+            system disk type is rejected here as well
+          type: string
+          format: uuid
+          maxLength: 64
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        size_gb:
+          description:
+            Matches the size of the backup when omitted. When given, it must not be smaller than the
+            backup
+          type: integer
+          format: int64
+          minimum: 0
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+      required:
+        - disk_type_id
+        - name
+        - billing
+      additionalProperties: false
+    AllocateFloatingIPQuoteRequestBody:
+      description: The request of `allocate-floating-ip`, without `checkout`.
+      type: object
+      properties:
+        address:
+          description: The address to allocate. Allocated by the platform when omitted
+          type: string
+          maxLength: 64
+        bandwidth_mbps:
+          description:
+            'The bandwidth ceiling of this address, in Mbit/s, applied to both directions.
+
+
+            Required, and there is no "unlimited": an address with no ceiling runs at line rate and is
+
+            charged nothing for the traffic, while the address itself bills normally — so the invoice
+
+            looks correct and nothing anywhere reports it.
+
+
+            It is part of this floating IP purchase and is billed as the pool''s `bandwidth_pricing` shows,
+
+            with the purchase''s billing choice. Changing it later updates the
+
+            same floating IP through its bandwidth endpoint, not an independent bandwidth resource.'
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000
+        private_network_id:
+          type: string
+          format: uuid
+        ipv4_pool_id:
+          type: string
+          format: uuid
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+      required:
+        - private_network_id
+        - bandwidth_mbps
+        - ipv4_pool_id
+        - billing
+      additionalProperties: false
+    SetSnapshotQuotaQuoteRequestBody:
+      description: The request of `set-snapshot-quota`, without `checkout` and `proration_date`.
+      type: object
+      properties:
+        limit:
+          description: Desired total concurrent snapshot count for this project and region, not additional slots.
+          type: integer
+          format: int64
+          minimum: 1
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+      required: [limit, billing]
+      additionalProperties: false
+    CreateBackupCapacityPackQuoteRequestBody:
+      description: The request of `create-backup-capacity-pack`, without `checkout`.
+      type: object
+      properties:
+        capacity_gib:
+          type: integer
+          format: int64
+          minimum: 1
+        billing:
+          $ref: "#/components/schemas/BillingChoice"
+      required:
+        - capacity_gib
+        - billing
+      additionalProperties: false
+    ResizeInstanceQuoteRequestBody:
+      description: The request of `resize-instance`, without `checkout` and `proration_date`.
+      type: object
+      properties:
+        instance_type_id:
+          description: Must be in the same region and availability zone as the current instance type
+          type: string
+          format: uuid
+          maxLength: 64
+      required:
+        - instance_type_id
+      additionalProperties: false
+    ResizeDiskQuoteRequestBody:
+      description: The request of `resize-disk`, without `checkout` and `proration_date`.
+      type: object
+      properties:
+        size_gb:
+          description: Must be larger than the current capacity
+          type: integer
+          format: int64
+          minimum: 1
+      required:
+        - size_gb
+      additionalProperties: false
+    SetFloatingIPBandwidthQuoteRequestBody:
+      description: The request of `set-floating-ip-bandwidth`, without `checkout` and `proration_date`.
+      type: object
+      properties:
+        bandwidth_mbps:
+          description: Applied to both directions
+          type: integer
+          format: int64
+          minimum: 1
+      required:
+        - bandwidth_mbps
+      additionalProperties: false
+    CheckoutOptions:
+      $ref: ../../type/v1/checkout.yaml#/components/schemas/CheckoutOptions
+    PlacedOrder:
+      $ref: ../../type/v1/order.yaml#/components/schemas/PlacedOrder
+    Quote:
+      $ref: ../../type/v1/quote.yaml#/components/schemas/Quote
+    CreateDiskResponseBody:
+      description: |-
+        The new disk, `pending` until its order is accepted, and the order. Also returned for a disk restored
+        from a backup.
+      type: object
+      properties:
+        disk:
+          $ref: "#/components/schemas/DiskResource"
+        order:
+          $ref: "#/components/schemas/PlacedOrder"
+      required: [disk, order]
+      additionalProperties: false
+    CreateImageResponseBody:
+      description: |-
+        The new private image, `pending` until its order is accepted, and the order.
+      type: object
+      properties:
+        image:
+          $ref: "#/components/schemas/ImageResource"
+        order:
+          $ref: "#/components/schemas/PlacedOrder"
+      required: [image, order]
+      additionalProperties: false
+    AllocateFloatingIPResponseBody:
+      description: |-
+        The new floating IP, `pending` until its order is accepted, and the order. `address` is null until
+        the address is allocated.
+      type: object
+      properties:
+        floating_ip:
+          $ref: "#/components/schemas/FloatingIPResource"
+        order:
+          $ref: "#/components/schemas/PlacedOrder"
+      required: [floating_ip, order]
+      additionalProperties: false
+    ResizeDiskResponseBody:
+      description: |-
+        The disk, still at its current size, and the order for the resize.
+      type: object
+      properties:
+        disk:
+          $ref: "#/components/schemas/DiskResource"
+        order:
+          $ref: "#/components/schemas/PlacedOrder"
+      required: [disk, order]
+      additionalProperties: false
+    ResizeInstanceResponseBody:
+      description: |-
+        The instance, still on its current type, and the order for the resize. The instance keeps its ID, and
+        its current subscription remains in force until the resize is applied.
+      type: object
+      properties:
+        instance:
+          $ref: "#/components/schemas/InstanceResource"
+        order:
+          $ref: "#/components/schemas/PlacedOrder"
+      required: [instance, order]
+      additionalProperties: false
+    SetFloatingIPBandwidthResponseBody:
+      description: |-
+        The floating IP, still at its current bandwidth, and the order for the change.
+      type: object
+      properties:
+        floating_ip:
+          $ref: "#/components/schemas/FloatingIPResource"
+        order:
+          $ref: "#/components/schemas/PlacedOrder"
+      required: [floating_ip, order]
       additionalProperties: false
     NewBootDisk:
       type: object
@@ -5810,16 +7213,12 @@ components:
           type: integer
           format: int64
           minimum: 1
-        price_id:
-          type: string
-          format: uuid
         delete_with_instance:
           type: boolean
           default: true
       required:
         - disk_type_id
         - size_gb
-        - price_id
       additionalProperties: false
       description:
         A system disk purchased in the same order. Required when booting from an image; mutually exclusive
@@ -5827,12 +7226,6 @@ components:
     NewFloatingIP:
       type: object
       properties:
-        price_id:
-          type: string
-          format: uuid
-        bandwidth_price_id:
-          type: string
-          format: uuid
         bandwidth_mbps:
           type: integer
           format: int64
@@ -5842,12 +7235,10 @@ components:
           type: string
           format: uuid
       required:
-        - price_id
-        - bandwidth_price_id
         - bandwidth_mbps
         - ipv4_pool_id
       additionalProperties: false
-      description: An address and bandwidth purchased in the same order. Mutually exclusive with floating_ip_id.
+      description: One floating IP purchased with this bandwidth configuration in the instance's order. Mutually exclusive with floating_ip_id.
     InstanceRestriction:
       type: object
       properties:
@@ -5879,8 +7270,8 @@ components:
         - created_at
       additionalProperties: false
       description:
-        An independent restriction on use. Removing one restriction never removes another source’s restriction
-        or changes the user’s desired power state.
+        An independent restriction on use. Removing one restriction never removes another source’s restriction,
+        and never starts an instance its user stopped.
     PowerRequest:
       type: object
       properties:
@@ -5889,8 +7280,6 @@ components:
           format: int64
           minimum: 1
       additionalProperties: false
-    Task:
-      $ref: ../../type/v1/task.yaml#/components/schemas/Task
     PortAddress:
       type: object
       properties:
@@ -5911,7 +7300,6 @@ components:
           enum:
             - reserved
             - assigned
-            - releasing
             - released
             - unknown
         assigned_at:
@@ -5956,9 +7344,7 @@ components:
           type: string
           enum:
             - reserved
-            - attaching
             - attached
-            - detaching
             - released
             - unknown
         attached_at:
@@ -6028,9 +7414,7 @@ components:
           type: string
           enum:
             - reserved
-            - attaching
             - attached
-            - detaching
             - released
             - unknown
         attached_at:
@@ -6073,18 +7457,19 @@ components:
         - pagination
       additionalProperties: false
     LaunchInstanceResponseBody:
+      description: |-
+        The new instances, `pending` until their order is accepted, and the order they share.
       type: object
       properties:
-        instance_ids:
+        instances:
           type: array
+          minItems: 1
+          maxItems: 20
           items:
-            type: string
-            format: uuid
-          description: Instances created by this operation. Empty before resource creation starts.
-        task_id:
-          type: string
-          format: uuid
-          description: The Compute task that carries out the purchase.
+            $ref: "#/components/schemas/InstanceResource"
+          description: |-
+            One instance per requested instance, in request order. Their IDs stay the same through checkout and
+            creation.
         order:
           $ref: "#/components/schemas/PlacedOrder"
         password:
@@ -6094,8 +7479,7 @@ components:
           description: Generated login password, returned only by this response. Null when no password was generated.
       required:
         - order
-        - task_id
-        - instance_ids
+        - instances
         - password
       additionalProperties: false
     IPv4PoolResource:
@@ -6109,22 +7493,24 @@ components:
           format: uuid
         name:
           type: string
-        plan_id:
-          type:
-            - string
-            - "null"
-          format: uuid
-        bandwidth_plan_id:
-          type:
-            - string
-            - "null"
-          format: uuid
+        pricing:
+          description: How an address from this pool can be bought, per address. Null when the project has no billing account.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
+        bandwidth_pricing:
+          description: How the bandwidth of an address from this pool is billed, per Mbit/s, with the same billing choice as the address. Null when the project has no billing account.
+          readOnly: true
+          anyOf:
+            - $ref: "#/components/schemas/Pricing"
+            - type: "null"
       required:
         - id
         - region_id
         - name
-        - plan_id
-        - bandwidth_plan_id
+        - pricing
+        - bandwidth_pricing
       additionalProperties: false
     IPv4PoolListResponseBody:
       type: object
@@ -6159,9 +7545,7 @@ components:
         state:
           type: string
           enum:
-            - binding
             - bound
-            - unbinding
             - released
             - unknown
         bound_at:
@@ -6191,8 +7575,8 @@ components:
         - released_at
     ReleaseSetItem:
       description:
-        One subscription of a release set and the resource it pays for. An address and its bandwidth are
-        two subscriptions of the same floating IP.
+        One subscription of a release set and the resource it pays for. Multiple internal billing components
+        may refer to the same floating IP; they do not create independent bandwidth resources.
       type: object
       properties:
         subscription_id:
@@ -6213,18 +7597,232 @@ components:
           enum:
             - instance
             - disk
-            - snapshot
-            - backup
             - image
             - floating_ip
+            - backup_service
+            - snapshot_quota
+            - backup_capacity_pack
         id:
+          description: The resource's ID; for `backup_service` and `snapshot_quota`, the ID of their region.
           type: string
           format: uuid
         name:
-          description: The resource's name. A floating IP is named by its address.
+          description:
+            The resource's name. A floating IP is named by its address, a backup service or snapshot quota by its
+            region, and a capacity pack by its capacity, such as 100 GiB.
           type: string
       required:
         - type
         - id
         - name
+      additionalProperties: false
+    InstanceOperation:
+      description:
+        An operation still running on this instance. It is not a separate resource; once it finishes, the
+        instance's `operation` is null again and the instance shows the result.
+      type: object
+      properties:
+        type:
+          description:
+            "`create` runs from acceptance of the order until the instance is `active` or `failed`. `suspend` and
+            `resume` impose and lift a suspension by the platform or for non-payment. `delete` includes release through
+            a Billing cancellation."
+          type: string
+          enum:
+            - create
+            - start
+            - stop
+            - reboot
+            - rebuild
+            - resize
+            - reset_password
+            - attach_disk
+            - detach_disk
+            - attach_port
+            - detach_port
+            - bind_floating_ip
+            - unbind_floating_ip
+            - suspend
+            - resume
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
+      additionalProperties: false
+    DiskOperation:
+      description:
+        An operation still running on this disk. It is not a separate resource; once it finishes, the
+        disk's `operation` is null again and the disk shows the result.
+      type: object
+      properties:
+        type:
+          description:
+            "`attach` and `detach` accompany the instance's `attach_disk` and `detach_disk`. `delete` includes
+            release through a Billing cancellation and deletion with an instance."
+          type: string
+          enum:
+            - create
+            - resize
+            - revert
+            - attach
+            - detach
+            - suspend
+            - resume
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
+      additionalProperties: false
+    SnapshotOperation:
+      description:
+        An operation still running on this snapshot. It is not a separate resource; once it finishes, the
+        snapshot's `operation` is null again and the snapshot shows the result.
+      type: object
+      properties:
+        type:
+          description:
+            "`restore`: a disk is being reverted to this snapshot or created from it."
+          type: string
+          enum:
+            - create
+            - restore
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
+      additionalProperties: false
+    BackupOperation:
+      description:
+        An operation still running on this backup. It is not a separate resource; once it finishes, the
+        backup's `operation` is null again and the backup shows the result.
+      type: object
+      properties:
+        type:
+          description:
+            "`restore`: a disk is being restored from this backup."
+          type: string
+          enum:
+            - create
+            - restore
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
+      additionalProperties: false
+    ImageOperation:
+      description:
+        An operation still running on this image. It is not a separate resource; once it finishes, the
+        image's `operation` is null again and the image shows the result.
+      type: object
+      properties:
+        type:
+          description:
+            "`create` is the capture of a private image."
+          type: string
+          enum:
+            - create
+            - suspend
+            - resume
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
+      additionalProperties: false
+    FloatingIPOperation:
+      description:
+        An operation still running on this floating IP. It is not a separate resource; once it finishes, the
+        floating IP's `operation` is null again and the floating IP shows the result.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - create
+            - bind
+            - unbind
+            - set_bandwidth
+            - suspend
+            - resume
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
+      additionalProperties: false
+    PrivateNetworkOperation:
+      description:
+        An operation still running on this private network. It is not a separate resource; once it finishes, the
+        private network's `operation` is null again and the private network shows the result.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - create
+            - enable_ipv6
+            - disable_ipv6
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
+      additionalProperties: false
+    PortOperation:
+      description:
+        An operation still running on this network interface. It is not a separate resource; once it finishes, the
+        network interface's `operation` is null again and the network interface shows the result.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - create
+            - attach
+            - detach
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
+      additionalProperties: false
+    PeeringOperation:
+      description:
+        An operation still running on this peering. It is not a separate resource; once it finishes, the
+        peering's `operation` is null again and the peering shows the result.
+      type: object
+      properties:
+        type:
+          description:
+            "`provision` runs after the peering is accepted, until it is `active`."
+          type: string
+          enum:
+            - provision
+            - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+        - type
+        - started_at
       additionalProperties: false

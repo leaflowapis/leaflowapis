@@ -16,8 +16,8 @@ components:
         credit grants and available balance. Insufficient funds fail the purchase with HTTP 422
         BILLING_INSUFFICIENT_FUNDS; no Billing order, charge or discount redemption is committed.
         deferred creates a pending_checkout order for subsequent confirmation and payment through Billing.
-        An absent invoice or zero immediate amount does not bypass confirmation. No new discount
-        redemption or payment is made when the order is created.
+        No new discount redemption or payment is made when the order is created. An order whose total is
+        zero, with nothing to pay or discount, completes checkout at placement in either mode.
     CheckoutOptions:
       type: object
       properties:

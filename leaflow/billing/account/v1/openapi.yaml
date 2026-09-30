@@ -26,9 +26,6 @@ tags:
   - name: allowances
     description: |-
       Included and promotional usage allowances and their remaining quantities.
-  - name: promotions
-    description: |-
-      Promotion code terms and purchase applicability previews.
 paths:
   /account/v1/currencies:
     get:
@@ -489,11 +486,11 @@ paths:
           description: Removed
         default:
           $ref: "#/components/responses/Error"
-  /account/v1/invoices/{invoiceId}/collect-payment:
+  /account/v1/invoices/{invoiceId}/pay:
     parameters:
       - $ref: "#/components/parameters/InvoiceId"
     post:
-      summary: Collect payment for an invoice
+      summary: Pay an invoice
       description: |-
         Applies eligible credit grants and available balance as requested, then collects the remainder
         through the selected payment gateway and method. With no gateway selection, insufficient
@@ -509,7 +506,7 @@ paths:
         invoice are refused with `BILLING_INVOICE_NOT_PAYABLE`; the invoice of an order that has failed or was
         canceled, with `BILLING_ORDER_FAILED` or `BILLING_ORDER_CANCELED`; and that of an order whose
         payment deadline has passed, with `BILLING_ORDER_EXPIRED`.
-      operationId: collect-invoice-payment
+      operationId: pay-invoice
       tags:
         - payments
       requestBody:
@@ -517,7 +514,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CollectInvoicePaymentRequest"
+              $ref: "#/components/schemas/PayInvoiceRequest"
       responses:
         "200":
           description: OK
@@ -988,7 +985,7 @@ paths:
         - 409 `BILLING_CANCELLATION_SCHEDULES_DIFFER` when, for `period_end`, the paid terms end at
           different times;
         - 409 `BILLING_SUBSCRIPTION_OPERATION_PENDING` when a subscription is already being canceled
-          (`meta.cancellation_id`) or reclaimed (`meta.job_id`);
+          (`meta.cancellation_id`) or reclaimed (`meta.action_id`);
         - 409 `BILLING_ORDER_PAYMENT_IN_FLIGHT` while an online payment for a renewal of one of them
           is in progress;
         - 409 `BILLING_CANCELLATION_REFUND_CHANGED` when the refund is no longer
@@ -1237,30 +1234,6 @@ paths:
                 $ref: "#/components/schemas/Subscription"
         default:
           $ref: "#/components/responses/Error"
-  /account/v1/promotion-codes/preview:
-    post:
-      summary: Preview promotion code
-      description: |-
-        Nothing is recorded and the code is not consumed. Use it to show the customer the effect
-        before they commit.
-      operationId: preview-promotion-code
-      tags:
-        - promotions
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/PromotionCodePreviewRequest"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/PromotionCodePreview"
-        default:
-          $ref: "#/components/responses/Error"
   /account/v1/allowances:
     get:
       summary: List allowances
@@ -1378,11 +1351,11 @@ paths:
         A successful confirmation records the discount, including any recurring discount terms,
         reserves its redemption, moves pending_checkout to pending and finalizes the invoice when one
         is required. The reservation counts toward the code's limits and is consumed when the invoice
-        is paid, or at confirmation when nothing is due. Use collect-invoice-payment to collect
+        is paid, or at confirmation when nothing is due. Use pay-invoice to collect
         its outstanding amount from account funds or a payment gateway. No payment attempt or checkout
-        session is created by this operation. A purchase with nothing to collect can proceed to Billing
-        admission without a payment transaction. An absent invoice or zero immediate amount still
-        requires checkout confirmation; checkout alone does not confirm resource delivery.
+        session is created by this operation. An order whose total is zero completes checkout at
+        placement in either mode and does not need this operation; an order with an amount due, even
+        when credits would cover it, still does. Checkout alone does not confirm resource delivery.
 
         Retrying with the same code and expected amount returns the existing order without another
         redemption. Omitting the code on a confirmed checkout retains its recorded discount. Changing
@@ -1531,54 +1504,49 @@ components:
       enum:
         - none
         - prorated
-      description:
-        Prorated returns the unused value of paid service periods using integer-second duration ratios.
-        Setup fees are excluded. Tax and funds follow the original invoice and payment sources.
-    QuoteRequest:
-      description: Quote exactly one target. An existing order, a renewal list and a cancellation are mutually exclusive.
-      oneOf:
-        - $ref: "#/components/schemas/OrderQuoteRequest"
-        - $ref: "#/components/schemas/RenewalQuoteRequest"
-        - $ref: "#/components/schemas/CancellationQuoteRequest"
-    OrderQuoteRequest:
       description: |-
-        Preview checkout of one existing order. Its recorded purchase terms supply every line.
-        Without a code, an applicable account discount is selected. A preview neither changes the
-        order nor reserves or consumes a redemption. A confirmed order returns its recorded amounts.
+        none refunds nothing. prorated refunds the amount paid for the current period minus the value of
+        the time used, never below zero and never more than what remains unrefunded. The time used runs
+        from the period start to the effective cancellation time and is valued at the plan's
+        shorter-period prices in the same currency, frozen at purchase as the order item's
+        refund_monthly_amount and refund_hourly_amount: each full calendar month at the one-month prepaid
+        price, the remainder at the postpaid hourly price or, without one, at the one-month price by the
+        second. When the plan has no prepaid period shorter than the one bought, the time used is valued
+        at the price paid, pro rata by the second. Discounts are not refunded, as they were never paid,
+        and setup fees are excluded. The refunded part returns to the payment sources it came from. Tax
+        paid is refunded in the same proportion as the amount it was paid on.
+    QuoteRequest:
+      description: |-
+        Quote exactly one target: an existing `order_id`, `renewals` or a `cancellation`. Giving none or
+        more than one, or a `promotion_code` with `renewals` or a `cancellation`, fails with HTTP 400
+        `BILLING_PURCHASE_INVALID` and `meta.field` naming the offending field. Without a code, an
+        applicable account discount is selected. An explicit code is evaluated without reserving or
+        consuming a redemption and must be supplied again when confirming checkout through Billing.
       type: object
       properties:
         order_id:
+          description: |-
+            Preview checkout of this existing order. Its recorded purchase terms supply every line, and a
+            confirmed order returns its recorded amounts. A preview does not change the order.
           type: string
           format: uuid
-        promotion_code:
-          type: string
-          minLength: 1
-          maxLength: 64
-          description: Code to evaluate for this order. Must be supplied again when confirming checkout.
-      required: [order_id]
-      additionalProperties: false
-    RenewalQuoteRequest:
-      description: |-
-        Preview renewing subscriptions, each at most once. Each entry represents a separate renewal
-        order. To preview a new promotion code, create a renewal order and quote it by order_id.
-      type: object
-      properties:
         renewals:
+          description: |-
+            Preview renewing these subscriptions, each at most once. Each entry represents a separate
+            renewal order. To preview a new promotion code, create a renewal order and quote it by order_id.
           type: array
           minItems: 1
           maxItems: 100
           items:
             $ref: "#/components/schemas/QuoteRenewal"
-      required: [renewals]
-      additionalProperties: false
-    CancellationQuoteRequest:
-      description: Preview one cancellation without combining it with a purchase, renewal or promotion code.
-      type: object
-      properties:
         cancellation:
           $ref: "#/components/schemas/QuoteCancellation"
-      required: [cancellation]
+        promotion_code:
+          type: string
+          minLength: 1
+          maxLength: 64
       additionalProperties: false
+
     CheckoutOrderRequest:
       type: object
       properties:
@@ -1602,7 +1570,9 @@ components:
       description: |-
         Price renewing a prepaid subscription. Give `price_id`, or `interval` with
         `interval_count`, to renew for another term at the price currently sold for it. Naming
-        the current term, or giving neither, renews at the agreed amount.
+        the current term, or giving neither, renews at the agreed amount. A term sold at several
+        prices that differ in termination policy is refused with 409
+        `BILLING_RENEWAL_OPTION_AMBIGUOUS` unless `termination_policy` or `price_id` is given.
       type: object
       properties:
         subscription_id:
@@ -1617,6 +1587,12 @@ components:
         interval_count:
           type: integer
           minimum: 1
+        termination_policy:
+          description:
+            With `interval` and `interval_count`, chooses among prices of that term that differ in termination
+            policy.
+          allOf:
+            - $ref: "#/components/schemas/TerminationPolicy"
         periods:
           description: How many consecutive periods to renew for.
           type: integer
@@ -1865,8 +1841,8 @@ components:
         What the cancellation would return, subscription by subscription and in total, as of now. Give
         `proration_date` and `refundable_amount` when creating the cancellation.
 
-        - `unused_amount`: before tax, the value of the paid service still unused, whatever the refund
-          terms say.
+        - `unused_amount`: before tax, the amount paid for the current periods minus the value of the
+          time used, valued as refund policy `prorated` describes, whatever the refund terms say.
         - `refundable_amount`: what is returned the way it was paid, including the tax paid on it;
           `refund_amount` plus `credit_amount`.
         - `refund_amount`: the part returned to the balance or to the payment method.
@@ -2182,38 +2158,6 @@ components:
       minLength: 1
       maxLength: 64
       pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
-    QuoteLine:
-      description: |-
-        Identify a price directly, or select a price for a plan. For each resource give its ID or lookup key, never both. Lookup keys require product_id.
-
-        Charges for future usage are not estimated here; the service that sells the product quotes
-        them with its purchase.
-      type: object
-      properties:
-        price_lookup_key: { type: string, minLength: 1, maxLength: 128 }
-        plan_lookup_key: { type: string, minLength: 1, maxLength: 128 }
-        price_id:
-          type: string
-          format: uuid
-        product_id:
-          $ref: "#/components/schemas/ProductID"
-        plan_id:
-          type: string
-          format: uuid
-        price_type:
-          description: |-
-            Narrows the selection when a plan offers more than one billing type.
-          type: string
-          enum:
-            - postpaid
-            - prepaid
-            - one_time
-        interval: { type: string, enum: [none, day, month, year] }
-        interval_count: { type: integer, minimum: 1 }
-        quantity:
-          type: string
-      required:
-        - quantity
     BillingAccount:
       type: object
       properties:
@@ -2845,7 +2789,7 @@ components:
         - setup_id
         - payment_gateway
         - action
-    CollectInvoicePaymentRequest:
+    PayInvoiceRequest:
       description: |-
         Applies eligible credit grants and the available balance as requested, then collects only the remainder
         through the selected gateway. Grants restricted to other purchases are not counted as available funds.
@@ -3169,6 +3113,10 @@ components:
             - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         amount_paid:
           $ref: ../../../type/v1/money.yaml#/components/schemas/Money
+        amount_due:
+          description: What is still collectible after applied credits and successful payments; never below zero. A draft order invoice is not collectible until checkout confirms it, and a paid or void invoice has none.
+          allOf:
+            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         period_start:
           type:
             - string
@@ -3214,6 +3162,7 @@ components:
         - currency
         - status
         - total
+        - amount_due
     InvoiceList:
       type: object
       properties:
@@ -3585,7 +3534,10 @@ components:
         - `subscription_canceled`: the subscription was canceled and its unused value returned under
           its refund terms.
         - `future_period_canceled`: a renewal that had not started yet was withdrawn.
-        - `downgrade_difference`: the unused value above the new price after a downgrade.
+        - `downgrade_difference`: after a downgrade, the remaining value of what was paid, valued as refund
+          policy `prorated` describes, minus the new configuration's cost for the remaining time at the
+          change item's `refund_monthly_amount` and `refund_hourly_amount`. Nothing is refunded when that is
+          zero or less.
         - `usage_true_up`: usage priced again over the whole month cost less than was charged.
         - `payment_not_applied`: a payment arrived after its invoice could no longer be paid.
         - `operator`: made by the platform operator.
@@ -3723,14 +3675,15 @@ components:
         through checkout and delivery. One order may create several subscriptions, such as an instance,
         its system disk and its address; it has no single subscription ID.
 
-        Pending does not grant service or accrue usage. Payment confirmation and order acceptance do
-        not activate a service-owned subscription. It becomes active when the owning service confirms
-        delivery, with started_at set to the confirmed effective time. Prepaid service periods start
+        Pending and provisioning do not grant service or accrue usage. A service-owned subscription
+        becomes provisioning when the owning service accepts the order, and active when the service
+        confirms delivery, with started_at set to the confirmed effective time; payment changes neither. Prepaid service periods start
         then; postpaid usage starts only when the service reports actual delivery and metering.
 
         One-time delivery may omit a subscription. Renewals reference and extend existing subscriptions
-        rather than creating another; changes may create pending replacements. Canceling or failing an
-        unfulfilled purchase closes its pending subscriptions without starting a service period.
+        rather than creating another; a change keeps the subscription ID and switches its terms when it
+        takes effect. Canceling or failing an
+        unfulfilled purchase closes its pending or provisioning subscriptions without starting a service period.
         Fixed renewals use the agreed recurring_amount and interval; already paid periods retain their
         original value. Technical state belongs to the owning service.
 
@@ -3754,7 +3707,10 @@ components:
         refund_policy:
           $ref: "#/components/schemas/RefundPolicy"
         order_item_id: { type: string, format: uuid }
-        replaces_subscription_id: { type: string, format: uuid }
+        replaces_subscription_id:
+          description: Present only on subscriptions created by an earlier change that replaced the subscription. A change now keeps the subscription ID.
+          type: string
+          format: uuid
         coupon_id: { type: string, format: uuid }
         coupon:
           $ref: "#/components/schemas/ObjectIdentity"
@@ -3812,8 +3768,8 @@ components:
           type: string
         paid_until:
           description: |-
-            End of the prepaid service already activated. Null for a new pending subscription, even
-            when its purchase has been paid, and for postpaid subscriptions with no prepaid end date.
+            End of the prepaid service already activated. Null until a new subscription becomes active,
+            even when its purchase has been paid, and for postpaid subscriptions with no prepaid end date.
           type:
             - string
             - "null"
@@ -3822,17 +3778,19 @@ components:
           type: boolean
         status:
           description: |-
-            pending means the purchase relationship exists but service has not started. For a
-            service-owned purchase, only confirmed delivery moves it to active; paying alone does not.
+            pending means the purchase relationship exists but its order has not been accepted.
+            provisioning means the service accepted the order and is delivering. For a service-owned
+            purchase, only confirmed delivery moves it to active; paying alone does not.
           type: string
           enum:
             - pending
+            - provisioning
             - active
             - suspended
             - canceled
             - terminated
         started_at:
-          description: Confirmed start of service. Null for a new pending subscription, including after payment.
+          description: Confirmed start of service. Null until a new subscription becomes active, including after payment.
           type:
             - string
             - "null"
@@ -3925,7 +3883,9 @@ components:
 
             Leaving both out renews at the price this item already bills at, which a later price
             change does not affect. Naming a term that differs from the current one is a fresh
-            choice, so it is bought at today's price. Naming the current term changes nothing.
+            choice, so it is bought at today's price. Naming the current term changes nothing. A
+            term sold at several prices that differ in termination policy is refused with 409
+            `BILLING_RENEWAL_OPTION_AMBIGUOUS` unless `termination_policy` is given.
 
             List the terms on offer with the renewal prices operation.
           type: integer
@@ -3934,6 +3894,12 @@ components:
           description: The unit interval_count counts in.
           type: string
           enum: [day, month, year]
+        termination_policy:
+          description:
+            With `interval` and `interval_count`, chooses among prices of that term that differ in termination
+            policy.
+          allOf:
+            - $ref: "#/components/schemas/TerminationPolicy"
         payment_method_id:
           type: string
           format: uuid
@@ -3983,8 +3949,9 @@ components:
     OrderStatus:
       type: string
       description: |-
-        pending_checkout has recorded purchase terms but no confirmed checkout. An absent invoice
-        or zero total does not permit acceptance. Confirmation moves it to pending. Both pending_checkout
+        pending_checkout has recorded purchase terms but no confirmed checkout; only a deferred order
+        with an amount due reaches it, since a zero-total order completes checkout at placement.
+        Confirmation moves it to pending. Both pending_checkout
         and pending can expire or be canceled; neither establishes service delivery.
 
         Follows the items. `pending` has confirmed checkout, is not yet accepted and may be paid or unpaid. `active` is
@@ -4154,122 +4121,6 @@ components:
           type: string
       required:
         - method_type
-    PromotionCodePreviewRequest:
-      description: Specify lines to check whether the promotion code applies to new purchases and to estimate its discount. Without lines, the response contains the code terms without a purchase-specific applicability decision.
-      type: object
-      properties:
-        billing_account_id:
-          type: integer
-          format: int64
-        promotion_code:
-          type: string
-          minLength: 1
-          maxLength: 64
-        lines:
-          description: New purchases to test against, in the same shape as a
-            quote.
-          type: array
-          maxItems: 100
-          items:
-            $ref: "#/components/schemas/QuoteLine"
-      required:
-        - billing_account_id
-        - promotion_code
-      additionalProperties: false
-    PromotionCodePreview:
-      description: Describes a usable promotion code and its applicability to the requested purchase. Invalid codes return an error response.
-      type: object
-      properties:
-        min_amount: { type: string }
-        type:
-          {
-            type: string,
-            enum: [percentage, fixed_amount, price_override, free_setup],
-          }
-        recurring: { type: boolean }
-        recurring_cycles: { type: integer, minimum: 1 }
-        name:
-          type: string
-        amount:
-          description: For a fixed-amount discount.
-          allOf:
-            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
-        percent_off:
-          description: For a percentage discount.
-          type: string
-        max_discount:
-          $ref: ../../../type/v1/money.yaml#/components/schemas/Money
-        currency:
-          type: string
-        applies_to:
-          description: |-
-            What it may be used for. Present whether or not a purchase was given, so that the
-            terms can be shown before anything is chosen.
-          allOf:
-            - $ref: "#/components/schemas/Applicability"
-        summary:
-          description: |-
-            The terms in one sentence, ready to display — for example "Compute, new purchases
-            only, from 100.00" or "No restriction on product or purchase type".
-          type: string
-        valid_until:
-          type:
-            - string
-            - "null"
-          format: date-time
-        applicable:
-          description: |-
-            Whether it applies to the purchase given in `lines`. Absent when no purchase was
-            given.
-          type: boolean
-        applicable_reason:
-          $ref: "#/components/schemas/PromotionCodeRejection"
-        qualifying_amount:
-          description: |-
-            The total of the lines that match the restrictions. This is what the threshold is
-            measured against, not the order total.
-          allOf:
-            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
-        shortfall:
-          description: |-
-            How much more of a qualifying purchase is needed to reach the threshold. `"0"` once
-            it is met.
-          allOf:
-            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
-        estimated_discount:
-          description: |-
-            What it would take off this purchase. An estimate: the discount is confirmed during
-            order checkout. Use CreateQuote for the purchase's complete total, including tax.
-          allOf:
-            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
-    PromotionCodeRejection:
-      description: |-
-        Why a code cannot be used. `none` when it can.
-
-        `operation_not_covered` means the code is limited to certain purchase actions — a
-        first-purchase code presented for a renewal, for example.
-
-        `term_not_covered` means the code is limited to certain term lengths. A purchase with
-        no term, such as metered usage, is reported the same way.
-
-        `below_minimum` is accompanied by `shortfall`.
-      type: string
-      enum:
-        - none
-        - not_found
-        - expired
-        - not_yet_valid
-        - exhausted
-        - already_redeemed
-        - currency_mismatch
-        - product_not_covered
-        - plan_not_covered
-        - price_not_covered
-        - price_type_not_covered
-        - operation_not_covered
-        - term_not_covered
-        - not_first_purchase
-        - below_minimum
     PurchaseOperation:
       description: |-
         Which purchase this applies to. `upgrade` and `downgrade` are told apart by money: a change
@@ -4352,7 +4203,7 @@ components:
         - pagination
     PriceOption:
       description: |-
-        A price's display terms, including retired prices referenced by an applicability list.
+        A price's display terms, including archived prices referenced by an applicability list.
       type: object
       properties:
         product:
@@ -4435,8 +4286,8 @@ components:
         subscription_id:
           description: |-
             Stable Billing subscription ID. A new prepaid or postpaid service purchase returns the
-            pending subscription here; renewals reference the existing subscription and changes the
-            replacement. Absent for delivery without a subscription. This is not a business resource ID.
+            pending subscription here; renewals and changes reference the existing subscription, which
+            keeps its ID. Absent for delivery without a subscription. This is not a business resource ID.
           type: string
           format: uuid
         interval: { type: string, enum: [none, day, month, year] }
@@ -4445,6 +4296,17 @@ components:
           $ref: "#/components/schemas/TerminationPolicy"
         refund_policy:
           $ref: "#/components/schemas/RefundPolicy"
+        refund_monthly_amount:
+          description: |-
+            Prepaid items only: the plan's one-month prepaid price for this item's quantity before tax, frozen
+            at purchase, used to value time used under a prorated refund or a downgrade. Null when the plan has
+            no prepaid period shorter than the one bought.
+          type: [string, "null"]
+        refund_hourly_amount:
+          description: |-
+            Prepaid items only: the plan's postpaid hourly price for this item's quantity before tax, frozen at
+            purchase, used for time used short of a full month. Null when the plan has no postpaid price.
+          type: [string, "null"]
         completes_on_payment: { type: boolean }
         recurring_amount: { type: string }
         setup_amount: { type: string }
@@ -4486,15 +4348,17 @@ components:
         unit_amount:
           description: |-
             The unit amount of the price this line is charged under. Absent for a tiered price, which has no
-            single unit amount, and for a change that takes effect at once, which is charged the prorated
-            difference.
+            single unit amount, and for a change that takes effect at once, which is charged as `gross_amount`
+            describes.
           allOf:
             - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
         gross_amount:
           description: |-
             Before discounts: the price applied to the quantity, which for a per-unit price is `unit_amount`
-            times `quantity`; a minimum charge can make it higher. For a change that takes effect at once it is
-            the prorated difference. The setup fee is not part of it; see `setup_amount`.
+            times `quantity`; a minimum charge can make it higher. For an upgrade that takes effect at once it is
+            the new price minus the old price for the time left in the paid period, both at the subscription's
+            own period price, and the period end does not move; a downgrade charges nothing and may refund the
+            difference instead. A change between equal period prices charges and refunds nothing. The setup fee is not part of it; see `setup_amount`.
 
             Under an inclusive tax rate it includes tax, as the price does, and the included part is
             `tax_included_amount`. A renewal at the agreed terms is the exception: the agreed amount excludes
@@ -4696,6 +4560,10 @@ components:
         tax_amount: { type: string }
         total: { type: string }
         amount_paid: { type: string }
+        amount_due:
+          description: What is still collectible after applied credits and successful payments; never below zero.
+          type: string
+          pattern: '^\d+(\.\d{1,10})?$'
         amount_refunded: { type: string }
         due_at: { type: string, format: date-time }
       required:
@@ -4708,6 +4576,7 @@ components:
           tax_amount,
           total,
           amount_paid,
+          amount_due,
           amount_refunded,
         ]
     TaxItem:
