@@ -217,7 +217,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectBillingInfoList"
+                $ref: "#/components/schemas/ProjectAssignmentList"
         default:
           $ref: "#/components/responses/Error"
   /account/v1/projects/{projectId}/billing-account:
@@ -237,7 +237,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectBillingInfo"
+                $ref: "#/components/schemas/ProjectAssignment"
         default:
           $ref: "#/components/responses/Error"
     put:
@@ -262,14 +262,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProjectBillingInfoSet"
+              $ref: "#/components/schemas/SetProjectAssignmentRequest"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectBillingInfo"
+                $ref: "#/components/schemas/ProjectAssignment"
         default:
           $ref: "#/components/responses/Error"
     delete:
@@ -1563,8 +1563,9 @@ components:
           pattern: '^\d+(\.\d{1,10})?$'
           description: |-
             Quote.total in the order's currency, after discounts and tax but before applying credit
-            grants or balance. A different total fails with BILLING_AMOUNT_CHANGED.
-      required: [expected_amount]
+            grants or balance. Omit to skip the amount comparison; an explicit zero is compared.
+            A different total fails with BILLING_AMOUNT_CHANGED. Must be a non-negative decimal
+            string; empty strings, null, JSON numbers, signs and exponent notation are rejected.
       additionalProperties: false
     QuoteRenewal:
       description: |-
@@ -2439,7 +2440,8 @@ components:
       required:
         - applies_to
         - amount
-    ProjectBillingInfo:
+    ProjectAssignment:
+      description: A project's assignment to a billing account for the interval from effective_from to effective_to. An open-ended assignment has no end time.
       type: object
       properties:
         project_id:
@@ -2472,19 +2474,19 @@ components:
         - billing_account_id
         - currency
         - effective_from
-    ProjectBillingInfoList:
+    ProjectAssignmentList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/ProjectBillingInfo"
+            $ref: "#/components/schemas/ProjectAssignment"
         pagination:
           $ref: "../../../type/v1/pagination.yaml#/components/schemas/OffsetPagination"
       required:
         - items
         - pagination
-    ProjectBillingInfoSet:
+    SetProjectAssignmentRequest:
       type: object
       properties:
         billing_account_id:
