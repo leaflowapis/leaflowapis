@@ -198,8 +198,8 @@ paths:
           $ref: "#/components/responses/Error"
   /account/v1/projects:
     get:
-      summary: List projects linked to billing accounts
-      operationId: list-billing-account-projects
+      summary: List project assignments
+      operationId: list-project-assignments
       tags:
         - accounts
       parameters:
@@ -224,11 +224,11 @@ paths:
     parameters:
       - $ref: "#/components/parameters/ProjectId"
     get:
-      summary: Get project billing account
+      summary: Get project assignment
       description:
         Returns 404 when the project has no billing account. No resources can be
         created until one is linked.
-      operationId: get-project-billing-account
+      operationId: get-project-assignment
       tags:
         - accounts
       responses:
@@ -241,7 +241,7 @@ paths:
         default:
           $ref: "#/components/responses/Error"
     put:
-      summary: Set project billing account
+      summary: Set project assignment
       description: |-
         Charges already incurred remain with the billing account that was linked when they
         occurred, and are still invoiced to it. Metered resources are settled up to the moment of
@@ -254,7 +254,7 @@ paths:
         The request is refused once the project no longer accepts purchases because it is being
         deleted, and while a subscription or an order in progress in the project uses a currency
         other than that of the new billing account.
-      operationId: set-project-billing-account
+      operationId: set-project-assignment
       tags:
         - accounts
       requestBody:
