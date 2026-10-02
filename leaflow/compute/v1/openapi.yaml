@@ -6614,6 +6614,7 @@ components:
         count:
           type: integer
           format: int32
+          maximum: 2147483647
           minimum: 1
       required:
         - unit
