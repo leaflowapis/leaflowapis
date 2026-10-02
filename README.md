@@ -7,7 +7,7 @@ leaflow/<service>/<version>/openapi.yaml
 leaflow/<service>/<sub-package>/<version>/openapi.yaml
 ```
 
-Sub-packages group related APIs within a service. Browse the directory for the available contracts and versions.
+Each `openapi.yaml` is a complete API entry point. Larger contracts, such as Billing, use resource files alongside the entry point and compose them with standard `$ref` references.
 
 ## SDKs
 

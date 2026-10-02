@@ -40,27 +40,8 @@ paths:
       tags:
         - APIKey
       parameters:
-        - name: limit
-          in: query
-          description: Maximum number of items in this page
-          explode: false
-          schema:
-            description: Maximum number of items in this page
-            type: integer
-            format: int64
-            default: 50
-            minimum: 1
-            maximum: 200
-        - name: offset
-          in: query
-          description: Number of items to skip. Use the cursor-paged endpoint to page deeper
-          explode: false
-          schema:
-            description: Number of items to skip. Use the cursor-paged endpoint to page deeper
-            type: integer
-            format: int64
-            minimum: 0
-            maximum: 10000
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
         - name: status
           in: query
           description: Restricts the result to the specified status. Every status is returned while this is absent
@@ -323,6 +304,8 @@ paths:
         **The request and response bodies are not returned**; they are not recorded. Quote the `upstream_request_id` when reporting a problem.
 
         A `usage_source` of `estimated` indicates that the upstream provider reported no usage for that request, and that the figures are derived from the character classes of the payload.
+
+        Omit cursor on the first page. Stop when next_cursor is empty; do not send an empty cursor.
       operationId: list-requests
       tags:
         - Usage
@@ -373,25 +356,8 @@ paths:
               - refused
               - upstream_failed
               - client_aborted
-        - name: limit
-          in: query
-          description: Maximum number of items in this page
-          explode: false
-          schema:
-            description: Maximum number of items in this page
-            type: integer
-            format: int64
-            default: 50
-            minimum: 1
-            maximum: 200
-        - name: cursor
-          in: query
-          description: The `next_cursor` returned by the previous page. Omitted on the first page
-          explode: false
-          schema:
-            description: The `next_cursor` returned by the previous page. Omitted on the first page
-            type: string
-            maxLength: 512
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Cursor
       responses:
         "200":
           description: OK
@@ -1401,7 +1367,7 @@ components:
             - active
             - failed
         failure_reason:
-          description: "Why the enablement failed; null unless `status` is `failed`. `order_declined` means Billing did not accept the order, for example because the billing account is suspended; `order_canceled` means the order was withdrawn; `order_expired` means its checkout was not confirmed in time."
+          description: Why the enablement failed; null unless `status` is `failed`. `order_declined` means Billing did not accept the order, for example because the billing account is suspended; `order_canceled` means the order was withdrawn; `order_expired` means its checkout was not confirmed in time.
           type:
             - string
             - "null"
