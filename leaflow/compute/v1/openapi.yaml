@@ -5851,8 +5851,6 @@ components:
         created_at:
           type: string
           format: date-time
-        has_internet_gateway:
-          type: boolean
         id:
           type: string
           format: uuid
@@ -5869,7 +5867,6 @@ components:
         - name
         - region_id
         - cidr
-        - has_internet_gateway
         - created_at
         - updated_at
       additionalProperties: false
