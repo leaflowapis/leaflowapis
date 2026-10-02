@@ -649,6 +649,7 @@ components:
         accordingly. When the plan has no postpaid price, the line is returned unpriced with
         `no_price`.
       type: object
+      additionalProperties: false
       properties:
         price_lookup_key: { type: string, minLength: 1, maxLength: 128 }
         plan_lookup_key: { type: string, minLength: 1, maxLength: 128 }

@@ -975,6 +975,7 @@ components:
         Charges for future usage are not estimated here; the service that sells the product quotes
         them with its purchase.
       type: object
+      additionalProperties: false
       properties:
         price_lookup_key: { type: string, minLength: 1, maxLength: 128 }
         plan_lookup_key: { type: string, minLength: 1, maxLength: 128 }
