@@ -968,7 +968,7 @@ components:
       minLength: 1
       maxLength: 64
       pattern: "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
-    QuoteLine:
+    QuoteItemInput:
       description: |-
         Identify a price directly, or select a price for a plan. For each resource give its ID or lookup key, never both. Lookup keys require product_id.
 
@@ -1047,7 +1047,7 @@ components:
         consuming a redemption and must be supplied again when confirming checkout through Billing.
       type: object
       properties:
-        lines:
+        items:
           description: |-
             A proposed purchase, priced with the project's current billing account. Future usage
             estimates cannot be combined with a promotion code or used as a checkout amount.
@@ -1055,7 +1055,7 @@ components:
           minItems: 1
           maxItems: 100
           items:
-            $ref: "#/components/schemas/QuoteLine"
+            $ref: "#/components/schemas/QuoteItemInput"
         order_id:
           description: |-
             Preview checkout of this existing order. Its recorded purchase terms supply every line, and a
@@ -1079,7 +1079,7 @@ components:
           maxLength: 64
       additionalProperties: false
 
-    QuotedLine:
+    QuoteItem:
       description: |-
         A purchase quote line or one recorded order item. Monetary fields use the account currency.
         Fixed purchase amounts are rounded as checkout rounds them. Usage estimates are not amounts
@@ -1243,10 +1243,10 @@ components:
           oneOf:
             - $ref: "#/components/schemas/QuotedDiscount"
             - type: "null"
-        lines:
+        items:
           type: array
           items:
-            $ref: "#/components/schemas/QuotedLine"
+            $ref: "#/components/schemas/QuoteItem"
         renewals:
           type: array
           items:

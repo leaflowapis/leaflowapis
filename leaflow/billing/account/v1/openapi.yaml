@@ -1665,7 +1665,7 @@ components:
         - tax_amount
         - tax_included_amount
         - total
-    QuotedLine:
+    QuoteItem:
       description: |-
         A purchase quote line or one recorded order item. Monetary fields use the account currency.
         Fixed purchase amounts are rounded as checkout rounds them. Usage estimates are not amounts
@@ -1768,10 +1768,10 @@ components:
           oneOf:
             - $ref: "#/components/schemas/QuotedDiscount"
             - type: "null"
-        lines:
+        items:
           type: array
           items:
-            $ref: "#/components/schemas/QuotedLine"
+            $ref: "#/components/schemas/QuoteItem"
         renewals:
           type: array
           items:
