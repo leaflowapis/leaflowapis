@@ -28,7 +28,8 @@ components:
         expected_amount:
           allOf:
           - $ref: ./money.yaml#/components/schemas/Money
-          pattern: '^\d+(\.\d{1,10})?$'
+          - type: string
+            pattern: ^[0-9]{1,15}([.][0-9]{1,10})?$
           description: |-
             Expected invoice total after discounts and tax, before applying credit grants or balance.
             A different total fails with BILLING_AMOUNT_CHANGED without charging or reserving a discount.

@@ -1559,8 +1559,9 @@ components:
             discount. On an already confirmed checkout, omission retains the recorded discount.
         expected_amount:
           allOf:
-            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
-          pattern: '^\d+(\.\d{1,10})?$'
+          - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
+          - type: string
+            pattern: ^[0-9]{1,15}([.][0-9]{1,10})?$
           description: |-
             Quote.total in the order's currency, after discounts and tax but before applying credit
             grants or balance. Omit to skip the amount comparison; an explicit zero is compared.
@@ -1958,7 +1959,10 @@ components:
           format: date-time
         expected_refundable_amount:
           description: The `refundable_amount` of the quote. The cancellation is refused when the refund differs.
-          type: string
+          allOf:
+          - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
+          - type: string
+            pattern: ^-?[0-9]{1,15}([.][0-9]{1,10})?$
         reason:
           description: A note from the account holder. It is kept with the cancellation and not shown elsewhere.
           type: string
@@ -2623,7 +2627,9 @@ components:
             exceeds the top-up itself, so such a payment costs more to accept than it brings.
             The minimum in force is returned with the rejection.
           allOf:
-            - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../../type/v1/money.yaml#/components/schemas/Money
+          - type: string
+            pattern: ^(?:(?:[1-9][0-9]{0,14}|0(?:[1-9][0-9]{0,13}|0(?:[1-9][0-9]{0,12}|0(?:[1-9][0-9]{0,11}|0(?:[1-9][0-9]{0,10}|0(?:[1-9][0-9]{0,9}|0(?:[1-9][0-9]{0,8}|0(?:[1-9][0-9]{0,7}|0(?:[1-9][0-9]{0,6}|0(?:[1-9][0-9]{0,5}|0(?:[1-9][0-9]{0,4}|0(?:[1-9][0-9]{0,3}|0(?:[1-9][0-9]{0,2}|0(?:[1-9][0-9]{0,1}|0[1-9]))))))))))))))([.][0-9]{1,10})?|0{1,15}[.](?:[1-9][0-9]{0,9}|0(?:[1-9][0-9]{0,8}|0(?:[1-9][0-9]{0,7}|0(?:[1-9][0-9]{0,6}|0(?:[1-9][0-9]{0,5}|0(?:[1-9][0-9]{0,4}|0(?:[1-9][0-9]{0,3}|0(?:[1-9][0-9]{0,2}|0(?:[1-9][0-9]{0,1}|0[1-9]))))))))))$
         payment_method_id:
           description: Charge a saved method instead of opening a checkout page.
           type: string
