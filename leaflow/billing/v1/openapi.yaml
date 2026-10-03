@@ -4,30 +4,31 @@ info:
   version: v1
   description: Products, prices, orders, subscriptions and account billing. Financial operations require an account access token and billing-account authorization. Public catalogue operations declare no security requirement.
 servers:
-  - url: https://billing.leaflow.cloud
-    description: Billing API
+- url: https://billing.leaflow.cloud
+  description: Billing API
 security:
-  - accessTokenAuth: []
+- accessTokenAuth: []
 tags:
-  - name: accounts
-  - name: active-resources
-  - name: allowances
-  - name: cancellations
-  - name: credit-grants
-  - name: discounts
-  - name: entitlements
-  - name: invoices
-  - name: orders
-  - name: payments
-  - name: plans
-  - name: prices
-  - name: products
-  - name: quotes
-  - name: refunds
-  - name: spend
-  - name: subscriptions
-  - name: transactions
-  - name: usage-charges
+- name: accounts
+- name: active-resources
+- name: allowances
+- name: cancellations
+- name: credit-grants
+- name: credit-notes
+- name: discounts
+- name: entitlements
+- name: invoices
+- name: orders
+- name: payments
+- name: plans
+- name: prices
+- name: products
+- name: quotes
+- name: refunds
+- name: spend
+- name: subscriptions
+- name: transactions
+- name: usage-charges
 paths:
   /api/v1/currencies:
     $ref: ./accounts.yaml#/paths/~1api~1v1~1currencies
@@ -79,6 +80,12 @@ paths:
     $ref: ./discounts.yaml#/paths/~1api~1v1~1discounts
   /api/v1/credit-grants:
     $ref: ./credit-grants.yaml#/paths/~1api~1v1~1credit-grants
+  /api/v1/credit-notes:
+    $ref: ./creditnotes.yaml#/paths/~1api~1v1~1credit-notes
+  /api/v1/credit-notes/{creditNoteId}:
+    $ref: ./creditnotes.yaml#/paths/~1api~1v1~1credit-notes~1{creditNoteId}
+  /api/v1/credit-notes/{creditNoteId}/items:
+    $ref: ./creditnotes.yaml#/paths/~1api~1v1~1credit-notes~1{creditNoteId}~1items
   /api/v1/refunds:
     $ref: ./refunds.yaml#/paths/~1api~1v1~1refunds
   /api/v1/usage-charges:
@@ -146,6 +153,8 @@ components:
       $ref: ./prices.yaml#/components/schemas/TerminationPolicy
     RefundPolicy:
       $ref: ./prices.yaml#/components/schemas/RefundPolicy
+    OrderCancel:
+      $ref: ./orders.yaml#/components/schemas/OrderCancel
     CheckoutOrderRequest:
       $ref: ./orders.yaml#/components/schemas/CheckoutOrderRequest
     QuoteRenewal:
@@ -264,6 +273,14 @@ components:
       $ref: ./credit-grants.yaml#/components/schemas/CreditGrant
     CreditGrantList:
       $ref: ./credit-grants.yaml#/components/schemas/CreditGrantList
+    CreditNote:
+      $ref: ./creditnotes.yaml#/components/schemas/CreditNote
+    CreditNoteItem:
+      $ref: ./creditnotes.yaml#/components/schemas/CreditNoteItem
+    CreditNoteList:
+      $ref: ./creditnotes.yaml#/components/schemas/CreditNoteList
+    CreditNoteItemList:
+      $ref: ./creditnotes.yaml#/components/schemas/CreditNoteItemList
     Refund:
       $ref: ./refunds.yaml#/components/schemas/Refund
     RefundReason:
@@ -338,8 +355,8 @@ components:
         name:
           type: string
       required:
-        - id
-        - name
+      - id
+      - name
     ProductList:
       $ref: ./products.yaml#/components/schemas/ProductList
     Plan:
@@ -414,6 +431,13 @@ components:
         format: uuid
     InvoiceId:
       name: invoiceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    CreditNoteId:
+      name: creditNoteId
       in: path
       required: true
       schema:
@@ -508,7 +532,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: "#/components/schemas/Error"
+            $ref: '#/components/schemas/Error'
     NotModified:
       description: Unchanged since the `ETag` that was sent. No body.
       headers:

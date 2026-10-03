@@ -4,62 +4,62 @@ paths:
       summary: List invoices
       operationId: list-invoices
       tags:
-        - invoices
+      - invoices
       parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-        - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
-        - name: status
-          in: query
-          required: false
-          schema:
-            $ref: "#/components/schemas/InvoiceStatus"
-        - $ref: ./openapi.yaml#/components/parameters/From
-        - $ref: ./openapi.yaml#/components/parameters/To
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
+      - name: status
+        in: query
+        required: false
+        schema:
+          $ref: '#/components/schemas/InvoiceStatus'
+      - $ref: ./openapi.yaml#/components/parameters/From
+      - $ref: ./openapi.yaml#/components/parameters/To
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/InvoiceList"
+                $ref: '#/components/schemas/InvoiceList'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/invoices/{invoiceId}:
     parameters:
-      - $ref: ./openapi.yaml#/components/parameters/InvoiceId
+    - $ref: ./openapi.yaml#/components/parameters/InvoiceId
     get:
       summary: Get invoice
       operationId: get-invoice
       tags:
-        - invoices
+      - invoices
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Invoice"
+                $ref: '#/components/schemas/Invoice'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/invoices/{invoiceId}/items:
     parameters:
-      - $ref: ./openapi.yaml#/components/parameters/InvoiceId
+    - $ref: ./openapi.yaml#/components/parameters/InvoiceId
     get:
       summary: List invoice items
       operationId: list-invoice-items
       tags:
-        - invoices
+      - invoices
       parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/InvoiceItemList"
+                $ref: '#/components/schemas/InvoiceItemList'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
 components:
@@ -82,12 +82,12 @@ components:
         `amount_refunded` show.
       type: string
       enum:
-        - draft
-        - open
-        - paid
-        - refunded
-        - void
-        - uncollectible
+      - draft
+      - open
+      - paid
+      - refunded
+      - void
+      - uncollectible
     Invoice:
       type: object
       properties:
@@ -99,7 +99,7 @@ components:
         tax_items:
           type: array
           items:
-            $ref: "#/components/schemas/TaxItem"
+            $ref: '#/components/schemas/TaxItem'
         order_id:
           description: The purchase that produced this invoice. Absent on usage invoices.
           type: string
@@ -117,50 +117,58 @@ components:
           description: What produced it — metered usage for a period, a purchase, or a correction.
           type: string
           enum:
-            - usage
-            - order
-            - adjustment
+          - usage
+          - order
+          - adjustment
         currency:
           type: string
         status:
-          $ref: "#/components/schemas/InvoiceStatus"
+          $ref: '#/components/schemas/InvoiceStatus'
         subtotal:
           description: |-
             Sum of the line amounts before discounts. Where prices include tax, the tax contained in
             each line's discounted amount is taken out here, so that total = subtotal -
             discount_amount + tax_amount always holds.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         discount_amount:
           description: Sum of the line discounts, taken off before tax.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         tax_amount:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
         credit_applied:
           description: Successful credit-grant payments included in amount_paid. Does not reduce the receivable or tax base.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         total:
           description: Subtotal less discount plus tax. Balance and credit grants are payment sources, not reductions of the receivable.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         amount_paid:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        amount_due:
-          description: What is still collectible after applied credits and successful payments; never below zero. A draft order invoice is not collectible until checkout confirms it, and a paid or void invoice has none.
+        unpaid_credit_notes_amount:
+          description: Issued, non-void credit notes that reduced unpaid receivables. Does not rewrite the original invoice total.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        paid_credit_notes_amount:
+          description: Issued credit notes against payments already received. This is a return obligation, not evidence of completed refunds.
+          allOf:
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        amount_due:
+          description: What is still collectible after unpaid credit notes and successful payments; never below zero. A draft order invoice is not collectible until checkout confirms it, and a paid or void invoice has none.
+          allOf:
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         period_start:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           format: date-time
         period_end:
           description: Exclusive.
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           format: date-time
         customer_name:
           description: |-
@@ -185,30 +193,32 @@ components:
           type: string
         paid_at:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           format: date-time
       required:
-        - tax_items
-        - id
-        - billing_account_id
-        - number
-        - currency
-        - status
-        - total
-        - amount_due
+      - tax_items
+      - id
+      - billing_account_id
+      - number
+      - currency
+      - status
+      - total
+      - amount_due
+      - unpaid_credit_notes_amount
+      - paid_credit_notes_amount
     InvoiceList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/Invoice"
+            $ref: '#/components/schemas/Invoice'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
-        - items
-        - pagination
+      - items
+      - pagination
     InvoiceItem:
       type: object
       properties:
@@ -235,15 +245,15 @@ components:
         type:
           type: string
           enum:
-            - usage
-            - subscription
-            - one_time
-            - setup
-            - adjustment
+          - usage
+          - subscription
+          - one_time
+          - setup
+          - adjustment
         project_id:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           format: uuid
         project:
           description: |-
@@ -251,8 +261,8 @@ components:
             not for a project, and when the project no longer exists or its details cannot be read at
             the moment; `project_id` still identifies it then.
           oneOf:
-            - $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
-            - type: "null"
+          - $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
+          - type: 'null'
         resource_id:
           type: string
         description:
@@ -275,31 +285,31 @@ components:
           type: string
         period_start:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           format: date-time
         period_end:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           format: date-time
       required:
-        - id
-        - description
-        - amount
-        - currency
+      - id
+      - description
+      - amount
+      - currency
     InvoiceItemList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/InvoiceItem"
+            $ref: '#/components/schemas/InvoiceItem'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
-        - items
-        - pagination
+      - items
+      - pagination
     InvoiceSummary:
       description: |-
         Purchase-related invoice amounts, without account contact details or payment methods. A draft
@@ -315,7 +325,7 @@ components:
         currency:
           type: string
         status:
-          $ref: "#/components/schemas/InvoiceStatus"
+          $ref: '#/components/schemas/InvoiceStatus'
         subtotal:
           description: |-
             Sum of the line amounts before discounts. Where prices include tax, the tax contained in
@@ -331,8 +341,16 @@ components:
           type: string
         amount_paid:
           type: string
+        unpaid_credit_notes_amount:
+          description: Issued, non-void credit notes that reduced unpaid receivables. Does not rewrite the original invoice total.
+          allOf:
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        paid_credit_notes_amount:
+          description: Issued credit notes against payments already received. This is a return obligation, not evidence of completed refunds.
+          allOf:
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         amount_due:
-          description: What is still collectible after applied credits and successful payments; never below zero.
+          description: What is still collectible after unpaid credit notes and successful payments; never below zero.
           type: string
           pattern: ^\d+(\.\d{1,10})?$
         amount_refunded:
@@ -341,16 +359,18 @@ components:
           type: string
           format: date-time
       required:
-        - id
-        - currency
-        - status
-        - subtotal
-        - discount_amount
-        - tax_amount
-        - total
-        - amount_paid
-        - amount_due
-        - amount_refunded
+      - id
+      - currency
+      - status
+      - subtotal
+      - discount_amount
+      - tax_amount
+      - total
+      - amount_paid
+      - amount_due
+      - unpaid_credit_notes_amount
+      - paid_credit_notes_amount
+      - amount_refunded
     TaxItem:
       description: Tax name, rate and amounts frozen on the invoice.
       type: object
@@ -376,11 +396,11 @@ components:
         currency:
           type: string
       required:
-        - id
-        - invoice_id
-        - name
-        - percentage
-        - country
-        - taxable_amount
-        - tax_amount
-        - currency
+      - id
+      - invoice_id
+      - name
+      - percentage
+      - country
+      - taxable_amount
+      - tax_amount
+      - currency
