@@ -16,48 +16,10 @@ paths:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
         - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
-        - name: project_id
-          in: query
-          required: false
-          description: |-
-            Restrict to one project. Anything bought at account level, such as a membership,
-            appears regardless.
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/EntitlementList"
-        default:
-          $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/projects/{projectId}/entitlements:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
-    get:
-      summary: List project entitlements
-      description: |-
-        Includes capabilities bought for this project and those the project's billing account holds at
-        account level.
-
-        Where a capability counts uses, `remaining_quantity` states how much is left. Whether
-        exceeding it refuses the request or simply continues to be charged for is decided by
-        the service that owns the capability.
-      operationId: list-project-entitlements
-      tags:
-        - entitlements
-      security:
-        - scopedTokenAuth: []
-      parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
         - name: product_id
           in: query
           required: false
-          description: Filter by ID or lookup key. A lookup key is scoped to the product.
           schema:
             $ref: ./products.yaml#/components/schemas/ProductID
       responses:

@@ -2,7 +2,7 @@ openapi: 3.2.1
 info:
   title: Leaflow Billing API
   version: v1
-  description: Products, prices, orders, subscriptions and account billing. Account credentials are required by default. Public operations and project-scoped operations declare their own security requirements.
+  description: Products, prices, orders, subscriptions and account billing. Financial operations require an account access token and billing-account authorization. Public catalogue operations declare no security requirement.
 servers:
   - url: https://billing.leaflow.cloud
     description: Billing API
@@ -133,44 +133,14 @@ paths:
     $ref: ./prices.yaml#/paths/~1api~1v1~1plans~1{planId}~1prices
   /api/v1/rate-cards/{rateCardId}/rules:
     $ref: ./prices.yaml#/paths/~1api~1v1~1rate-cards~1{rateCardId}~1rules
-  /api/v1/estimates:
-    $ref: ./quotes.yaml#/paths/~1api~1v1~1estimates
-  /api/v1/projects/{projectId}/billing-account:
-    $ref: ./accounts.yaml#/paths/~1api~1v1~1projects~1{projectId}~1billing-account
-  /api/v1/projects/{projectId}/spend:
-    $ref: ./spend.yaml#/paths/~1api~1v1~1projects~1{projectId}~1spend
-  /api/v1/projects/{projectId}/usage-charges:
-    $ref: ./usage-charges.yaml#/paths/~1api~1v1~1projects~1{projectId}~1usage-charges
-  /api/v1/projects/{projectId}/subscriptions:
-    $ref: ./subscriptions.yaml#/paths/~1api~1v1~1projects~1{projectId}~1subscriptions
-  /api/v1/projects/{projectId}/subscriptions/{subscriptionId}/auto-renew:
-    $ref: ./subscriptions.yaml#/paths/~1api~1v1~1projects~1{projectId}~1subscriptions~1{subscriptionId}~1auto-renew
-  /api/v1/projects/{projectId}/cancellations:
-    $ref: ./cancellations.yaml#/paths/~1api~1v1~1projects~1{projectId}~1cancellations
-  /api/v1/projects/{projectId}/cancellations/{cancellationId}:
-    $ref: ./cancellations.yaml#/paths/~1api~1v1~1projects~1{projectId}~1cancellations~1{cancellationId}
-  /api/v1/projects/{projectId}/cancellations/{cancellationId}/withdraw:
-    $ref: ./cancellations.yaml#/paths/~1api~1v1~1projects~1{projectId}~1cancellations~1{cancellationId}~1withdraw
-  /api/v1/projects/{projectId}/orders:
-    $ref: ./orders.yaml#/paths/~1api~1v1~1projects~1{projectId}~1orders
-  /api/v1/projects/{projectId}/orders/{orderId}:
-    $ref: ./orders.yaml#/paths/~1api~1v1~1projects~1{projectId}~1orders~1{orderId}
-  /api/v1/projects/{projectId}/active-resources:
-    $ref: ./active-resources.yaml#/paths/~1api~1v1~1projects~1{projectId}~1active-resources
-  /api/v1/projects/{projectId}/quotes:
-    $ref: ./quotes.yaml#/paths/~1api~1v1~1projects~1{projectId}~1quotes
-  /api/v1/projects/{projectId}/orders/{orderId}/items:
-    $ref: ./orders.yaml#/paths/~1api~1v1~1projects~1{projectId}~1orders~1{orderId}~1items
-  /api/v1/projects/{projectId}/allowances:
-    $ref: ./allowances.yaml#/paths/~1api~1v1~1projects~1{projectId}~1allowances
-  /api/v1/projects/{projectId}/entitlements:
-    $ref: ./entitlements.yaml#/paths/~1api~1v1~1projects~1{projectId}~1entitlements
+  /api/v1/active-resources:
+    $ref: ./active-resources.yaml#/paths/~1api~1v1~1active-resources
+  /api/v1/spend:
+    $ref: ./spend.yaml#/paths/~1api~1v1~1spend
 components:
   securitySchemes:
     accessTokenAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/AccessToken
-    scopedTokenAuth:
-      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
   schemas:
     TerminationPolicy:
       $ref: ./prices.yaml#/components/schemas/TerminationPolicy
@@ -370,8 +340,6 @@ components:
       required:
         - id
         - name
-    AccountQuoteRequest:
-      $ref: ./quotes.yaml#/components/schemas/AccountQuoteRequest
     ProductList:
       $ref: ./products.yaml#/components/schemas/ProductList
     Plan:
@@ -386,22 +354,12 @@ components:
       $ref: ./prices.yaml#/components/schemas/Rate
     RateList:
       $ref: ./prices.yaml#/components/schemas/RateList
-    EstimateRequest:
-      $ref: ./quotes.yaml#/components/schemas/EstimateRequest
     Tier:
       $ref: ./prices.yaml#/components/schemas/Tier
     PlanFeature:
       $ref: ./plans.yaml#/components/schemas/PlanFeature
-    EstimateItemInput:
-      $ref: ./quotes.yaml#/components/schemas/EstimateItemInput
-    EstimateItem:
-      $ref: ./quotes.yaml#/components/schemas/EstimateItem
-    Estimate:
-      $ref: ./quotes.yaml#/components/schemas/Estimate
     QuoteItemInput:
       $ref: ./quotes.yaml#/components/schemas/QuoteItemInput
-    ProjectBillingAccount:
-      $ref: ./accounts.yaml#/components/schemas/ProjectBillingAccount
     SpendRow:
       $ref: ./spend.yaml#/components/schemas/SpendRow
     SpendRowList:
@@ -410,16 +368,12 @@ components:
       $ref: ./active-resources.yaml#/components/schemas/ActiveResource
     ActiveResourceList:
       $ref: ./active-resources.yaml#/components/schemas/ActiveResourceList
-    ProjectQuoteRequest:
-      $ref: ./quotes.yaml#/components/schemas/ProjectQuoteRequest
-    ProjectUsageCharge:
-      $ref: ./usage-charges.yaml#/components/schemas/ProjectUsageCharge
-    ProjectUsageChargeList:
-      $ref: ./usage-charges.yaml#/components/schemas/ProjectUsageChargeList
     OrderRefundQuoteInput:
       $ref: ./quotes.yaml#/components/schemas/OrderRefundQuoteInput
     OrderRefundQuote:
       $ref: ./quotes.yaml#/components/schemas/OrderRefundQuote
+    QuoteRequest:
+      $ref: ./quotes.yaml#/components/schemas/QuoteRequest
   parameters:
     From:
       name: from
@@ -533,6 +487,21 @@ components:
       schema:
         type: string
         format: date-time
+    ProjectIdsQuery:
+      name: project_ids
+      in: query
+      required: false
+      description: Restrict the account-authorized results to these projects. Omit for all projects and account-level records. This filter does not grant access to another billing account.
+      style: form
+      explode: false
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 100
+        uniqueItems: true
+        items:
+          type: string
+          format: uuid
   responses:
     Error:
       description: Error

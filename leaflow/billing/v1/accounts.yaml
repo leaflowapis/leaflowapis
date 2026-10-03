@@ -137,6 +137,7 @@ paths:
           schema:
             type: integer
             format: int64
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
       responses:
         "200":
           description: OK
@@ -218,32 +219,6 @@ paths:
       responses:
         "204":
           description: Unlinked
-        default:
-          $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/projects/{projectId}/billing-account:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
-    get:
-      summary: Get project billing account
-      description: |-
-        Returns the billing account's identity, its currency, and how much can still be spent. Cards,
-        invoices and transaction history are not included; they belong to the account owner
-        and are available only through account-authenticated operations.
-
-        Returns 404 when the project has no billing account. Resources cannot be created in that
-        state.
-      operationId: get-project-billing-account
-      tags:
-        - accounts
-      security:
-        - scopedTokenAuth: []
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProjectBillingAccount"
         default:
           $ref: ./openapi.yaml#/components/responses/Error
 components:
@@ -542,50 +517,3 @@ components:
         - id
         - name
         - currency
-    ProjectBillingAccount:
-      description: |-
-        A narrow view of the project's billing account, restricted to what a project member needs in order
-        to know whether the project's resources will keep running.
-      type: object
-      properties:
-        billing_account_id:
-          description: Identifies the billing account. Use it to link into the billing centre.
-          type: integer
-          format: int64
-        name:
-          type: string
-        currency:
-          description: |-
-            Everything this project is charged is in this currency, and it cannot change while
-            the account exists.
-          type: string
-        spendable_amount:
-          description: |-
-            What remains to be spent. It already accounts for this month's uninvoiced usage, so
-            it is what will be available at checkout rather than the balance shown in the
-            billing centre. It goes negative when usage has exceeded the balance.
-          allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        status:
-          description: |-
-            `active` — nothing is owed. `past_due` — the account owes money and resources are
-            still running. `suspended` — resources have been stopped for non-payment.
-          type: string
-          enum:
-            - active
-            - past_due
-            - suspended
-        suspends_at:
-          description: |-
-            When this project's resources will be stopped unless the account is topped up.
-            Absent while `status` is `active`.
-          type:
-            - string
-            - "null"
-          format: date-time
-      required:
-        - billing_account_id
-        - name
-        - currency
-        - spendable_amount
-        - status

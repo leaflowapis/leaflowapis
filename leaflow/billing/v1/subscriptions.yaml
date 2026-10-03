@@ -14,12 +14,7 @@ paths:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
         - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
-        - name: project_id
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
       responses:
         "200":
           description: OK
@@ -102,66 +97,6 @@ paths:
       operationId: set-auto-renew
       tags:
         - subscriptions
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/AutoRenewSet"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Subscription"
-        default:
-          $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/projects/{projectId}/subscriptions:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
-    get:
-      summary: List project subscriptions
-      operationId: list-project-subscriptions
-      tags:
-        - subscriptions
-      security:
-        - scopedTokenAuth: []
-      parameters:
-        - name: expiring_before
-          in: query
-          schema:
-            type: string
-            format: date-time
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/SubscriptionList"
-        default:
-          $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/projects/{projectId}/subscriptions/{subscriptionId}/auto-renew:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
-      - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
-    put:
-      summary: Set project auto renew
-      description: |-
-        Automatic renewal draws on the project billing account's balance, which a project member may
-        commit. Paying by card requires the account owner and is done from the billing centre.
-
-        While the subscription has an open cancellation, turning it on or off is refused with 409
-        `BILLING_SUBSCRIPTION_OPERATION_PENDING` and `meta.cancellation_id`: creating the cancellation
-        turned it off, and withdrawing the cancellation does not turn it back on.
-      operationId: set-project-auto-renew
-      tags:
-        - subscriptions
-      security:
-        - scopedTokenAuth: []
       requestBody:
         required: true
         content:

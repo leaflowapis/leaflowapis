@@ -1,15 +1,14 @@
 paths:
-  /api/v1/projects/{projectId}/active-resources:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
+  /api/v1/active-resources:
     get:
-      summary: List project active resources
-      description: A resource that is running but does not appear here is not being charged for.
-      operationId: list-project-active-resources
+      summary: List active resources
+      description: |-
+        Lists continuous metering registrations paid for by your billing accounts. Their state does not
+        describe machine runtime or health. Project filters narrow the authorized accounts; they do not
+        grant project-based access.
+      operationId: list-active-resources
       tags:
         - active-resources
-      security:
-        - scopedTokenAuth: []
       parameters:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
@@ -18,6 +17,29 @@ paths:
           required: false
           schema:
             type: string
+        - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
+        - name: meter_id
+          in: query
+          required: false
+          schema:
+            type: string
+            format: uuid
+        - name: product_id
+          in: query
+          required: false
+          schema:
+            $ref: ./products.yaml#/components/schemas/ProductID
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - active
+              - suspended
+              - closing
+              - completed
       responses:
         "200":
           description: OK
@@ -81,6 +103,9 @@ components:
           description: Usage has been generated up to this boundary; it does not imply invoicing or payment.
           type: string
           format: date-time
+        project_id:
+          type: string
+          format: uuid
       required:
         - id
         - subscription_id

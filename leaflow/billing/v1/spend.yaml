@@ -1,19 +1,15 @@
 paths:
-  /api/v1/projects/{projectId}/spend:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
+  /api/v1/spend:
     get:
-      summary: List project spend
+      summary: List account spend
       description: |-
-        Covers a closed time range. Both bounds are required: a total without a stated period
-        cannot be reconciled against an invoice.
-
-        Includes usage that has not been invoiced yet.
-      operationId: list-project-spend
+        Aggregates rated and invoiced usage charges in the specified time range for one billing account.
+        Includes usage not yet invoiced. Project filters use the account recorded on each charge, including
+        charges for projects later assigned to another account. The total covers all matching groups, not
+        just the returned page.
+      operationId: list-spend
       tags:
         - spend
-      security:
-        - scopedTokenAuth: []
       parameters:
         - $ref: ./openapi.yaml#/components/parameters/FromRequired
         - $ref: ./openapi.yaml#/components/parameters/ToRequired
@@ -40,6 +36,14 @@ paths:
             $ref: ./products.yaml#/components/schemas/ProductID
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: billing_account_id
+          in: query
+          required: true
+          description: The authorized billing account whose currency and charges are used for this report.
+          schema:
+            type: integer
+            format: int64
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
       responses:
         "200":
           description: OK

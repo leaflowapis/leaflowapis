@@ -42,7 +42,10 @@ paths:
   /api/v1/orders:
     get:
       summary: List orders
-      description: Lists acceptance status and associated invoice amounts. pending_checkout awaits confirmation; pending has confirmed checkout and may be unpaid or paid. active means accepted, not delivered. pending_checkout and pending orders can expire at expires_at.
+      description: |-
+        Lists acceptance status and associated invoice amounts. pending_checkout awaits confirmation;
+        pending has confirmed checkout and may be unpaid or paid. active means accepted, not delivered.
+        pending_checkout and pending orders can expire at expires_at.
       operationId: list-orders
       tags:
         - orders
@@ -50,12 +53,6 @@ paths:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
         - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
-        - name: project_id
-          in: query
-          required: false
-          schema:
-            type: string
-            format: uuid
         - name: status
           in: query
           required: false
@@ -63,6 +60,7 @@ paths:
             $ref: "#/components/schemas/OrderStatus"
         - $ref: ./openapi.yaml#/components/parameters/From
         - $ref: ./openapi.yaml#/components/parameters/To
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
       responses:
         "200":
           description: OK
@@ -194,81 +192,6 @@ paths:
       operationId: list-order-items
       tags:
         - orders
-      parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrderItemList"
-        default:
-          $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/projects/{projectId}/orders:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
-    get:
-      summary: List project orders
-      description: |-
-        A draft order invoice shows base amounts awaiting checkout. A confirmed invoice shows what
-        is outstanding. Checkout and payment are performed in the billing centre by the account owner.
-      operationId: list-project-orders
-      tags:
-        - orders
-      security:
-        - scopedTokenAuth: []
-      parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-        - name: status
-          in: query
-          required: false
-          schema:
-            $ref: "#/components/schemas/OrderStatus"
-        - $ref: ./openapi.yaml#/components/parameters/From
-        - $ref: ./openapi.yaml#/components/parameters/To
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/OrderList"
-        default:
-          $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/projects/{projectId}/orders/{orderId}:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
-      - $ref: ./openapi.yaml#/components/parameters/OrderId
-    get:
-      summary: Get project order
-      operationId: get-project-order
-      tags:
-        - orders
-      security:
-        - scopedTokenAuth: []
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Order"
-        default:
-          $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/projects/{projectId}/orders/{orderId}/items:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
-      - $ref: ./openapi.yaml#/components/parameters/OrderId
-    get:
-      summary: List project order items
-      operationId: list-project-order-items
-      tags:
-        - orders
-      security:
-        - scopedTokenAuth: []
       parameters:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
