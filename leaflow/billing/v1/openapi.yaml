@@ -94,6 +94,8 @@ paths:
     $ref: ./subscriptions.yaml#/paths/~1api~1v1~1subscriptions
   /api/v1/subscriptions/{subscriptionId}:
     $ref: ./subscriptions.yaml#/paths/~1api~1v1~1subscriptions~1{subscriptionId}
+  /api/v1/subscriptions/{subscriptionId}/cancel:
+    $ref: ./subscriptions.yaml#/paths/~1api~1v1~1subscriptions~1{subscriptionId}~1cancel
   /api/v1/quotes:
     $ref: ./quotes.yaml#/paths/~1api~1v1~1quotes
   /api/v1/cancellations:
