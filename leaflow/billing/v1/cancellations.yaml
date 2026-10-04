@@ -174,7 +174,7 @@ components:
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
             - type: string
-              pattern: ^-?[0-9]{1,15}([.][0-9]{1,10})?$
+              pattern: ^[0-9]{1,15}([.][0-9]{1,10})?$
         reason:
           description: A note from the account holder. It is kept with the cancellation and not shown elsewhere.
           type: string
