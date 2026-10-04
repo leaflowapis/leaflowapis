@@ -52,7 +52,7 @@ paths:
         account. Preserves commercial status, ended_at and billing and financial history. Completed
         cancellations and canceled unfulfilled purchases can be deleted directly, without termination.
         Pending, provisioning, active and suspended subscriptions are refused with 409
-        BILLING_SUBSCRIPTION_INVALID and status in error params. A scheduled or releasing cancellation
+        BILLING_SUBSCRIPTION_NOT_ENDED and status in error params. A scheduled or releasing cancellation
         does not make a subscription canceled.
         There is no force, skip-cleanup or override option. Repeating deletion preserves the original
         deleted_at. Sends no cleanup command and creates no refund; outstanding cleanup continues.
