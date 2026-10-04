@@ -55,6 +55,37 @@ paths:
           description: Hidden from subscription reads; financial history retained.
         default:
           $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/subscriptions/{subscriptionId}/terminate:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
+    post:
+      summary: Terminate subscription
+      operationId: terminate-subscription
+      description: |-
+        Immediately ends commercial billing and metering and requests cleanup without waiting for the
+        owning service. Creates no credit note or refund, even when delivery or cleanup is unknown.
+        Your account access token must authorize the subscription's current billing account.
+        Pending and provisioning subscriptions can be terminated. Existing cancellation terms and
+        financial records remain unchanged. A canceled subscription keeps its original billing end.
+        Repeating termination returns the original result without another cleanup command.
+        The reason is audited. Refund options are not supported.
+      tags:
+        - subscriptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TerminateSubscriptionRequest'
+      responses:
+        "200":
+          description: Commercial billing ended; cleanup can still be pending.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subscription'
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/subscriptions/{subscriptionId}/cancel:
     parameters:
       - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
@@ -165,6 +196,16 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
 components:
   schemas:
+    TerminateSubscriptionRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 8
+          maxLength: 1024
+      required:
+        - reason
     CancelSubscriptionRequest:
       type: object
       additionalProperties: false
