@@ -45,9 +45,12 @@ paths:
       summary: Delete subscription
       operationId: delete-subscription
       description: |-
-        Hides a terminated subscription from your subscription list and detail. Billing and financial
-        history remain available. Other states, including canceled, are refused; terminate it first.
-        Sends no cleanup command and creates no refund.
+        Hides an already terminated subscription from your subscription list and detail. Your account
+        access token must authorize the subscription's current billing account. Billing and financial
+        history remain available. This operation cannot force termination, skip cleanup, or delete a
+        pending, provisioning, active or suspended subscription. Other states, including canceled, are
+        refused with 409 BILLING_SUBSCRIPTION_NOT_TERMINATED and status in error params. A canceled
+        subscription must first be converted to terminated. Sends no cleanup command and creates no refund.
       tags:
         - subscriptions
       responses:
@@ -62,13 +65,17 @@ paths:
       summary: Terminate subscription
       operationId: terminate-subscription
       description: |-
-        Immediately ends commercial billing and metering and requests cleanup without waiting for the
-        owning service. Creates no credit note or refund, even when delivery or cleanup is unknown.
-        Your account access token must authorize the subscription's current billing account.
-        Pending and provisioning subscriptions can be terminated. Existing cancellation terms and
-        financial records remain unchanged. A canceled subscription keeps its original billing end.
-        Repeating termination returns the original result without another cleanup command.
-        The reason is audited. Refund options are not supported.
+        Converts an already canceled subscription to terminated so it can subsequently be hidden.
+        Your account access token must authorize the subscription's current billing account. Preserves
+        the original billing end and financial history, sends no new cleanup command, and creates no
+        credit note or refund. A terminated subscription is returned unchanged on repeat; a deleted
+        subscription remains hidden from tenant reads.
+
+        Account holders cannot force termination of pending, provisioning, active or suspended
+        subscriptions. These states are refused with 400 BILLING_SUBSCRIPTION_INVALID and status in
+        error params. Use cancellation under the agreed terms to end service. Immediate commercial
+        termination is reserved for administrators and the owning service. The audited reason does
+        not grant permission to terminate. No force, skip-cleanup or refund options are accepted.
       tags:
         - subscriptions
       requestBody:
@@ -79,7 +86,7 @@ paths:
               $ref: '#/components/schemas/TerminateSubscriptionRequest'
       responses:
         "200":
-          description: Commercial billing ended; cleanup can still be pending.
+          description: Canceled subscription converted to terminated; original billing end retained.
           content:
             application/json:
               schema:
