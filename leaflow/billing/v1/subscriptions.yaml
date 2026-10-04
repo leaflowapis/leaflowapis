@@ -41,6 +41,20 @@ paths:
                 $ref: "#/components/schemas/Subscription"
         default:
           $ref: ./openapi.yaml#/components/responses/Error
+    delete:
+      summary: Delete subscription
+      operationId: delete-subscription
+      description: |-
+        Hides a terminated subscription from your subscription list and detail. Billing and financial
+        history remain available. Other states, including canceled, are refused; terminate it first.
+        Sends no cleanup command and creates no refund.
+      tags:
+        - subscriptions
+      responses:
+        "204":
+          description: Hidden from subscription reads; financial history retained.
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/subscriptions/{subscriptionId}/renew:
     parameters:
       - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
@@ -274,6 +288,7 @@ components:
             - suspended
             - canceled
             - terminated
+            - deleted
         started_at:
           description: Confirmed start of service. Null until a new subscription becomes active, including after payment.
           type:
