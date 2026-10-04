@@ -2,6 +2,7 @@ paths:
   /api/v1/subscriptions:
     get:
       summary: List subscriptions
+      description: Lists subscriptions visible to the authorized billing account. Soft-deleted subscriptions are excluded.
       operationId: list-subscriptions
       tags:
         - subscriptions
@@ -29,6 +30,7 @@ paths:
       - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
     get:
       summary: Get subscription
+      description: Returns a subscription visible to the authorized billing account. Soft-deleted subscriptions are reported as not found.
       operationId: get-subscription
       tags:
         - subscriptions
@@ -45,52 +47,20 @@ paths:
       summary: Delete subscription
       operationId: delete-subscription
       description: |-
-        Hides an already terminated subscription from your subscription list and detail. Your account
-        access token must authorize the subscription's current billing account. Billing and financial
-        history remain available. This operation cannot force termination, skip cleanup, or delete a
-        pending, provisioning, active or suspended subscription. Other states, including canceled, are
-        refused with 409 BILLING_SUBSCRIPTION_NOT_TERMINATED and status in error params. A canceled
-        subscription must first be converted to terminated. Sends no cleanup command and creates no refund.
+        Sets deleted_at on a canceled or terminated subscription, hiding it from your subscription
+        list and detail. Your account access token must authorize the subscription's current billing
+        account. Preserves commercial status, ended_at and billing and financial history. Completed
+        cancellations and canceled unfulfilled purchases can be deleted directly, without termination.
+        Pending, provisioning, active and suspended subscriptions are refused with 409
+        BILLING_SUBSCRIPTION_INVALID and status in error params. A scheduled or releasing cancellation
+        does not make a subscription canceled.
+        There is no force, skip-cleanup or override option. Repeating deletion preserves the original
+        deleted_at. Sends no cleanup command and creates no refund; outstanding cleanup continues.
       tags:
         - subscriptions
       responses:
         "204":
           description: Hidden from subscription reads; financial history retained.
-        default:
-          $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/subscriptions/{subscriptionId}/terminate:
-    parameters:
-      - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
-    post:
-      summary: Terminate subscription
-      operationId: terminate-subscription
-      description: |-
-        Converts an already canceled subscription to terminated so it can subsequently be hidden.
-        Your account access token must authorize the subscription's current billing account. Preserves
-        the original billing end and financial history, sends no new cleanup command, and creates no
-        credit note or refund. A terminated subscription is returned unchanged on repeat; a deleted
-        subscription remains hidden from tenant reads.
-
-        Account holders cannot force termination of pending, provisioning, active or suspended
-        subscriptions. These states are refused with 400 BILLING_SUBSCRIPTION_INVALID and status in
-        error params. Use cancellation under the agreed terms to end service. Immediate commercial
-        termination is reserved for administrators and the owning service. The audited reason does
-        not grant permission to terminate. No force, skip-cleanup or refund options are accepted.
-      tags:
-        - subscriptions
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/TerminateSubscriptionRequest'
-      responses:
-        "200":
-          description: Canceled subscription converted to terminated; original billing end retained.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Subscription'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/subscriptions/{subscriptionId}/cancel:
@@ -203,16 +173,6 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
 components:
   schemas:
-    TerminateSubscriptionRequest:
-      type: object
-      additionalProperties: false
-      properties:
-        reason:
-          type: string
-          minLength: 8
-          maxLength: 1024
-      required:
-        - reason
     CancelSubscriptionRequest:
       type: object
       additionalProperties: false
@@ -262,8 +222,8 @@ components:
 
         One-time delivery may omit a subscription. Renewals reference and extend existing subscriptions
         rather than creating another; a change keeps the subscription ID and switches its terms when it
-        takes effect. Canceling or failing an
-        unfulfilled purchase closes its pending or provisioning subscriptions without starting a service period.
+        takes effect. Canceling or failing an unfulfilled purchase sets its pending or provisioning
+        subscriptions to canceled without starting a service period.
         Fixed renewals use the agreed recurring_amount and interval; already paid periods retain their
         original value. Technical state belongs to the owning service.
 
@@ -387,6 +347,8 @@ components:
             pending means the purchase relationship exists but its order has not been accepted.
             provisioning means the service accepted the order and is delivering. For a service-owned
             purchase, only confirmed delivery moves it to active; paying alone does not.
+            canceled means cancellation completed, or an unfulfilled purchase was canceled or failed without delivery.
+            terminated means an administrator or the owning service immediately ended the commercial relationship.
           type: string
           enum:
             - pending
@@ -395,7 +357,6 @@ components:
             - suspended
             - canceled
             - terminated
-            - deleted
         started_at:
           description: Confirmed start of service. Null until a new subscription becomes active, including after payment.
           type:
