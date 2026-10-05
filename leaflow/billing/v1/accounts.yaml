@@ -273,6 +273,14 @@ components:
             0 means none. Whichever runs out first — this or grace_amount — ends the grace.
           type: integer
           format: int64
+        closed_at:
+          description: |-
+            The actual time this account was closed, in UTC (RFC 3339).
+            Null or absent if the account is not closed or its historical close time is unknown.
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
         created_at:
           type: string
           format: date-time
