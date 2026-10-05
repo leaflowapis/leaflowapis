@@ -3,10 +3,11 @@ paths:
     get:
       summary: List account spend
       description: |-
-        Aggregates rated and invoiced usage charges in the specified time range for one billing account.
-        Includes usage not yet invoiced. Project filters use the account recorded on each charge, including
-        charges for projects later assigned to another account. The total covers all matching groups, not
-        just the returned page.
+        Sums priced usage for one billing account by UTC day, including usage not yet invoiced. Amounts are
+        before tax and before the tier adjustments made when a statement closes; minimum charges added at
+        closing are included. `from` and `to` must fall on UTC day boundaries and span at most 92 days.
+        Project filters use the account recorded on each charge, including charges for projects later
+        assigned to another account. The total covers all matching groups, not just the returned page.
       operationId: list-spend
       tags:
         - spend
@@ -17,7 +18,8 @@ paths:
           in: query
           required: false
           description: |-
-            `resource` groups by the resource each charge names. Items billed under their own
+            `plan` groups by the plan of the price each charge was priced with, which stays the same after the
+            subscription changes plan. `resource` groups by the resource each charge names. Items billed under their own
             identifier — a disk, a public address — appear as their own rows rather than under
             the machine they are attached to, since the relationship between them is known to
             the owning service and not here.

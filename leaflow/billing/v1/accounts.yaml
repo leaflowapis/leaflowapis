@@ -2,22 +2,22 @@ paths:
   /api/v1/currencies:
     get:
       summary: List currencies accounts can be opened in
-      description: |-
-        The currencies a new billing account can be opened in. A retired currency is not listed,
-        although accounts already opened in it keep working. Results are paginated.
+      description: 'The currencies a new billing account can be opened in. A retired currency is not listed,
+
+        although accounts already opened in it keep working. Results are paginated.'
       operationId: list-currencies
       tags:
-        - accounts
+      - accounts
       parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CurrencyList"
+                $ref: '#/components/schemas/CurrencyList'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/billing-accounts:
@@ -25,101 +25,101 @@ paths:
       summary: List billing accounts
       operationId: list-billing-accounts
       tags:
-        - accounts
+      - accounts
       parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BillingAccountList"
+                $ref: '#/components/schemas/BillingAccountList'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
     post:
       summary: Create billing account
-      description: |-
-        The currency is chosen here and cannot be changed afterwards. Everything charged to the
+      description: 'The currency is chosen here and cannot be changed afterwards. Everything charged to the
+
         account — prices, orders, invoices, balance — is denominated in it.
 
-        One person may hold several accounts, for example a personal one and one for a team.
+
+        One person may hold several accounts, for example a personal one and one for a team.'
       operationId: create-billing-account
       tags:
-        - accounts
+      - accounts
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BillingAccountCreate"
+              $ref: '#/components/schemas/BillingAccountCreate'
       responses:
-        "201":
+        '201':
           description: Created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BillingAccount"
+                $ref: '#/components/schemas/BillingAccount'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/billing-accounts/{accountId}:
     parameters:
-      - $ref: ./openapi.yaml#/components/parameters/AccountId
+    - $ref: ./openapi.yaml#/components/parameters/AccountId
     get:
       summary: Get billing account
       operationId: get-billing-account
       tags:
-        - accounts
+      - accounts
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BillingAccount"
+                $ref: '#/components/schemas/BillingAccount'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
     patch:
       summary: Update billing account
       description: |-
-        The legal name, address and tax identifier are copied onto each invoice when it is
-        issued. Changing them here affects invoices issued afterwards, not those already sent.
-
-        The currency cannot be changed.
+        Select an active contact belonging to this account for future invoices. Its legal name,
+        address and tax identifier are copied when an invoice is issued; issued snapshots are
+        retained. Set invoice_contact_id to null to clear the selection. The currency cannot change.
       operationId: update-billing-account
       tags:
-        - accounts
+      - accounts
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/BillingAccountUpdate"
+              $ref: '#/components/schemas/BillingAccountUpdate'
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BillingAccount"
+                $ref: '#/components/schemas/BillingAccount'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/billing-accounts/{accountId}/balance:
     parameters:
-      - $ref: ./openapi.yaml#/components/parameters/AccountId
+    - $ref: ./openapi.yaml#/components/parameters/AccountId
     get:
       summary: Get account balance
       operationId: get-account-balance
       tags:
-        - accounts
+      - accounts
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AccountBalance"
+                $ref: '#/components/schemas/AccountBalance'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/assignments:
@@ -127,97 +127,110 @@ paths:
       summary: List project assignments
       operationId: list-project-assignments
       tags:
-        - accounts
+      - accounts
       parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-        - name: billing_account_id
-          in: query
-          required: false
-          schema:
-            type: integer
-            format: int64
-        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      - name: billing_account_id
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+      - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectAssignmentList"
+                $ref: '#/components/schemas/ProjectAssignmentList'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/assignments/{projectId}:
     parameters:
-      - $ref: ./openapi.yaml#/components/parameters/ProjectId
+    - $ref: ./openapi.yaml#/components/parameters/ProjectId
     get:
       summary: Get project assignment
-      description: |-
-        Returns the current assignment for the project identified by projectId. Returns 404 when
-        no billing account is assigned; no resources can be created until one is assigned.
+      description: 'Returns the current assignment for the project identified by projectId. Returns 404 when
+
+        no billing account is assigned; no resources can be created until one is assigned.'
       operationId: get-project-assignment
       tags:
-        - accounts
+      - accounts
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectAssignment"
+                $ref: '#/components/schemas/ProjectAssignment'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
     put:
       summary: Set project assignment
-      description: |-
-        Charges already incurred remain with the billing account that was linked when they
+      description: 'Charges already incurred remain with the billing account that was linked when they
+
         occurred, and are still invoiced to it. Metered resources are settled up to the moment of
+
         the change. Amounts owed by the previous billing account remain owed by it and do not
+
         prevent the change.
 
+
         Orders keep the billing account they were placed with and are fulfilled as placed. Periods
+
         already paid for are unaffected; renewals are charged to the new billing account.
 
+
         The request is refused once the project no longer accepts purchases because it is being
+
         deleted, and while a subscription or an order in progress in the project uses a currency
-        other than that of the new billing account.
+
+        other than that of the new billing account.'
       operationId: set-project-assignment
       tags:
-        - accounts
+      - accounts
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SetProjectAssignmentRequest"
+              $ref: '#/components/schemas/SetProjectAssignmentRequest'
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProjectAssignment"
+                $ref: '#/components/schemas/ProjectAssignment'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
     delete:
       summary: Unlink project billing account
-      description: |-
-        Ends the project's current assignment without deleting its assignment history.
+      description: 'Ends the project''s current assignment without deleting its assignment history.
+
 
         Permitted only when nothing in the project is still running or in progress: no metered
+
         resources, no subscriptions that have not ended, and no orders in progress, including
+
         changes scheduled for the end of a period. Orders are not modified by this request; wait
+
         for them to complete, and have the service that scheduled a change call it off.
 
+
         Charges already incurred remain with the billing account and are invoiced to it as usual.
+
         Amounts the billing account owes do not prevent unlinking.
 
-        After this the project cannot make purchases until a billing account is linked again.
+
+        After this the project cannot make purchases until a billing account is linked again.'
       operationId: unlink-project-billing-account
       tags:
-        - accounts
+      - accounts
       responses:
-        "204":
+        '204':
           description: Unlinked
         default:
           $ref: ./openapi.yaml#/components/responses/Error
@@ -226,32 +239,17 @@ components:
     BillingAccount:
       type: object
       properties:
+        invoice_contact_id:
+          description: The active contact used for invoicing. Must belong to this account; null clears the selection.
+          type:
+          - string
+          - 'null'
+          format: uuid
         id:
           type: integer
           format: int64
         name:
           description: What you call this account.
-          type: string
-        legal_name:
-          description: The name invoices are made out to. Copied onto each invoice when it is issued.
-          type: string
-        email:
-          description: Where invoices are sent.
-          type: string
-        address_line1:
-          type: string
-        address_line2:
-          type: string
-        address_city:
-          type: string
-        address_state:
-          type: string
-        address_postal_code:
-          type: string
-        address_country:
-          description: Two-letter code.
-          type: string
-        tax_id:
           type: string
         currency:
           description: Fixed when the account was opened.
@@ -259,18 +257,18 @@ components:
         status:
           type: string
           enum:
-            - active
-            - suspended
-            - closed
+          - active
+          - suspended
+          - closed
         grace_amount:
-          description: |-
-            How far past the suspension threshold this account may go before its resources are
-            suspended. "0" means none: the account is suspended as soon as it crosses the threshold.
+          description: 'How far past the suspension threshold this account may go before its resources are
+
+            suspended. "0" means none: the account is suspended as soon as it crosses the threshold.'
           type: string
         grace_period_seconds:
-          description: |-
-            How long this account has to top up after crossing the suspension threshold.
-            0 means none. Whichever runs out first — this or grace_amount — ends the grace.
+          description: 'How long this account has to top up after crossing the suspension threshold.
+
+            0 means none. Whichever runs out first — this or grace_amount — ends the grace.'
           type: integer
           format: int64
         closed_at:
@@ -284,10 +282,10 @@ components:
           type: string
           format: date-time
       required:
-        - id
-        - currency
-        - status
-        - created_at
+      - id
+      - currency
+      - status
+      - created_at
     Currency:
       description: A currency a billing account can be opened in.
       type: object
@@ -311,10 +309,10 @@ components:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
           description: The smallest top-up accepted. Zero means no lower bound.
       required:
-        - code
-        - exponent
-        - name
-        - minimum_top_up
+      - code
+      - exponent
+      - name
+      - minimum_top_up
       additionalProperties: false
     CurrencyList:
       type: object
@@ -322,12 +320,12 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/Currency"
+            $ref: '#/components/schemas/Currency'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
-        - items
-        - pagination
+      - items
+      - pagination
       additionalProperties: false
     BillingAccountCreate:
       type: object
@@ -339,49 +337,21 @@ components:
         name:
           type: string
           maxLength: 255
-        legal_name:
-          type: string
-          maxLength: 255
-        email:
-          type: string
-          maxLength: 255
       required:
-        - currency
+      - currency
       additionalProperties: false
     BillingAccountUpdate:
       type: object
       properties:
+        invoice_contact_id:
+          description: The active contact used for invoicing. Must belong to this account; null clears the selection.
+          type:
+          - string
+          - 'null'
+          format: uuid
         name:
           type: string
           maxLength: 255
-        legal_name:
-          type: string
-          maxLength: 255
-        email:
-          type: string
-          maxLength: 255
-        address_line1:
-          type: string
-          maxLength: 255
-        address_line2:
-          type: string
-          maxLength: 255
-        address_city:
-          type: string
-          maxLength: 128
-        address_state:
-          type: string
-          maxLength: 128
-        address_postal_code:
-          type: string
-          maxLength: 32
-        address_country:
-          type: string
-          minLength: 2
-          maxLength: 2
-        tax_id:
-          type: string
-          maxLength: 64
       additionalProperties: false
     BillingAccountList:
       type: object
@@ -389,86 +359,95 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/BillingAccount"
+            $ref: '#/components/schemas/BillingAccount'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
-        - items
-        - pagination
+      - items
+      - pagination
     AccountBalance:
       description: Account balance, credits, and unpaid charges are reported separately.
       type: object
       properties:
+        available_credit:
+          description: Cash balance minus pending cash returns, unbilled usage estimates and issued unpaid amounts.
+            Credit grants are excluded; the result may be negative.
+          allOf:
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        unbilled_amount:
+          description: Current estimate of rated usage that has not been invoiced. Final pricing and tax are fixed
+            at issuance.
+          allOf:
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         billing_account_id:
           type: integer
           format: int64
         currency:
           type: string
         balance:
-          description: |-
-            Prepaid funds in the account currency, excluding credits. May be negative after a payment
-            dispute. Outstanding charges are reported separately in due; this value is not a withdrawal quote.
+          description: 'Prepaid funds in the account currency, excluding credits. May be negative after a payment
+
+            dispute. Outstanding charges are reported separately in due; this value is not a withdrawal quote.'
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         credits:
-          description: |-
-            The recorded remaining credit, including restricted grants. It is not withdrawable
+          description: 'The recorded remaining credit, including restricted grants. It is not withdrawable
+
             and is not part of balance. credit_groups describes currently valid credit by permitted use; a positive
-            credits balance does not imply that due is zero.
+
+            credits balance does not imply that due is zero.'
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        total:
-          description: |-
-            balance plus credits, the sum shown as the account's funds. Credits count at their recorded remaining
-            amount, including restricted grants that only pay for what they allow, so total is an upper bound of what
-            the account can pay with rather than a withdrawable amount. due is reported separately and is not subtracted.
-          allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         restricted_credits:
-          description: |-
-            The part of currently valid credit that only pays for what its restrictions allow, such as a single
-            service, a billing type or a first purchase. The rest of the valid credit pays for anything on the account.
-            Included in credits and therefore in total.
+          description: Currently valid credit whose use has applicable product, operation or eligibility conditions.
+            Included in credits, separate from cash balance.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         credit_groups:
-          description: |-
-            Currently valid, unspent credit grouped by permitted use. Restrictions and
+          description: 'Currently valid, unspent credit grouped by permitted use. Restrictions and
+
             validity dates determine which charges a group can cover, so these groups are not a general
-            spendable balance and may differ from the recorded credits total.
+
+            spendable balance and may differ from the recorded credits total.'
           type: array
           items:
             $ref: ./credit-grants.yaml#/components/schemas/CreditGroup
         due:
-          description: |-
-            Owed and not yet paid: metered usage that balance and applicable credit could not cover as it was
-            charged, and issued usage invoices still unpaid. The account is in arrears while this
-            is above zero. Topping up pays it on the next collection.
+          description: Amount still payable on issued invoices. Unbilled usage is reported separately; arrears depend
+            on actual eligible funding and grace terms.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        pending_returns_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: Cash principal committed to pending top-up refunds or payouts. Already unavailable for spending;
+            unbilled usage does not freeze cash.
       required:
-        - billing_account_id
-        - currency
-        - balance
-        - credits
-        - total
-        - restricted_credits
-        - credit_groups
-        - due
+      - billing_account_id
+      - currency
+      - balance
+      - credits
+      - restricted_credits
+      - credit_groups
+      - due
+      - available_credit
+      - unbilled_amount
+      - pending_returns_amount
     ProjectAssignment:
-      description: A project's assignment to a billing account for the interval from effective_from to effective_to. An open-ended assignment has no end time.
+      description: A project's assignment to a billing account for the interval from effective_from to effective_to.
+        An open-ended assignment has no end time.
       type: object
       properties:
         project_id:
           type: string
           format: uuid
         project:
-          description: |-
-            The project and its current name, for display. Absent when the project no longer exists or its
-            details cannot be read at the moment; `project_id` still identifies it.
+          description: 'The project and its current name, for display. Absent when the project no longer exists
+            or its
+
+            details cannot be read at the moment; `project_id` still identifies it.'
           oneOf:
-            - $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
-            - type: "null"
+          - $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
+          - type: 'null'
         billing_account_id:
           type: integer
           format: int64
@@ -481,26 +460,26 @@ components:
           format: date-time
         effective_to:
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           format: date-time
       required:
-        - project_id
-        - billing_account_id
-        - currency
-        - effective_from
+      - project_id
+      - billing_account_id
+      - currency
+      - effective_from
     ProjectAssignmentList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/ProjectAssignment"
+            $ref: '#/components/schemas/ProjectAssignment'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
-        - items
-        - pagination
+      - items
+      - pagination
     SetProjectAssignmentRequest:
       type: object
       properties:
@@ -508,7 +487,7 @@ components:
           type: integer
           format: int64
       required:
-        - billing_account_id
+      - billing_account_id
       additionalProperties: false
     AccountIdentity:
       type: object
@@ -521,6 +500,6 @@ components:
         currency:
           type: string
       required:
-        - id
-        - name
-        - currency
+      - id
+      - name
+      - currency

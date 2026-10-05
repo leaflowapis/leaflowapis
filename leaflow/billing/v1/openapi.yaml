@@ -2,7 +2,8 @@ openapi: 3.2.1
 info:
   title: Leaflow Billing API
   version: v1
-  description: Products, prices, orders, subscriptions and account billing. Financial operations require an account access token and billing-account authorization. Public catalogue operations declare no security requirement.
+  description: Products, prices, orders, subscriptions and account billing. Financial operations require an account access
+    token and billing-account authorization. Public catalogue operations declare no security requirement.
 servers:
 - url: https://billing.leaflow.cloud
   description: Billing API
@@ -29,7 +30,12 @@ tags:
 - name: subscriptions
 - name: transactions
 - name: usage-charges
+- name: statements
 paths:
+  /api/v1/billing-accounts/{accountId}/contacts:
+    $ref: ./contacts.yaml#/paths/~1api~1v1~1billing-accounts~1{accountId}~1contacts
+  /api/v1/contacts/{contactId}:
+    $ref: ./contacts.yaml#/paths/~1api~1v1~1contacts~1{contactId}
   /api/v1/currencies:
     $ref: ./accounts.yaml#/paths/~1api~1v1~1currencies
   /api/v1/billing-accounts:
@@ -38,8 +44,6 @@ paths:
     $ref: ./accounts.yaml#/paths/~1api~1v1~1billing-accounts~1{accountId}
   /api/v1/billing-accounts/{accountId}/balance:
     $ref: ./accounts.yaml#/paths/~1api~1v1~1billing-accounts~1{accountId}~1balance
-  /api/v1/billing-accounts/{accountId}/metered-usage:
-    $ref: ./usage-charges.yaml#/paths/~1api~1v1~1billing-accounts~1{accountId}~1metered-usage
   /api/v1/billing-accounts/{accountId}/payment-options:
     $ref: ./payments.yaml#/paths/~1api~1v1~1billing-accounts~1{accountId}~1payment-options
   /api/v1/assignments:
@@ -146,6 +150,12 @@ paths:
     $ref: ./active-resources.yaml#/paths/~1api~1v1~1active-resources
   /api/v1/spend:
     $ref: ./spend.yaml#/paths/~1api~1v1~1spend
+  /api/v1/statements:
+    $ref: ./statements.yaml#/paths/~1api~1v1~1statements
+  /api/v1/statements/{statementId}:
+    $ref: ./statements.yaml#/paths/~1api~1v1~1statements~1{statementId}
+  /api/v1/statements/{statementId}/usage-summary:
+    $ref: ./statements.yaml#/paths/~1api~1v1~1statements~1{statementId}~1usage-summary
 components:
   securitySchemes:
     accessTokenAuth:
@@ -205,8 +215,6 @@ components:
       $ref: ./accounts.yaml#/components/schemas/BillingAccountList
     AccountBalance:
       $ref: ./accounts.yaml#/components/schemas/AccountBalance
-    MeteredUsage:
-      $ref: ./usage-charges.yaml#/components/schemas/MeteredUsage
     CreditGroup:
       $ref: ./credit-grants.yaml#/components/schemas/CreditGroup
     ProjectAssignment:
@@ -477,11 +485,12 @@ components:
       name: If-None-Match
       in: header
       required: false
-      description: |-
-        The `ETag` from an earlier reply. When the catalogue has not changed since, the
+      description: 'The `ETag` from an earlier reply. When the catalogue has not changed since, the
+
         answer is `304` with no body.
 
-        Send it on every catalogue read. An unchanged catalogue is answered without a body.
+
+        Send it on every catalogue read. An unchanged catalogue is answered without a body.'
       schema:
         type: string
     PlanId:
@@ -517,7 +526,8 @@ components:
       name: project_ids
       in: query
       required: false
-      description: Restrict the account-authorized results to these projects. Omit for all projects and account-level records. This filter does not grant access to another billing account.
+      description: Restrict the account-authorized results to these projects. Omit for all projects and account-level records.
+        This filter does not grant access to another billing account.
       style: form
       explode: false
       schema:
