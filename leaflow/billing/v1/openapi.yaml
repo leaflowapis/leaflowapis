@@ -81,11 +81,11 @@ paths:
   /api/v1/credit-grants:
     $ref: ./credit-grants.yaml#/paths/~1api~1v1~1credit-grants
   /api/v1/credit-notes:
-    $ref: ./creditnotes.yaml#/paths/~1api~1v1~1credit-notes
+    $ref: ./credit-notes.yaml#/paths/~1api~1v1~1credit-notes
   /api/v1/credit-notes/{creditNoteId}:
-    $ref: ./creditnotes.yaml#/paths/~1api~1v1~1credit-notes~1{creditNoteId}
+    $ref: ./credit-notes.yaml#/paths/~1api~1v1~1credit-notes~1{creditNoteId}
   /api/v1/credit-notes/{creditNoteId}/items:
-    $ref: ./creditnotes.yaml#/paths/~1api~1v1~1credit-notes~1{creditNoteId}~1items
+    $ref: ./credit-notes.yaml#/paths/~1api~1v1~1credit-notes~1{creditNoteId}~1items
   /api/v1/refunds:
     $ref: ./refunds.yaml#/paths/~1api~1v1~1refunds
   /api/v1/usage-charges:
@@ -276,13 +276,13 @@ components:
     CreditGrantList:
       $ref: ./credit-grants.yaml#/components/schemas/CreditGrantList
     CreditNote:
-      $ref: ./creditnotes.yaml#/components/schemas/CreditNote
+      $ref: ./credit-notes.yaml#/components/schemas/CreditNote
     CreditNoteItem:
-      $ref: ./creditnotes.yaml#/components/schemas/CreditNoteItem
+      $ref: ./credit-notes.yaml#/components/schemas/CreditNoteItem
     CreditNoteList:
-      $ref: ./creditnotes.yaml#/components/schemas/CreditNoteList
+      $ref: ./credit-notes.yaml#/components/schemas/CreditNoteList
     CreditNoteItemList:
-      $ref: ./creditnotes.yaml#/components/schemas/CreditNoteItemList
+      $ref: ./credit-notes.yaml#/components/schemas/CreditNoteItemList
     Refund:
       $ref: ./refunds.yaml#/components/schemas/Refund
     RefundReason:
