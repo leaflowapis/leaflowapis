@@ -277,9 +277,8 @@ components:
           description: |-
             The actual time this account was closed, in UTC (RFC 3339).
             Null or absent if the account is not closed or its historical close time is unknown.
-          type: string
+          type: [string, "null"]
           format: date-time
-          nullable: true
           readOnly: true
         created_at:
           type: string
