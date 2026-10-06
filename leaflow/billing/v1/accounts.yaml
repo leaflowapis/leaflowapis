@@ -370,7 +370,7 @@ components:
       type: object
       properties:
         available_credit:
-          description: Cash balance minus pending cash returns, unbilled usage estimates and issued unpaid amounts.
+          description: Balance minus pending balance returns, unbilled usage estimates and issued unpaid amounts.
             Credit grants are excluded; the result may be negative.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
@@ -400,7 +400,7 @@ components:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         restricted_credits:
           description: Currently valid credit whose use has applicable product, operation or eligibility conditions.
-            Included in credits, separate from cash balance.
+            Included in credits, separate from the balance.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         credit_groups:
@@ -419,8 +419,8 @@ components:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         pending_returns_amount:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
-          description: Cash principal committed to pending top-up refunds or payouts. Already unavailable for spending;
-            unbilled usage does not freeze cash.
+          description: Balance committed to pending top-up refunds or payouts. Already unavailable for spending;
+            unbilled usage does not freeze the balance.
       required:
       - billing_account_id
       - currency

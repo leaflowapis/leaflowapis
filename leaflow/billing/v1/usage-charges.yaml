@@ -2,10 +2,10 @@ paths:
   /api/v1/usage-charges:
     get:
       summary: List usage charges
-      description: 'Lists priced and pending usage charges. Requires `statement_id`, `invoice_item_id`, or both `from` and
+      description: 'Lists priced and unrated usage charges. Requires `statement_id`, `invoice_item_id`, or both `from` and
         `to` spanning at most 31 days; use the statement summary or spend report for longer periods. Charges are summed into
         one line per subscription, project, resource, meter and rate when their statement closes; filter by `invoice_item_id`
-        to see the charges behind a line. Charges still waiting to be priced are included too.
+        to see the charges behind a line. Unrated charges had no applicable price when the usage occurred and are not billed.
 
 
         Only charges recorded against your billing accounts are included, before filtering, counting and pagination. Reassigning
@@ -115,13 +115,15 @@ components:
         currency:
           type: string
         invoice_id:
-          description: The usage invoice this charge was added to. Absent while it waits to be priced.
+          description: The usage invoice this charge was added to. Absent until its statement closes and always absent for
+            unrated charges.
           type:
           - string
           - 'null'
           format: uuid
         invoice_item_id:
-          description: The usage invoice line this charge was summed into. Absent while it waits to be priced.
+          description: The usage invoice line this charge was summed into. Absent until its statement closes and always absent
+            for unrated charges.
           type:
           - string
           - 'null'

@@ -161,8 +161,9 @@ components:
           $ref: '#/components/schemas/StatementStatus'
         estimated:
           type: boolean
-          description: True while the statement is open. The estimate is the priced usage plus tax for the current invoice
-            contact; tier adjustments over the whole period and minimum charges are determined at closing.
+          description: True while the statement is open. The estimate applies tier pricing to the period's usage so far and
+            adds tax for the current invoice contact. Minimum charges are added at closing, and a tier reduction larger than
+            this statement's own charges is credited to earlier invoices of the period at closing.
         amounts:
           $ref: '#/components/schemas/StatementAmounts'
           description: The current estimate while open, or the invoiced result when closed.
@@ -232,7 +233,7 @@ components:
           type: string
         unrated_quantity:
           type: string
-          description: Usage not yet priced; not a zero-cost charge.
+          description: Usage that had no applicable price when it occurred. It is not charged, either now or later.
         amount:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
           description: Priced amount before tax. Minimum charges added at closing are included; tier adjustments and tax appear
