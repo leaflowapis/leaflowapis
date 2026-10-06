@@ -112,6 +112,9 @@ paths:
       - $ref: ./openapi.yaml#/components/parameters/CancellationId
     get:
       summary: Get a cancellation
+      description: Returns a cancellation request for an authorized billing account with its schedule, expected
+        refundable amount and individual subscription outcomes. Read individual item states for per-subscription
+        outcomes, including partial success.
       operationId: get-cancellation
       tags:
         - cancellations

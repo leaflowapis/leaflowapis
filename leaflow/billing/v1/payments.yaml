@@ -142,6 +142,8 @@ paths:
   /api/v1/payment-methods:
     get:
       summary: List payment methods
+      description: Paginated saved payment methods for owned billing accounts, optionally restricted to
+        billing_account_id. Removed methods are excluded; they do not disappear from historical payment records.
       operationId: list-payment-methods
       tags:
         - payments
@@ -190,6 +192,8 @@ paths:
       - $ref: ./openapi.yaml#/components/parameters/PaymentMethodId
     put:
       summary: Set default payment method
+      description: Selects an active saved payment method as the default for its owned billing account and returns it.
+        Expired or removed methods cannot be selected; selecting the current default is idempotent.
       operationId: set-default-payment-method
       tags:
         - payments

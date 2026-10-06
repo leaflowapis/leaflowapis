@@ -2,6 +2,8 @@ paths:
   /api/v1/invoices:
     get:
       summary: List invoices
+      description: Paginated issued invoices belonging to owned billing accounts, filtered by billing_account_id,
+        status and creation interval. Drafts are excluded; top-ups do not create invoices.
       operationId: list-invoices
       tags:
       - invoices
@@ -30,6 +32,8 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/InvoiceId
     get:
       summary: Get invoice
+      description: Returns an issued invoice for an owned billing account with its amounts, tax lines and payment
+        state. Returns 404 for a missing or unissued invoice and 403 when its account belongs to another user.
       operationId: get-invoice
       tags:
       - invoices
@@ -47,6 +51,8 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/InvoiceId
     get:
       summary: List invoice items
+      description: Paginated lines of an issued invoice belonging to an owned billing account, including their service
+        periods and project references. A missing or unissued invoice returns 404; another user account returns 403.
       operationId: list-invoice-items
       tags:
       - invoices

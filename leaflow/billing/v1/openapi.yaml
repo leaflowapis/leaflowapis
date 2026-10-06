@@ -34,8 +34,8 @@ tags:
 paths:
   /api/v1/billing-accounts/{accountId}/contacts:
     $ref: ./contacts.yaml#/paths/~1api~1v1~1billing-accounts~1{accountId}~1contacts
-  /api/v1/contacts/{contactId}:
-    $ref: ./contacts.yaml#/paths/~1api~1v1~1contacts~1{contactId}
+  /api/v1/billing-accounts/{accountId}/contacts/{contactId}:
+    $ref: ./contacts.yaml#/paths/~1api~1v1~1billing-accounts~1{accountId}~1contacts~1{contactId}
   /api/v1/currencies:
     $ref: ./accounts.yaml#/paths/~1api~1v1~1currencies
   /api/v1/billing-accounts:

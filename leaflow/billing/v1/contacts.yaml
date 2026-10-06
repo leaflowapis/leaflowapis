@@ -9,6 +9,8 @@ paths:
         format: int64
     get:
       summary: List contacts
+      description: Paginated contact profiles belonging to the billing account in the path, including inactive
+        contacts. Returns 404 if the account does not exist.
       operationId: list-contacts
       tags:
       - accounts
@@ -26,6 +28,8 @@ paths:
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
     post:
       summary: Create contact
+      description: Creates a contact profile for the billing account in the path. Creating a contact does not select
+        it for invoicing; set the account invoice_contact_id separately.
       operationId: create-contact
       tags:
       - accounts
@@ -44,8 +48,9 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/ContactCreate'
-  /api/v1/contacts/{contactId}:
+  /api/v1/billing-accounts/{accountId}/contacts/{contactId}:
     parameters:
+    - $ref: ./openapi.yaml#/components/parameters/AccountId
     - name: contactId
       in: path
       required: true
@@ -54,6 +59,7 @@ paths:
         format: uuid
     get:
       summary: Get contact
+      description: Returns a contact belonging to this billing account. Returns 404 if the contact does not exist in this account.
       operationId: get-contact
       tags:
       - accounts
@@ -68,6 +74,7 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
     patch:
       summary: Update contact
+      description: Updates a contact belonging to this billing account. Returns 404 if the contact does not exist in this account.
       operationId: update-contact
       tags:
       - accounts
@@ -88,8 +95,8 @@ paths:
               $ref: '#/components/schemas/ContactUpdate'
     delete:
       summary: Delete contact
-      description: The selected invoice contact must be cleared or replaced before deletion. Issued invoice snapshots are
-        retained.
+      description: Deletes a contact belonging to this billing account. Returns 404 if the contact does not exist in this account.
+        The selected invoice contact must be cleared or replaced before deletion. Issued invoice snapshots are retained.
       operationId: delete-contact
       tags:
       - accounts

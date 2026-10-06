@@ -75,6 +75,8 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/OrderId
     get:
       summary: Get order
+      description: Returns an order charged to an owned billing account with its commercial state and invoice
+        reference. An unknown order returns 404; an order on another user account is forbidden.
       operationId: get-order
       tags:
       - orders

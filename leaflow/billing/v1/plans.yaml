@@ -43,6 +43,8 @@ paths:
           $ref: ./products.yaml#/components/schemas/ProductID
     get:
       summary: List catalog plans
+      description: Paginated active plans for the required product_id, with their feature allocations. An unknown
+        product returns 404; If-None-Match can return 304 for an unchanged page.
       operationId: list-plans
       tags:
         - plans

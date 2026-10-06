@@ -2,6 +2,8 @@ paths:
   /api/v1/products:
     get:
       summary: List catalog products
+      description: Paginated registered catalog products with their service identities and descriptions. Supports If-
+        None-Match and returns 304 when the selected page has not changed.
       operationId: list-products
       tags:
         - products

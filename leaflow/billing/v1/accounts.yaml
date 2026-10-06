@@ -23,6 +23,8 @@ paths:
   /api/v1/billing-accounts:
     get:
       summary: List billing accounts
+      description: Paginated billing accounts owned by the authenticated user. Accounts owned by other users are
+        excluded; the result is empty when the user owns none.
       operationId: list-billing-accounts
       tags:
       - accounts
@@ -69,6 +71,8 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/AccountId
     get:
       summary: Get billing account
+      description: Returns an owned account settlement currency, lifecycle state and selected invoice contact. Returns
+        404 if the account does not exist and 403 if it belongs to another user.
       operationId: get-billing-account
       tags:
       - accounts
@@ -110,6 +114,9 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/AccountId
     get:
       summary: Get account balance
+      description: Returns the owned account balance, applicable credit groups, unpaid invoice amounts, unbilled
+        estimates and pending returns separately. Returns 404 for a missing account and 403 for an account owned by
+        another user.
       operationId: get-account-balance
       tags:
       - accounts
@@ -125,6 +132,8 @@ paths:
   /api/v1/assignments:
     get:
       summary: List project assignments
+      description: Paginated current project assignments to accounts owned by the authenticated user. Filter by
+        billing_account_id or project_ids; historical financial records keep their original account assignment.
       operationId: list-project-assignments
       tags:
       - accounts

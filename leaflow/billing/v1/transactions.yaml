@@ -2,6 +2,8 @@ paths:
   /api/v1/transactions:
     get:
       summary: List transactions
+      description: Paginated ledger entries for owned billing accounts, optionally filtered by billing_account_id and
+        creation interval. Each entry retains its amount, currency and any referenced credit grant.
       operationId: list-transactions
       tags:
         - transactions
