@@ -169,6 +169,15 @@ components:
           type: string
         customer_tax_id:
           type: string
+        customer_tax_exempt:
+          description: |-
+            How tax applied to the customer when the invoice was issued. `reverse` means no tax was
+            charged because the customer accounts for it under the reverse-charge mechanism.
+          type: string
+          enum:
+            - none
+            - exempt
+            - reverse
         customer_address_line1:
           type: string
         customer_address_line2:
