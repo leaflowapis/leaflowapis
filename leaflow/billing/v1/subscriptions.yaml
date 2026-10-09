@@ -172,7 +172,9 @@ paths:
       summary: Set auto renew
       description: 'Controls automatic prepaid renewal. Disabling it does not shorten paid_until and still permits
 
-        manual renewal. Postpaid subscriptions do not renew and keep this false.
+        manual renewal. A postpaid subscription always continues until it is canceled; setting it is refused with 409
+
+        `BILLING_SUBSCRIPTION_AUTO_RENEW_FIXED`.
 
 
         While the subscription has an open cancellation, turning it on or off is refused with 409
@@ -391,6 +393,8 @@ components:
           - 'null'
           format: date-time
         auto_renew:
+          description: A prepaid subscription renews automatically while this is on. A postpaid subscription always
+            continues until it is canceled; this is true until a cancellation is requested and cannot be set.
           type: boolean
         status:
           description: 'pending means the purchase relationship exists but its order has not been accepted.

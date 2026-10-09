@@ -385,9 +385,9 @@ components:
             - one_time
         auto_renew:
           description: |-
-            Whether automatic renewal is on now. Creating the cancellation turns it off, and withdrawing
-            the cancellation does not turn it back on. Always false for a subscription that is not
-            `prepaid`.
+            Whether automatic renewal is on now. Creating the cancellation turns it off. Withdrawing the
+            cancellation does not turn it back on for a prepaid subscription; a postpaid subscription continues
+            until it is canceled and turns it back on.
           type: boolean
         unused_amount:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money

@@ -336,9 +336,11 @@ components:
       - failed
       - canceled
     Order:
-      description: 'A recorded purchase. pending_checkout requires explicit Billing confirmation before collection
+      description: 'A recorded purchase with its invoice from placement; a zero-total invoice, such as for postpaid
 
-        or acceptance, even without an invoice. Coupon fields describe a discount confirmed at checkout and are absent
+        admission, is issued and paid automatically whatever the checkout mode. pending_checkout requires explicit Billing
+
+        confirmation before collection or acceptance. Coupon fields describe a discount confirmed at checkout and are absent
 
         before confirmation; a quote never populates them. A draft invoice contains base purchase
 
@@ -356,6 +358,10 @@ components:
         promotion_code:
           description: Code text frozen when checkout applied the coupon. Absent for an account discount.
           type: string
+        invoice_id:
+          description: The order's invoice, the same as invoice.id.
+          type: string
+          format: uuid
         invoice:
           $ref: ./invoices.yaml#/components/schemas/InvoiceSummary
         paid_with:
@@ -392,7 +398,7 @@ components:
 
             linked to another billing account. While this account is suspended or closed the order cannot
 
-            be accepted, and a change scheduled for the end of a period is not invoiced and is called off
+            be accepted, and the invoice of a change scheduled for the end of a period is not issued and the change is called off
 
             when the current period ends; such requests fail with BILLING_ACCOUNT_UNAVAILABLE.'
           type: integer
@@ -400,15 +406,13 @@ components:
         currency:
           type: string
         type:
-          description: '`adopt` brings a resource that already existed under billing. It charges nothing at
-
-            the time and starts billing from the moment agreed.'
+          description: '`new` buys, `renew` extends a prepaid subscription, `modify` changes a subscription''s
+            configuration or billing terms.'
           type: string
           enum:
-          - purchase
+          - new
           - renew
-          - change
-          - adopt
+          - modify
         status:
           $ref: '#/components/schemas/OrderStatus'
         change_effective:
@@ -445,6 +449,8 @@ components:
             $ref: '#/components/schemas/OrderItem'
       required:
       - id
+      - invoice_id
+      - invoice
       - currency
       - type
       - status
@@ -491,7 +497,7 @@ components:
 
         zero-charge purchases. It does not mean the account''s first purchase; use
 
-        `first_purchase_only` for that restriction. `renew` covers renewals. `change` covers
+        `first_purchase_only` for that restriction. `renew` covers renewals. `modify` covers
 
         configuration or billing-term changes, including changes that increase or decrease
 
@@ -500,11 +506,11 @@ components:
       enum:
       - new
       - renew
-      - change
+      - modify
     OrderItem:
-      description: 'Frozen purchase terms. Monetary fields come from related invoice-line snapshots and are absent
+      description: 'Frozen purchase terms. Monetary fields come from related invoice-line snapshots and are zero
 
-        when there is no immediate invoice. Later catalog changes do not reprice this line. A new service
+        for a line with no immediate charge, such as postpaid admission. Later catalog changes do not reprice this line. A new service
 
         purchase creates its pending subscription when this item is recorded, not when payment succeeds.'
       type: object

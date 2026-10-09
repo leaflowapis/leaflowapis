@@ -12,12 +12,10 @@ components:
       type: object
       properties:
         invoice_id:
-          type:
-          - string
-          - 'null'
+          type: string
           format: uuid
-          description: The invoice for this purchase, which may still be a draft awaiting checkout. Null when no
-            invoice has been created. Its presence or absence does not establish whether delivery may begin.
+          description: The invoice Billing created with this order, a draft awaiting checkout or issued. Every order has
+            one; a zero-total invoice is issued and paid automatically.
         order_id:
           description: The order, including for purchases without an immediate charge. Payment alone does not
             imply that the service has completed delivery.

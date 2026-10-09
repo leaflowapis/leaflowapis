@@ -308,9 +308,10 @@ components:
       - pagination
     InvoiceSummary:
       description: |-
-        Purchase-related invoice amounts, without account contact details or payment methods. A draft
-        order invoice shows base amounts awaiting checkout, not a confirmed discount or collectible total.
-        Absent when no invoice has been created; absence does not establish acceptance or delivery.
+        Purchase-related invoice amounts, without account contact details or payment methods. Every order
+        has an invoice from placement. A draft order invoice shows base amounts awaiting checkout, not a
+        confirmed discount or collectible total; a zero-total invoice is issued and paid automatically
+        whatever the checkout mode. Neither establishes acceptance or delivery.
       type: object
       properties:
         id:

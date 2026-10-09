@@ -17,7 +17,8 @@ components:
         BILLING_INSUFFICIENT_FUNDS; no Billing order, charge or discount redemption is committed.
         deferred creates a pending_checkout order for subsequent confirmation and payment through Billing.
         No new discount redemption or payment is made when the order is created. An order whose total is
-        zero, with nothing to pay or discount, completes checkout at placement in either mode.
+        zero, with nothing to pay or discount, completes checkout at placement in either mode, and its
+        zero invoice is issued and paid automatically.
     CheckoutOptions:
       type: object
       properties:
