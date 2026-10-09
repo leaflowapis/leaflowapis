@@ -75,14 +75,13 @@ components:
         Draft invoices are private to administrators and cannot be read, listed or paid by customers.
         An issued invoice is open until settled; a zero-total issued invoice is immediately paid.
         Unbilled usage remains separate from invoices until it is invoiced.
-        refunded means a full refund; a partial refund leaves the invoice paid.
-        void means collection has stopped and any funds received have been returned.
+        A refund does not change the status: a paid invoice stays paid, with the refunded part in
+        amount_refunded. void means collection has stopped and any funds received have been returned.
       type: string
       enum:
       - draft
       - open
       - paid
-      - refunded
       - void
       - uncollectible
     Invoice:
@@ -137,11 +136,11 @@ components:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         amount_paid:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        unpaid_credit_notes_amount:
+        pre_payment_credit_notes_amount:
           description: Issued, non-void credit notes that reduced unpaid receivables. Does not rewrite the original invoice total.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        paid_credit_notes_amount:
+        post_payment_credit_notes_amount:
           description: Issued credit notes against payments already received. This is a return obligation, not evidence of completed refunds.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
@@ -204,8 +203,8 @@ components:
       - status
       - total
       - amount_due
-      - unpaid_credit_notes_amount
-      - paid_credit_notes_amount
+      - pre_payment_credit_notes_amount
+      - post_payment_credit_notes_amount
     InvoiceList:
       type: object
       properties:
@@ -347,11 +346,11 @@ components:
           type: string
         amount_paid:
           type: string
-        unpaid_credit_notes_amount:
+        pre_payment_credit_notes_amount:
           description: Issued, non-void credit notes that reduced unpaid receivables. Does not rewrite the original invoice total.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
-        paid_credit_notes_amount:
+        post_payment_credit_notes_amount:
           description: Issued credit notes against payments already received. This is a return obligation, not evidence of completed refunds.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
@@ -374,8 +373,8 @@ components:
       - total
       - amount_paid
       - amount_due
-      - unpaid_credit_notes_amount
-      - paid_credit_notes_amount
+      - pre_payment_credit_notes_amount
+      - post_payment_credit_notes_amount
       - amount_refunded
     TaxItem:
       description: Tax name, rate and amounts frozen on the invoice.
