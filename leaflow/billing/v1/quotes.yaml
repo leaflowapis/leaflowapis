@@ -377,7 +377,7 @@ components:
           oneOf:
             - $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
             - type: "null"
-        billing_type:
+        charge_type:
           type: string
           enum:
             - postpaid
@@ -405,7 +405,7 @@ components:
         - subscription_id
         - plan_id
         - plan_name
-        - billing_type
+        - charge_type
         - auto_renew
         - unused_amount
         - refundable_amount
@@ -438,7 +438,7 @@ components:
           type: string
           format: uuid
         price_type:
-          description: Narrows the selection when a plan offers more than one billing type.
+          description: Narrows the selection when a plan offers more than one charge type.
           type: string
           enum:
             - postpaid

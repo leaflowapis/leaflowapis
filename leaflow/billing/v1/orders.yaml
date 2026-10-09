@@ -572,7 +572,7 @@ components:
           type: string
         setup_amount:
           type: string
-        billing_type:
+        charge_type:
           description: The payment timing of the selected price.
           type: string
           enum:
@@ -678,7 +678,7 @@ components:
       - currency
       - plan_id
       - plan_name
-      - billing_type
+      - charge_type
       - interval
       - completes_on_payment
       - status

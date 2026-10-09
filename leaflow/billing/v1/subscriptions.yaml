@@ -122,7 +122,7 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
     post:
       summary: Renew subscription
-      description: 'Purchases prepaid periods from paid_until using the agreed recurring amount, and pays for them at
+      description: 'Purchases prepaid periods from current_term_end using the agreed recurring amount, and pays for them at
 
         once. A changed interval selects a current price and freezes new terms on the order, applied
 
@@ -170,7 +170,7 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
     put:
       summary: Set auto renew
-      description: 'Controls automatic prepaid renewal. Disabling it does not shorten paid_until and still permits
+      description: 'Controls automatic prepaid renewal. Disabling it does not shorten current_term_end and still permits
 
         manual renewal. A postpaid subscription always continues until it is canceled; setting it is refused with 409
 
@@ -282,7 +282,7 @@ components:
       properties:
         currency:
           type: string
-        billing_type:
+        charge_type:
           type: string
           enum:
           - postpaid
@@ -303,7 +303,7 @@ components:
 
             Pending subscriptions show base terms until checkout confirms any new continuing discount.
 
-            Absent for other billing types.'
+            Absent for other charge types.'
           type: string
         termination_policy:
           $ref: ./prices.yaml#/components/schemas/TerminationPolicy
@@ -384,10 +384,26 @@ components:
           format: uuid
         quantity:
           type: string
-        paid_until:
-          description: 'End of the prepaid service already activated. Null until a new subscription becomes active,
+        current_term_end:
+          description: 'When a prepaid subscription renews or expires, the end of the last service period bought.
 
-            even when its purchase has been paid, and for postpaid subscriptions with no prepaid end date.'
+            Renewing several periods in advance moves it. Null until a new subscription becomes active, even when
+
+            its purchase has been paid, and for postpaid subscriptions.'
+          type:
+          - string
+          - 'null'
+          format: date-time
+        current_period_start:
+          description: Start of the service period in effect now. Null when none is, including for postpaid subscriptions.
+          type:
+          - string
+          - 'null'
+          format: date-time
+        current_period_end:
+          description: 'End of the service period in effect now. Renewing in advance moves `current_term_end`, not
+
+            this. Null when no period is in effect, including for postpaid subscriptions.'
           type:
           - string
           - 'null'
@@ -436,7 +452,7 @@ components:
       - product_id
       - product
       - plan_name
-      - billing_type
+      - charge_type
       - currency
       - interval
       - auto_renew

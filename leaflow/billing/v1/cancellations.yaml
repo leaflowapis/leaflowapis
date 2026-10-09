@@ -283,10 +283,11 @@ components:
           format: uuid
         plan_name:
           type: string
-        billing_type:
+        charge_type:
           description: |-
-            How the subscription is paid for. Only a `prepaid` subscription renews automatically; creating
-            the cancellation turned that off, and withdrawing the cancellation leaves it off.
+            How the subscription is charged. Creating the cancellation turned automatic renewal off;
+            withdrawing it turns renewal back on for a `postpaid` subscription and leaves it off for a
+            `prepaid` one.
           type: string
           enum:
             - postpaid
@@ -328,7 +329,7 @@ components:
         - subscription_id
         - plan_id
         - plan_name
-        - billing_type
+        - charge_type
         - status
     CancellationList:
       type: object

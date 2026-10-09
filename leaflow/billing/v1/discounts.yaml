@@ -123,7 +123,7 @@ components:
     Applicability:
       description: |-
         Anything not excluded that matches an inclusion, or anything not excluded when no inclusion is
-        given, subject to the billing type, operation and term conditions. Entries always include their
+        given, subject to the charge type, operation and term conditions. Entries always include their
         display fields; archived plans and prices stay listed with active set to false.
       type: object
       properties:
