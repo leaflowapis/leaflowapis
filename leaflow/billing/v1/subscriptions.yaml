@@ -557,6 +557,10 @@ components:
           - day
           - month
           - year
+        termination_policy:
+          description: As in renewing.
+          allOf:
+          - $ref: ./prices.yaml#/components/schemas/TerminationPolicy
       required:
       - order_id
       additionalProperties: false
