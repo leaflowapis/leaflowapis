@@ -195,8 +195,8 @@ components:
       $ref: ./cancellations.yaml#/components/schemas/CancellationItem
     CancellationList:
       $ref: ./cancellations.yaml#/components/schemas/CancellationList
-    CancellationRequest:
-      $ref: ./cancellations.yaml#/components/schemas/CancellationRequest
+    SubscriptionCancellation:
+      $ref: ./cancellations.yaml#/components/schemas/SubscriptionCancellation
     Error:
       $ref: ../../type/v1/error.yaml#/components/schemas/Error
     Product:

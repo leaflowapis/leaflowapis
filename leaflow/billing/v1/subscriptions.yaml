@@ -330,8 +330,8 @@ components:
         billing_cycle_anchor:
           type: string
           format: date-time
-        cancellation_request:
-          $ref: ./cancellations.yaml#/components/schemas/CancellationRequest
+        cancellation:
+          $ref: ./cancellations.yaml#/components/schemas/SubscriptionCancellation
         default_payment_method_id:
           description: 'The saved payment method automatic renewal charges after the account''s balance and credits,
 
