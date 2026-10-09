@@ -409,7 +409,7 @@ components:
           type: string
         remaining_amount:
           description: |-
-            The part of this top-up still held in the balance. Pending refunds and payouts can temporarily
+            The part of this top-up still held in the balance. Pending refunds can temporarily
             reserve part of it; it is not a promise that the whole amount is immediately withdrawable.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money

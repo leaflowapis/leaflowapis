@@ -149,7 +149,7 @@ components:
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         amount_due:
-          description: What is still collectible after unpaid credit notes and successful payments; never below zero. For the draft invoice of an order it is the base total, before the discount applied when it is paid; a paid or void invoice has none.
+          description: What is still collectible after unpaid credit notes and successful payments; never below zero. A draft has none: read total for its base price and preview the payment for what paying it would collect. A paid or void invoice has none either.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         period_start:

@@ -22,9 +22,9 @@ components:
           format: uuid
         invoice:
           description: |-
-            What the purchase charges. A draft with an amount due is paid through Billing, where a promotion
-            code can still be applied; an open invoice is issued and awaits payment; a paid one needs nothing
-            further. A zero-total invoice is issued and paid at placement.
+            What the purchase charges. A draft shows the base price in total and is paid through Billing, where a
+            promotion code can still be applied; an open invoice is issued and awaits its amount_due; a paid one
+            needs nothing further. A zero-total invoice is issued and paid at placement.
           allOf:
           - $ref: ../../v1/invoices.yaml#/components/schemas/InvoiceSummary
       required:
