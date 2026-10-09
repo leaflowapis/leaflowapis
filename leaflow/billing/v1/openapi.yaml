@@ -130,6 +130,8 @@ paths:
     $ref: ./orders.yaml#/paths/~1api~1v1~1orders~1{orderId}~1items
   /api/v1/entitlements:
     $ref: ./entitlements.yaml#/paths/~1api~1v1~1entitlements
+  /api/v1/feature-grants:
+    $ref: ./entitlements.yaml#/paths/~1api~1v1~1feature-grants
   /api/v1/prices:
     $ref: ./prices.yaml#/paths/~1api~1v1~1prices
   /api/v1/products:
@@ -345,6 +347,12 @@ components:
       $ref: ./allowances.yaml#/components/schemas/Allowance
     AllowanceList:
       $ref: ./allowances.yaml#/components/schemas/AllowanceList
+    FeatureGrantStatus:
+      $ref: ./entitlements.yaml#/components/schemas/FeatureGrantStatus
+    FeatureGrant:
+      $ref: ./entitlements.yaml#/components/schemas/FeatureGrant
+    FeatureGrantList:
+      $ref: ./entitlements.yaml#/components/schemas/FeatureGrantList
     Entitlement:
       $ref: ./entitlements.yaml#/components/schemas/Entitlement
     EntitlementList:
