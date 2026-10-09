@@ -332,14 +332,16 @@ components:
           format: date-time
         cancellation_request:
           $ref: ./cancellations.yaml#/components/schemas/CancellationRequest
-        paid_with:
-          description: 'How the purchase, or the latest renewal paid with a saved card, was paid. Automatic renewal
+        default_payment_method_id:
+          description: 'The saved payment method automatic renewal charges after the account''s balance and credits,
 
-            tries this card after the account''s balance and credits, and the account''s default card after
+            before the account''s default payment method. Set when the purchase, or a renewal, is paid with a saved
 
-            that.'
-          allOf:
-          - $ref: ./orders.yaml#/components/schemas/PaidWith
+            payment method. It is used only while it belongs to the account that pays the renewal.'
+          type:
+          - string
+          - 'null'
+          format: uuid
         created_at:
           type: string
           format: date-time

@@ -469,9 +469,9 @@ components:
       - items
       - pagination
     PaidWith:
-      description: 'How it was paid, as recorded at the time. It is kept as it was: removing the card afterwards
+      description: 'How it was paid. Removing the payment method afterwards does not change it; `payment_method_id`
 
-        does not change it, and `payment_method_id` may then name a card that no longer exists.'
+        then names a removed payment method.'
       type: object
       properties:
         method_type:
