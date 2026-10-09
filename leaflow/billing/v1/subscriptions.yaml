@@ -301,7 +301,7 @@ components:
         recurring_amount:
           description: 'Whole-subscription prepaid renewal amount, after continuing discounts and before tax.
 
-            Pending subscriptions show base terms until checkout confirms any new continuing discount.
+            Pending subscriptions show base terms until paying the order fixes any new continuing discount.
 
             Absent for other charge types.'
           type: string

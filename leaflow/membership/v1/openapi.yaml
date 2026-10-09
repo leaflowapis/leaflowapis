@@ -14,7 +14,7 @@ info:
     ## Conventions
 
     - **One membership per billing account.** A pending or active membership must end before another is bought; change plans with upgrade and downgrade instead.
-    - **Payment goes through Billing.** Purchases and upgrades return a Billing order. With `checkout.mode` `deferred`, confirm and pay the order through Billing. Benefits are issued once Billing reports the order ready; every order has an invoice, including a zero-total one, which is paid automatically.
+    - **Payment goes through Billing.** Purchases and upgrades return a Billing order. With `checkout.mode` `deferred`, pay the order's invoice through Billing. Benefits are issued once Billing reports the order ready; every order has an invoice, including a zero-total one, which is paid automatically.
     - **Cancellation and auto-renewal are managed in Billing** on the membership's `subscription_id`. A cancellation takes effect at the end of the paid period without a refund, and the period's benefits remain until then.
     - **An upgrade takes effect immediately** for the full difference between the two plans' period prices, whatever remains of the period. The difference in credit is issued in full and the new plan's discount applies from payment. Renewals are charged at the new plan's price.
     - **A downgrade takes effect at the end of the paid period.** The current period keeps its benefits and nothing is refunded.
@@ -699,7 +699,7 @@ components:
         membership:
           $ref: "#/components/schemas/Membership"
         order:
-          $ref: ../../type/v1/order.yaml#/components/schemas/PlacedOrder
+          $ref: ../../billing/type/v1/order.yaml#/components/schemas/PlacedOrder
       required:
         - membership
         - order
@@ -719,7 +719,7 @@ components:
           type: string
           format: uuid
         checkout:
-          $ref: ../../type/v1/checkout.yaml#/components/schemas/CheckoutOptions
+          $ref: ../../billing/type/v1/checkout.yaml#/components/schemas/CheckoutOptions
       required:
         - billing_account_id
         - plan_id
@@ -733,7 +733,7 @@ components:
           type: string
           format: uuid
         checkout:
-          $ref: ../../type/v1/checkout.yaml#/components/schemas/CheckoutOptions
+          $ref: ../../billing/type/v1/checkout.yaml#/components/schemas/CheckoutOptions
       required:
         - plan_id
       additionalProperties: false

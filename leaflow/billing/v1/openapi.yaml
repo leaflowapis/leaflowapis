@@ -122,8 +122,6 @@ paths:
     $ref: ./orders.yaml#/paths/~1api~1v1~1orders
   /api/v1/orders/{orderId}:
     $ref: ./orders.yaml#/paths/~1api~1v1~1orders~1{orderId}
-  /api/v1/orders/{orderId}/checkout:
-    $ref: ./orders.yaml#/paths/~1api~1v1~1orders~1{orderId}~1checkout
   /api/v1/orders/{orderId}/cancel:
     $ref: ./orders.yaml#/paths/~1api~1v1~1orders~1{orderId}~1cancel
   /api/v1/orders/{orderId}/items:
@@ -169,8 +167,6 @@ components:
       $ref: ./prices.yaml#/components/schemas/RefundPolicy
     OrderCancel:
       $ref: ./orders.yaml#/components/schemas/OrderCancel
-    CheckoutOrderRequest:
-      $ref: ./orders.yaml#/components/schemas/CheckoutOrderRequest
     QuoteRenewal:
       $ref: ./quotes.yaml#/components/schemas/QuoteRenewal
     QuoteRenewalResult:
