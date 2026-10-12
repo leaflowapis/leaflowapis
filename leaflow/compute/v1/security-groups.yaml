@@ -1,0 +1,210 @@
+paths:
+  /api/v1/security-groups:
+    get:
+      summary: List security groups
+      operationId: list-security-groups
+      tags:
+      - security-groups
+      parameters:
+      - name: region_id
+        in: query
+        required: false
+        explode: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+      - name: virtual_private_cloud_id
+        in: query
+        description: Return only the security groups of this virtual private cloud
+        explode: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+          description: Return only the security groups of this virtual private cloud
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroupListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Create a security group
+      description: A new security group carries one rule, permitting ICMP fragmentation-needed messages (type 3,
+        code 4). Without it path MTU discovery fails, which presents as connections that establish and then stall
+        on large packets.
+      operationId: create-security-group
+      tags:
+      - security-groups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecurityGroupRequestBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroupResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/security-groups/{securityGroupId}:
+    get:
+      summary: Retrieve a security group
+      operationId: get-security-group
+      tags:
+      - security-groups
+      parameters:
+      - name: securityGroupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroupResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    patch:
+      summary: Rename a security group
+      description: Changes the name only. Use the rule endpoints to change rules.
+      operationId: rename-security-group
+      tags:
+      - security-groups
+      parameters:
+      - name: securityGroupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameSecurityGroupRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityGroupResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    delete:
+      summary: Delete a security group
+      description: The default security group cannot be deleted, as it is released with the virtual private cloud.
+        A security group still referenced by a network interface cannot be deleted either.
+      operationId: delete-security-group
+      tags:
+      - security-groups
+      parameters:
+      - name: securityGroupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+      responses:
+        '204':
+          description: No Content
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    SecurityGroupResource:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        description:
+          type: string
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+        is_default:
+          description: The default security group is released with its virtual private cloud and cannot be deleted
+            individually
+          type: boolean
+        name:
+          type: string
+        virtual_private_cloud_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+      required:
+      - id
+      - virtual_private_cloud_id
+      - name
+      - description
+      - is_default
+      - created_at
+      additionalProperties: false
+    SecurityGroupListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/SecurityGroupResource'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    CreateSecurityGroupRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+          maxLength: 500
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        virtual_private_cloud_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+      required:
+      - virtual_private_cloud_id
+      - name
+      additionalProperties: false
+    RenameSecurityGroupRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - name
+      additionalProperties: false

@@ -1,0 +1,1460 @@
+paths:
+  /api/v1/virtual-machines:
+    get:
+      summary: List virtual machines
+      description: Every virtual machine in the project, newest first, in their stored state.
+      operationId: list-virtual-machines
+      tags:
+      - virtual-machines
+      parameters:
+      - name: label
+        in: query
+        description: Only virtual machines carrying this label, written as `key:value` — for example `env:prod`.
+          Both halves are matched exactly
+        explode: false
+        schema:
+          description: A label to filter by, written as `key:value`
+          type: string
+          maxLength: 128
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachineListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Create virtual machines
+      description: |-
+        Records the requested configuration, creates a deferred Billing order, including for metered terms, and returns one `pending` virtual machine per requested virtual machine with the order. Each new component carries its own commercial terms; their billing mode and period must match. A pending virtual machine has no virtual machine, system disk or address, and is not metered.
+
+        Creation starts only after Compute receives `orderAccepted` and verifies the accepted order with Billing: the virtual machine becomes `provisioning`, then `active`. Preview and confirm checkout through Billing using the returned order reference. A zero-total order still requires verified acceptance; a canceled or expired order leaves the virtual machines `failed` with `order_canceled` or `order_expired`. Do not submit another creation request after paying. After an uncertain response, look the order up before submitting again.
+
+        Choose an image or existing disk through boot_disk, and exactly one of network_interface_id or subnet_id. Existing network interfaces, boot disks or elastic IPs require count=1. They are not held while the virtual machine is pending; if one is no longer usable when the order is accepted, the virtual machine ends `failed` with `provisioning_failed`. Image boots require boot_disk; existing disks retain their own subscription. Virtual machines, disks and public IPs keep their own subscription items on the same order.
+
+        Virtual machines of one request succeed or fail individually. Each virtual machine, with its system disk, network interface and elastic IP, is created or fails as a whole. Virtual machines that were created are kept; each failed virtual machine ends `failed` with `provisioning_failed`, its part of the order is refunded, and the order then ends `partially_completed`. Each virtual machine is named after this request with a number appended.
+
+        The network is checked before the order is created, and a request it refuses orders and charges nothing. It is refused with `PRIVATE_NETWORK_UNAVAILABLE` when the virtual private cloud's `status` is not `available`, `SUBNET_UNAVAILABLE` or `SECURITY_GROUP_UNAVAILABLE` when the subnet or a security group is not ready, `SECURITY_GROUP_OTHER_PRIVATE_NETWORK` when a security group belongs to another virtual private cloud, and `PORT_UNAVAILABLE` when the port's `status` is not `available`. `meta` names the resource.
+      operationId: create-virtual-machine
+      tags:
+      - virtual-machines
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVirtualMachineRequestBody'
+      responses:
+        '202':
+          description: The virtual machines and their order were created; no virtual machine exists in the cloud
+            yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateVirtualMachineResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}:
+    get:
+      summary: Retrieve a virtual machine
+      description: Returns the stored state of the virtual machine; it does not query the cloud. Use it to poll
+        creation progress.
+      operationId: get-virtual-machine
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    patch:
+      summary: Rename a virtual machine
+      description: Changes the display name only. The hostname inside the virtual machine is unchanged; it equals
+        the virtual machine id.
+      operationId: rename-virtual-machine
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameVirtualMachineRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    delete:
+      summary: Release a virtual machine
+      description: |-
+        The system disk is deleted with the virtual machine, and **snapshots created from the system disk are deleted with it**. Data disks are detached and kept, and their snapshots and backups are unaffected. The primary network interface is released with the virtual machine.
+
+        A virtual machine being captured as a private image cannot be released. Wait for the capture to finish, or delete that image first.
+
+        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the virtual machine, or for a disk that is deleted with it, including a pay-as-you-go subscription. `meta.resource_id` names that resource. The virtual machine is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`.
+      operationId: delete-virtual-machine
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      responses:
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        '202':
+          description: Release was accepted. The virtual machine shows the `delete` operation until it is released.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/commands:
+    post:
+      summary: Run a command on a virtual machine
+      description: |-
+        Runs one command over SSH and returns what it wrote. **This is not a shell.** There is no terminal, no standard input and no way to answer a prompt: a command that waits for input produces nothing and is killed at the timeout. Chain steps with `&&`, or write a script and run that.
+
+        **A command that fails is still a 200.** Its failure is its own result, not this endpoint's: read `exit_code` for what it exited with and `stderr` for what it said, and decide from those. A `grep` that matches nothing exits 1 and is a perfectly successful call.
+
+        The status therefore answers a different question — did the command run at all. A non-2xx means it did not, and nothing about the virtual machine was changed by this request: it was suspended, not running or had no elastic IP; or it refused the platform key; or the connection could not be opened. Retrying is meaningful in those cases and is not for a non-zero `exit_code`.
+
+        Three conditions must hold; the virtual machine is unreachable otherwise:
+
+        - it is `active`
+        - an elastic IP is bound to it, since this endpoint connects over the public internet
+        - its security group permits inbound TCP 22
+
+        Authentication uses the key the platform attaches to every virtual machine at creation, so nothing has to be set up first. The virtual machine must have applied that key at first boot, which images without a full cloud-init do not do.
+
+        **Do not pass secrets in the command.** Read them from a file on the virtual machine instead: neither the command nor its output is a confidential channel.
+
+        Each stream is capped at 1 MiB. Beyond that the rest is discarded and `truncated` is true.
+      operationId: run-virtual-machine-command
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunCommandRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandResultResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/console:
+    post:
+      summary: Open a remote console
+      description: |-
+        Operates the virtual machine directly from a browser and does not require the virtual machine to be reachable over the network, which makes it usable when a network misconfiguration prevents login.
+
+        The returned address is single-use and expires within minutes. Request a new one before each use.
+      operationId: open-virtual-machine-console
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsoleResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/labels:
+    put:
+      summary: Replace a virtual machine's labels
+      description: |-
+        Records what this virtual machine is for, as key-value pairs. Nothing on the platform reads them.
+
+        **The whole set is replaced**: whatever is absent from the request is removed.
+
+        Do not put credentials here. Labels are visible to platform operators.
+      operationId: set-virtual-machine-labels
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetVirtualMachineLabelsRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/notes:
+    put:
+      summary: Replace a virtual machine's note
+      description: |-
+        A free-text note about this virtual machine — what it runs, and what to be careful about before touching it.
+
+        **The whole note is replaced**; send an empty string to clear it.
+
+        Do not put credentials here. The note is visible to platform operators.
+      operationId: set-virtual-machine-notes
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetVirtualMachineNotesRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/password:
+    post:
+      summary: Reset the login password
+      description: |-
+        Changes the root password without a reboot. The virtual machine must be running.
+
+        **Not every image supports this.** Images whose `supports_password_reset` is false cannot, and a new password can then only be set by rebuilding the virtual machine, which erases all data on the system disk.
+
+        The request is also rejected when the image is marked as supported but the corresponding component has been removed or stopped inside the virtual machine.
+      operationId: reset-virtual-machine-password
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResetPasswordRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/reboot:
+    post:
+      summary: Reboot a virtual machine
+      description: |-
+        A reboot defaults to soft, in which the operating system shuts down normally before starting again.
+
+        A soft reboot has no effect once the system is unresponsive. Set `force` to reboot forcibly: a forced reboot does not wait for the operating system to shut down, so **unwritten data is lost**.
+
+        A forced reboot is accepted while a soft reboot is in progress, which is the way out of a soft reboot the virtual machine never carried out. Any other request for an operation, including a second soft reboot, is refused with `COMPUTE_RESOURCE_BUSY` while the reboot is in progress.
+
+        A virtual machine suspended by the platform must be unsuspended first.
+
+        The virtual machine shows the `reboot` operation until the reboot has finished.
+      operationId: reboot-virtual-machine
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RebootVirtualMachineRequestBody'
+      responses:
+        '202':
+          description: The reboot was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/rebuild:
+    post:
+      summary: Rebuild a virtual machine
+      description: |-
+        **All data on the system disk is erased and cannot be recovered.** Attached data disks are unaffected.
+
+        The image this virtual machine already runs is accepted even after the platform has withdrawn it, since rebuilding is the only way back into a virtual machine broken from the inside. Any *other* withdrawn image is rejected with `IMAGE_RETIRED`, which is a change of image and therefore a new order.
+
+        The virtual machine shows the `rebuild` operation until the rebuild has finished.
+      operationId: rebuild-virtual-machine
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RebuildVirtualMachineRequestBody'
+      responses:
+        '202':
+          description: The rebuild was accepted. The virtual machine shows the `rebuild` operation until it has
+            finished.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RebuildVirtualMachineResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/resize:
+    post:
+      summary: Resize a virtual machine
+      description: |-
+        Records the requested configuration, creates a deferred Billing change order, including for metered terms, and returns the virtual machine with the order. The virtual machine keeps its billing mode and period; Billing resolves the applicable commercial terms and refuses an unavailable option with 409 `BILLING_OPTION_UNAVAILABLE`. The resize starts only after Compute receives `orderAccepted` and verifies the accepted order with Billing. Do not submit the change again after paying. After an uncertain response, look the order up before submitting again.
+
+        The virtual machine shows the `resize` operation until the resize is applied or its order is canceled, including while the order awaits checkout, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. It keeps its current type until the resize is applied; the new type takes effect, and is billed from then on, when `machine_type_id` shows it. If the order is not accepted or the resize fails, the virtual machine keeps its current type and the order shows the outcome. A completed resize is final and cannot be reverted; to return to the previous type, submit another resize.
+      operationId: resize-virtual-machine
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResizeVirtualMachineRequestBody'
+      responses:
+        '202':
+          description: The virtual machine and the order for the resize; the new type is not yet in effect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResizeVirtualMachineResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/start:
+    post:
+      summary: Start a virtual machine
+      description: Outstanding restrictions can prevent starting. The virtual machine shows the `start` operation
+        until it is running or the start has failed.
+      operationId: start-virtual-machine
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PowerRequest'
+      responses:
+        '202':
+          description: The start was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/stop:
+    post:
+      summary: Stop a virtual machine
+      description: A stopped virtual machine keeps its disks, network attachments and sellable quota. The virtual
+        machine shows the `stop` operation until it is stopped or the stop has failed.
+      operationId: stop-virtual-machine
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PowerRequest'
+      responses:
+        '202':
+          description: The stop was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/disks:
+    get:
+      summary: List the disks attached to a virtual machine
+      operationId: list-virtual-machine-disks
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./disks.yaml#/components/schemas/DiskAttachmentList
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Attach a disk
+      description: The disk must be in the same region and availability zone as the virtual machine. Returns the
+        disk; the virtual machine shows the `attach_disk` operation and the disk the `attach` operation until the
+        attachment is confirmed. Partition the disk and mount the file system inside the virtual machine once it
+        is attached.
+      operationId: attach-disk
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./disks.yaml#/components/schemas/AttachDiskRequestBody
+      responses:
+        '202':
+          description: The attachment was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: ./disks.yaml#/components/schemas/DiskResource
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/disks/{diskId}:
+    delete:
+      summary: Detach a disk
+      description: |-
+        Unmount the device inside the virtual machine before calling this endpoint. Forcibly detaching a file system that is being written to corrupts data.
+
+        The disk the virtual machine boots from cannot be detached, whether it is the system disk bought with the virtual machine or a disk supplied as the existing boot_disk at launch. Such a request is refused with `INSTANCE_BOOT_DISK_LOCKED` and changes nothing; releasing the virtual machine is what frees that disk.
+
+        Returns the disk; the virtual machine shows the `detach_disk` operation and the disk the `detach` operation until the disk is detached.
+      operationId: detach-disk
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      - name: diskId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      responses:
+        '202':
+          description: The detachment was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: ./disks.yaml#/components/schemas/DiskResource
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/elastic-ips:
+    post:
+      summary: Bind an elastic IP to a virtual machine
+      description: Changes the public IP binding on the virtual machine's primary network interface. The virtual
+        machine shows the `bind_elastic_ip` operation until the binding is confirmed.
+      operationId: attach-virtual-machine-elastic-ip
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./elastic-ips.yaml#/components/schemas/AttachElasticIPRequestBody
+      responses:
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+        '202':
+          description: The binding was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: ./elastic-ips.yaml#/components/schemas/ElasticIP
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+  /api/v1/virtual-machines/{virtualMachineId}/elastic-ips/{elasticIpId}:
+    delete:
+      summary: Unbind the elastic IP of a virtual machine
+      description: Changes the public IP binding on the virtual machine's primary network interface. The virtual
+        machine shows the `unbind_elastic_ip` operation until the change is confirmed.
+      operationId: detach-virtual-machine-elastic-ip
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      - name: elasticIpId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
+      responses:
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+        '202':
+          description: The unbinding was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: ./elastic-ips.yaml#/components/schemas/ElasticIP
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+  /api/v1/virtual-machines/{virtualMachineId}/network-interfaces:
+    get:
+      summary: List the network interfaces of a virtual machine
+      operationId: list-virtual-machine-network-interfaces
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAttachmentList
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Attach a network interface
+      description: Returns the network interface; the virtual machine shows the `attach_network_interface` operation
+        and the interface the `attach` operation until the attachment is confirmed.
+      operationId: attach-network-interface
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./network-interfaces.yaml#/components/schemas/AttachNetworkInterfaceRequestBody
+      responses:
+        '202':
+          description: The attachment was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterface
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-machines/{virtualMachineId}/network-interfaces/{networkInterfaceId}:
+    delete:
+      summary: Detach a network interface
+      description: |-
+        The primary network interface cannot be detached; the virtual machine would lose its network address.
+
+        Returns the network interface; the virtual machine shows the `detach_network_interface` operation and the interface the `detach` operation until it is detached.
+      operationId: detach-network-interface
+      tags:
+      - virtual-machines
+      parameters:
+      - name: virtualMachineId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      - name: networkInterfaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+      responses:
+        '202':
+          description: The detachment was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterface
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    VirtualMachine:
+      type: object
+      properties:
+        availability_zone_id:
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        created_at:
+          type: string
+          format: date-time
+        hostname:
+          description: Hostname inside the virtual machine; equals the virtual machine id
+          type: string
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+        image_id:
+          description: Non-empty when the virtual machine was created from an image, public or private
+          anyOf:
+          - $ref: ./identifiers.yaml#/components/schemas/ImageID
+          - type: 'null'
+        machine_type_id:
+          description: The machine type in effect, and the basis for billing
+          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+        ipv6_address:
+          description: IPv6 address of the primary network interface. Assigned automatically once IPv6 is enabled
+            on the virtual private cloud
+          type:
+          - string
+          - 'null'
+        labels:
+          description: Your own classification of this virtual machine, as key-value pairs. Empty when never set
+          type: object
+          maxProperties: 20
+          additionalProperties:
+            type: string
+            maxLength: 63
+        login_username:
+          description: The account to log in as over SSH. The password set at creation belongs to this account
+          type: string
+          maxLength: 32
+        name:
+          type: string
+        notes:
+          description: A free-text note about this virtual machine. Empty when never set
+          type: string
+          maxLength: 4096
+        private_ip:
+          description: Private address of the virtual machine
+          type:
+          - string
+          - 'null'
+        virtual_private_cloud_id:
+          anyOf:
+          - $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+          - type: 'null'
+        public_ips:
+          description: Floating IPv4 addresses bound to the primary network interface; an empty array when none
+            are bound
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        status:
+          description: '`pending` until the order is accepted: no virtual machine exists and addresses are null.
+            `provisioning` while the virtual machine is created, then `active`. `failed` means the virtual machine
+            was not created; `failure_reason` states why. `missing` means the virtual machine no longer exists in
+            the cloud. The other values are the state last observed in the cloud; an operation in progress appears
+            in `operation`, not here.'
+          type: string
+          enum:
+          - pending
+          - provisioning
+          - active
+          - stopped
+          - paused
+          - suspended
+          - shelved
+          - shelved_offloaded
+          - rescued
+          - deleted
+          - failed
+          - error
+          - unknown
+          - missing
+        subnet_id:
+          anyOf:
+          - $ref: ./identifiers.yaml#/components/schemas/SubnetID
+          - type: 'null'
+        updated_at:
+          type: string
+          format: date-time
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
+        observed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        restrictions:
+          type: array
+          items:
+            $ref: '#/components/schemas/VirtualMachineRestriction'
+        failure_reason:
+          description: Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation
+            failed after the order was accepted, and the charge for this virtual machine is refunded.
+          type:
+          - string
+          - 'null'
+          enum:
+          - order_declined
+          - order_canceled
+          - order_expired
+          - provisioning_failed
+          - null
+        operation:
+          description: The operation in progress on this virtual machine, or null when none is.
+          anyOf:
+          - $ref: '#/components/schemas/VirtualMachineOperation'
+          - type: 'null'
+          readOnly: true
+        order_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        order_item_id:
+          description: The Billing order item for this resource.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        subscription_id:
+          description: |-
+            The Billing subscription associated with this resource. It may still be pending; its
+            presence does not imply delivery or metering. Null when no subscription is associated.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        release_subscription_ids:
+          description: "Subscriptions required to release this virtual machine and disks deleted with it. Billing determines cancellation terms. An empty list does not establish refund eligibility."
+          type: array
+          items:
+            type: string
+            format: uuid
+        release_set:
+          description: The subscriptions of `release_subscription_ids`, in the same order, each with the resource
+            it pays for, so that each line of a cancellation can name what it releases.
+          type: array
+          items:
+            $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
+        access_state:
+          type:
+          - string
+          - 'null'
+          enum:
+          - pending
+          - enabled
+          - suspended
+          - reclaimed
+          - null
+        source_disk_id:
+          description: Non-empty when the virtual machine was created from a disk you already had, instead of from
+            an image
+          anyOf:
+          - $ref: ./identifiers.yaml#/components/schemas/DiskID
+          - type: 'null'
+      required:
+      - id
+      - name
+      - hostname
+      - login_username
+      - labels
+      - notes
+      - region_id
+      - availability_zone_id
+      - virtual_private_cloud_id
+      - subnet_id
+      - private_ip
+      - public_ips
+      - ipv6_address
+      - machine_type_id
+      - image_id
+      - source_disk_id
+      - status
+      - created_at
+      - updated_at
+      - order_id
+      - generation
+      - restrictions
+      - order_item_id
+      - subscription_id
+      - release_subscription_ids
+      - release_set
+      - access_state
+      - failure_reason
+      - operation
+      - observed_at
+      additionalProperties: false
+    VirtualMachineListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VirtualMachine'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    CreateVirtualMachineRequestBody:
+      type: object
+      properties:
+        elastic_ip_id:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
+          description: |-
+            Bind an elastic IP you already hold, instead of allocating a new one. It must be idle and in
+            the same region.
+
+            Mutually exclusive with `bandwidth_mbps`: an address you already hold has its own bandwidth
+            ceiling, set when it was allocated, and changing it is a separate operation.
+
+            Like `bandwidth_mbps`, this happens **inside the creation**: if binding fails, no virtual machine is
+            created. Binding afterwards is still possible from the virtual machine page, but then it is two
+            operations and a failure in between leaves a virtual machine you cannot reach.
+
+            Only one virtual machine can be created when it is used — one address binds to one interface.
+        count:
+          description: Number of virtual machines to create; 1 when omitted. Names are numbered automatically for
+            several
+          type: integer
+          format: int64
+          default: 1
+          minimum: 1
+          maximum: 20
+        generate_password:
+          description: Have the platform generate a random password, returned only in this response
+          type: boolean
+        compute:
+          $ref: '#/components/schemas/NewCompute'
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        password:
+          description: The password to set, on the login account and on root. Only the SSH public keys of the project
+            are used when omitted
+          type: string
+          maxLength: 128
+        network_interface_id:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+          description: Use an existing network interface, which may already have an elastic IP bound. Exactly one
+            of this and `subnet_id`; only one virtual machine can be created when it is used
+        security_group_ids:
+          description: Required when a primary network interface is created, at least one; the default security
+            group is not applied automatically. Ignored together with `network_interface_id`, as the security groups
+            of that interface were fixed when it was created
+          type:
+          - array
+          - 'null'
+          minItems: 1
+          items:
+            $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+        subnet_id:
+          description: Create the primary network interface in this subnet. Exactly one of this and `network_interface_id`
+          $ref: ./identifiers.yaml#/components/schemas/SubnetID
+        boot_disk:
+          $ref: '#/components/schemas/BootDisk'
+        elastic_ip:
+          $ref: '#/components/schemas/NewElasticIP'
+      required:
+      - name
+      - compute
+      - boot_disk
+      additionalProperties: false
+    SetVirtualMachineLabelsRequestBody:
+      type: object
+      properties:
+        labels:
+          description: The complete set of labels. Whatever is absent here is removed; send an empty object to clear
+            them all. A key may not contain a colon, whitespace or control characters
+          type: object
+          maxProperties: 20
+          additionalProperties:
+            type: string
+            maxLength: 63
+      required:
+      - labels
+      additionalProperties: false
+    SetVirtualMachineNotesRequestBody:
+      type: object
+      properties:
+        notes:
+          description: The complete note. Send an empty string to clear it
+          type: string
+          maxLength: 4096
+      required:
+      - notes
+      additionalProperties: false
+    RenameVirtualMachineRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - name
+      additionalProperties: false
+    RebootVirtualMachineRequestBody:
+      type: object
+      properties:
+        force:
+          description: A forced reboot does not wait for the operating system to shut down and unwritten data is
+            lost; use it when the system is unresponsive. False when omitted
+          type: boolean
+      required: []
+      additionalProperties: false
+    RunCommandRequestBody:
+      type: object
+      properties:
+        command:
+          description: Run by the login shell, so pipes, redirection and `&&` work. It cannot read standard input
+          type: string
+          minLength: 1
+          maxLength: 65536
+        timeout_seconds:
+          description: Kill the command after this long. 60 when omitted
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 300
+      required:
+      - command
+      additionalProperties: false
+    CommandResultResponseBody:
+      type: object
+      properties:
+        exit_code:
+          description: What the command exited with, 0 being success. Any other value is the command's own verdict
+            and still arrives as a 200. Null when it was killed rather than exiting on its own, which includes the
+            timeout — null is the absence of a verdict, not a successful one
+          type:
+          - integer
+          - 'null'
+          format: int64
+        stderr:
+          type: string
+        stdout:
+          type: string
+        timed_out:
+          description: True when the command was still running at the timeout and was killed
+          type: boolean
+        truncated:
+          description: True when either stream hit the 1 MiB cap and the rest was discarded
+          type: boolean
+      required:
+      - exit_code
+      - stdout
+      - stderr
+      - truncated
+      - timed_out
+      additionalProperties: false
+    ConsoleResponseBody:
+      type: object
+      properties:
+        console_url:
+          description: Connection address of the remote console; single-use and expires within minutes
+          type: string
+      required:
+      - console_url
+      additionalProperties: false
+    ResetPasswordRequestBody:
+      type: object
+      properties:
+        generate_password:
+          description: Have the platform generate a random password, returned only in this response
+          type: boolean
+        password:
+          description: New root password. Exactly one of this and `generate_password`
+          type: string
+          maxLength: 128
+      required: []
+      additionalProperties: false
+    ResetPasswordResponseBody:
+      type: object
+      properties:
+        password:
+          description: The password generated by the platform, returned only in this response. Empty when the password
+            was supplied in the request
+          type: string
+      required:
+      - password
+      additionalProperties: false
+    RebuildVirtualMachineRequestBody:
+      type: object
+      properties:
+        generate_password:
+          type: boolean
+        image_id:
+          description: A public image, which must be on sale unless it is the one this virtual machine already runs,
+            or an available private image of this project
+          $ref: ./identifiers.yaml#/components/schemas/ImageID
+        password:
+          type: string
+          maxLength: 128
+      required:
+      - image_id
+      additionalProperties: false
+    RebuildVirtualMachineResponseBody:
+      type: object
+      properties:
+        virtual_machine:
+          $ref: '#/components/schemas/VirtualMachine'
+        password:
+          description: Returned only in this response; store it immediately
+          type: string
+      required:
+      - virtual_machine
+      - password
+      additionalProperties: false
+    ResizeVirtualMachineRequestBody:
+      type: object
+      properties:
+        machine_type_id:
+          description: Must be in the same region and availability zone as the current machine type
+          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+        proration_date:
+          description: The instant used to price the change order. Defaults to the time of the request; it must
+            be a whole second, not in the future and at most 10 minutes old, otherwise the request is refused with
+            `BILLING_CHANGE_INVALID`. Preview the recorded order through Billing using its `order_id`.
+          type: string
+          format: date-time
+      required:
+      - machine_type_id
+      additionalProperties: false
+    NewCompute:
+      description: The compute capacity requested for each virtual machine in this order.
+      type: object
+      properties:
+        machine_type_id:
+          description: A machine type currently on sale.
+          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+        billing:
+          $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+      required:
+      - machine_type_id
+      - billing
+      additionalProperties: false
+    BootDisk:
+      description: Create a boot disk from an image, or use a prepared disk already held by this project. Using
+        an existing disk does not buy it again and always keeps it when the virtual machine is released.
+      oneOf:
+      - $ref: '#/components/schemas/NewBootDisk'
+      - $ref: '#/components/schemas/ExistingBootDisk'
+      discriminator:
+        propertyName: type
+        mapping:
+          image: '#/components/schemas/NewBootDisk'
+          disk: '#/components/schemas/ExistingBootDisk'
+    ExistingBootDisk:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - disk
+        disk_id:
+          description: A prepared boot disk owned by this project, available and unattached in the same availability
+            zone as the machine type. Only one virtual machine may be created when used.
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+        login_username:
+          description: The existing account used to log in to this disk's operating system.
+          type: string
+          minLength: 1
+          maxLength: 32
+      required:
+      - type
+      - disk_id
+      - login_username
+      additionalProperties: false
+    ResizeVirtualMachineResponseBody:
+      description: |-
+        The virtual machine, still on its current type, and the order for the resize. The virtual machine keeps its ID, and
+        its current subscription remains in force until the resize is applied.
+      type: object
+      properties:
+        virtual_machine:
+          $ref: '#/components/schemas/VirtualMachine'
+        order:
+          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+      required:
+      - virtual_machine
+      - order
+      additionalProperties: false
+    NewBootDisk:
+      description: A system disk created from an image and recorded in the virtual machine order. Its commercial
+        terms are explicit and its release policy does not override them.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - image
+        image_id:
+          description: A public image on sale, or an available private image of this project.
+          $ref: ./identifiers.yaml#/components/schemas/ImageID
+        disk_type_id:
+          description: A system disk type on sale in the availability zone of the virtual machine, one whose `purpose`
+            is `system`
+          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
+        size_gb:
+          type: integer
+          format: int64
+          minimum: 1
+        delete_with_virtual_machine:
+          type: boolean
+          default: true
+        billing:
+          $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+      required:
+      - type
+      - image_id
+      - billing
+      - disk_type_id
+      - size_gb
+      additionalProperties: false
+    NewElasticIP:
+      description: One IPv4 elastic IP created with this bandwidth configuration in the virtual machine's order. Mutually
+        exclusive with elastic_ip_id.
+      type: object
+      properties:
+        bandwidth_mbps:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 1000
+        type_id:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
+        billing:
+          $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+      required:
+      - billing
+      - bandwidth_mbps
+      - type_id
+      additionalProperties: false
+    VirtualMachineRestriction:
+      description: An independent restriction on use. Removing one restriction never removes another source’s restriction,
+        and never starts a virtual machine its user stopped.
+      type: object
+      properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineRestrictionID
+        source:
+          type: string
+          enum:
+          - billing
+          - iam
+          - operator
+        source_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        reason_code:
+          type: string
+          minLength: 1
+          maxLength: 128
+        created_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - source
+      - source_id
+      - reason_code
+      - created_at
+      additionalProperties: false
+    PowerRequest:
+      type: object
+      properties:
+        expected_generation:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateVirtualMachineResponseBody:
+      description: The new virtual machines, `pending` until their order is accepted, and the order they share.
+      type: object
+      properties:
+        virtual_machines:
+          description: |-
+            One virtual machine per requested virtual machine, in request order. Their IDs stay the same through checkout and
+            creation.
+          type: array
+          minItems: 1
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/VirtualMachine'
+        order:
+          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+        password:
+          description: Generated login password, returned only by this response. Null when no password was generated.
+          type:
+          - string
+          - 'null'
+      required:
+      - order
+      - virtual_machines
+      - password
+      additionalProperties: false
+    VirtualMachineOperation:
+      description: An operation still running on this virtual machine. It is not a separate resource; once it finishes,
+        the virtual machine's `operation` is null again and the virtual machine shows the result.
+      type: object
+      properties:
+        type:
+          description: '`create` runs from acceptance of the order until the virtual machine is `active` or `failed`.
+            `suspend` and `resume` impose and lift a suspension by the platform or for non-payment. `delete` includes
+            release through a Billing cancellation.'
+          type: string
+          enum:
+          - create
+          - start
+          - stop
+          - reboot
+          - rebuild
+          - resize
+          - reset_password
+          - attach_disk
+          - detach_disk
+          - attach_network_interface
+          - detach_network_interface
+          - bind_elastic_ip
+          - unbind_elastic_ip
+          - suspend
+          - resume
+          - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+      - type
+      - started_at
+      additionalProperties: false

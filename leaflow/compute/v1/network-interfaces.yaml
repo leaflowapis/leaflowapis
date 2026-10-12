@@ -1,0 +1,310 @@
+paths:
+  /api/v1/network-interfaces:
+    get:
+      summary: List network interfaces
+      operationId: list-network-interfaces
+      tags:
+      - network-interfaces
+      parameters:
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkInterfaceListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Create a network interface
+      description: The new network interface is not attached to any virtual machine. Primary network interfaces
+        are not created here; they are created with the virtual machine.
+      operationId: create-network-interface
+      tags:
+      - network-interfaces
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNetworkInterfaceRequestBody'
+      responses:
+        '202':
+          description: The network interface was accepted and is being created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkInterface'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/network-interfaces/{networkInterfaceId}:
+    delete:
+      summary: Delete a network interface
+      description: The primary network interface cannot be deleted on its own, as it is released with the virtual
+        machine. A network interface still attached to a virtual machine cannot be deleted either.
+      operationId: delete-network-interface
+      tags:
+      - network-interfaces
+      parameters:
+      - name: networkInterfaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+      responses:
+        '202':
+          description: Deletion was accepted. The network interface shows the `delete` operation until it is deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkInterface'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    NetworkInterface:
+      type: object
+      properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+        mac:
+          type:
+          - string
+          - 'null'
+        name:
+          type: string
+        virtual_private_cloud_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+        public_ips:
+          description: Floating IPv4 addresses bound to this network interface; an empty array when none are bound
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+        addresses:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkInterfaceAddress'
+        attachment:
+          anyOf:
+          - $ref: '#/components/schemas/NetworkInterfaceAttachment'
+          - type: 'null'
+        status:
+          description: '`missing` means the interface no longer exists in the cloud.'
+          type: string
+          enum:
+          - pending
+          - available
+          - error
+          - unknown
+          - missing
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
+        observed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        operation:
+          description: The operation in progress on this network interface, or null when none is.
+          anyOf:
+          - $ref: '#/components/schemas/NetworkInterfaceOperation'
+          - type: 'null'
+          readOnly: true
+      required:
+      - id
+      - virtual_private_cloud_id
+      - name
+      - mac
+      - public_ips
+      - status
+      - generation
+      - observed_at
+      - operation
+      additionalProperties: false
+    NetworkInterfaceListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/NetworkInterface'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    AttachNetworkInterfaceRequestBody:
+      type: object
+      properties:
+        network_interface_id:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+      required:
+      - network_interface_id
+      additionalProperties: false
+    CreateNetworkInterfaceRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        security_group_ids:
+          description: At least one, and all must belong to the same virtual private cloud
+          type:
+          - array
+          - 'null'
+          minItems: 1
+          items:
+            $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+        subnet_id:
+          $ref: ./identifiers.yaml#/components/schemas/SubnetID
+        address:
+          description: The private address to assign. Allocated automatically when omitted
+          type: string
+          maxLength: 64
+      required:
+      - subnet_id
+      - security_group_ids
+      additionalProperties: false
+    NetworkInterfaceAddress:
+      type: object
+      properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceAddressID
+        subnet_id:
+          $ref: ./identifiers.yaml#/components/schemas/SubnetID
+        address:
+          type: string
+          minLength: 1
+          maxLength: 64
+        is_primary:
+          type: boolean
+        state:
+          type: string
+          enum:
+          - reserved
+          - assigned
+          - released
+          - unknown
+        assigned_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        released_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - subnet_id
+      - address
+      - is_primary
+      - state
+      - assigned_at
+      - released_at
+      additionalProperties: false
+    NetworkInterfaceAttachment:
+      type: object
+      properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineNetworkInterfaceID
+        virtual_machine_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+        network_interface_id:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+        role:
+          type: string
+          enum:
+          - primary
+          - additional
+        delete_with_virtual_machine:
+          type: boolean
+        state:
+          type: string
+          enum:
+          - reserved
+          - attached
+          - released
+          - unknown
+        attached_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        detached_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        released_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - virtual_machine_id
+      - network_interface_id
+      - role
+      - delete_with_virtual_machine
+      - state
+      - attached_at
+      - detached_at
+      - released_at
+      additionalProperties: false
+    NetworkInterfaceAttachmentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/NetworkInterfaceAttachment'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    NetworkInterfaceOperation:
+      description: An operation still running on this network interface. It is not a separate resource; once it
+        finishes, the network interface's `operation` is null again and the network interface shows the result.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - create
+          - attach
+          - detach
+          - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+      - type
+      - started_at
+      additionalProperties: false

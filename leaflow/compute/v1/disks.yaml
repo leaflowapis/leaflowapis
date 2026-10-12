@@ -1,0 +1,588 @@
+paths:
+  /api/v1/disks:
+    get:
+      summary: List disks
+      description: When both `region_code` and `availability_zone` are supplied, only disks attachable to a virtual
+        machine at that location are returned.
+      operationId: list-disks
+      tags:
+      - disks
+      parameters:
+      - name: region_id
+        in: query
+        required: false
+        explode: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+      - name: availability_zone_id
+        in: query
+        description: Supplied together with `region_code` to filter attachable disks
+        explode: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiskListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Create a disk
+      description: |-
+        The disk is created in the availability zone of the selected disk type, and a virtual machine must reside in the same zone to attach it. Choosing the disk type therefore determines the zone.
+
+        A disk type that is off sale is rejected with `DISK_TYPE_OFF_SALE`, even though its identifier still resolves. Types that are off sale do not appear in the disk type listing; disks already bought on one keep working and can still be resized.
+      operationId: create-disk
+      tags:
+      - disks
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDiskRequestBody'
+      responses:
+        '202':
+          description: The disk and its order were created; the disk does not exist in the cloud yet.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDiskResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/disks/{diskId}:
+    get:
+      summary: Retrieve a disk
+      description: Returns the stored state of the disk; it does not query the cloud.
+      operationId: get-disk
+      tags:
+      - disks
+      parameters:
+      - name: diskId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiskResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    patch:
+      summary: Rename a disk
+      description: Changes the name only. Use the resize endpoint for capacity; type and availability zone are immutable.
+      operationId: rename-disk
+      tags:
+      - disks
+      parameters:
+      - name: diskId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameDiskRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiskResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    delete:
+      summary: Delete a disk
+      description: |-
+        Deletion is rejected while the disk is attached, or while snapshots created from it still exist.
+
+        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the disk, including a pay-as-you-go subscription. `meta.resource_id` names the disk. It is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`.
+      operationId: delete-disk
+      tags:
+      - disks
+      parameters:
+      - name: diskId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      responses:
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        '202':
+          description: Deletion was accepted. The disk shows the `delete` operation until it is deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiskResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/disks/{diskId}/resize:
+    post:
+      summary: Resize a disk
+      description: |-
+        Capacity can only be increased; shrinking is not supported. Returns the disk with the order for the resize, which keeps the disk's billing mode and period. The disk shows the `resize` operation until the resize is applied or its order is canceled, including while the order awaits checkout, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The disk keeps its current size until the resize is applied; once `size_gb` shows the new size, extend the file system inside the virtual machine. If the order is not accepted or the resize fails, the disk keeps its size and the order shows the outcome.
+
+        **An attached data disk whose performance scales with its size must be detached before it is resized.** The performance of an attached disk does not change until the disk is detached and attached again, so such a request is refused with `DISK_RESIZE_NEEDS_DETACH` rather than providing the new capacity at the performance of the previous size. Detach the disk, resize it, and attach it again.
+
+        The request is refused only when the new size has a different performance level. A disk whose type has no QoS level, or whose performance has already reached the maximum of its type, can be resized while attached.
+
+        **A system disk can be resized while attached**, because a system disk cannot be detached. System disk types use a performance level that does not scale with size, so resizing a system disk does not change its performance.
+      operationId: resize-disk
+      tags:
+      - disks
+      parameters:
+      - name: diskId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResizeDiskRequestBody'
+      responses:
+        '202':
+          description: The disk and the order for the resize; the new size is not yet in effect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResizeDiskResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/disks/{diskId}/revert:
+    post:
+      summary: Revert to a snapshot
+      description: |-
+        Restores the contents of the disk to the moment the snapshot was taken. **All data written after that moment is lost and cannot be recovered.**
+
+        Three restrictions apply: only the most recent snapshot of the disk can be reverted to; the disk must be detached from its virtual machine first; and a disk resized since the snapshot was taken cannot be reverted. To return to an earlier point in time, or to keep the existing disk, create a new disk from the snapshot instead.
+
+        The disk shows the `revert` operation until the revert is complete.
+      operationId: revert-disk
+      tags:
+      - disks
+      parameters:
+      - name: diskId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RevertDiskRequestBody'
+      responses:
+        '202':
+          description: The revert was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiskResource'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    DiskResource:
+      type: object
+      properties:
+        availability_zone_id:
+          description: Availability zone the disk actually resides in. A virtual machine must be in the same zone
+            to attach it
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        created_at:
+          type: string
+          format: date-time
+        disk_type_id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+        name:
+          type: string
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        size_gb:
+          type: integer
+          format: int64
+        iops:
+          description: |-
+            IOPS this disk is allowed. Null when its type is not rate-limited.
+
+            Computed from the disk's own capacity, so it grows when the disk is grown — but see the
+            note on the resize endpoint: growing a disk that is attached is refused, precisely because
+            the new figure would not take effect until it was attached again.
+          type:
+          - integer
+          - 'null'
+          format: int64
+        throughput_bytes_per_sec:
+          description: Throughput this disk is allowed, in bytes per second. Null when its type is not rate-limited
+          type:
+          - integer
+          - 'null'
+          format: int64
+        status:
+          description: '`pending` until the order is accepted, with no storage allocated; `provisioning` while the
+            disk is created; then `available`, or `in_use` once attached. `failed` means the disk was not created;
+            `failure_reason` states why. `missing` means the disk no longer exists in the cloud.'
+          type: string
+          enum:
+          - pending
+          - provisioning
+          - available
+          - in_use
+          - deleted
+          - failed
+          - error
+          - missing
+        order_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+        order_item_id:
+          description: The Billing order item for this resource.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        subscription_id:
+          description: |-
+            The Billing subscription associated with this resource. It may still be pending; its
+            presence does not imply delivery or metering. Null when no subscription is associated.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        release_subscription_ids:
+          description: 'The subscriptions a cancellation through Billing has to cover to release this disk: its
+            own. Snapshots have no individual subscriptions. A system disk is released only with its virtual machine,
+            so for a system disk the list is that of the virtual machine. Subscriptions that have ended are not
+            listed, and the list is empty when no subscription pays for any of them.'
+          type: array
+          items:
+            type: string
+            format: uuid
+        release_set:
+          description: The subscriptions of `release_subscription_ids`, in the same order, each with the resource
+            it pays for, so that each line of a cancellation can name what it releases.
+          type: array
+          items:
+            $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
+        access_state:
+          type:
+          - string
+          - 'null'
+          enum:
+          - pending
+          - enabled
+          - suspended
+          - reclaimed
+          - null
+        failure_reason:
+          description: Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation
+            failed after the order was accepted, and the charge for this disk is refunded.
+          type:
+          - string
+          - 'null'
+          enum:
+          - order_declined
+          - order_canceled
+          - order_expired
+          - provisioning_failed
+          - null
+        operation:
+          description: The operation in progress on this disk, or null when none is.
+          anyOf:
+          - $ref: '#/components/schemas/DiskOperation'
+          - type: 'null'
+          readOnly: true
+        attachment:
+          anyOf:
+          - $ref: '#/components/schemas/DiskAttachment'
+          - type: 'null'
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
+        observed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - name
+      - region_id
+      - availability_zone_id
+      - disk_type_id
+      - size_gb
+      - iops
+      - throughput_bytes_per_sec
+      - status
+      - created_at
+      - order_id
+      - order_item_id
+      - subscription_id
+      - release_subscription_ids
+      - release_set
+      - access_state
+      - failure_reason
+      - operation
+      - generation
+      - observed_at
+      additionalProperties: false
+    DiskListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/DiskResource'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    CreateDiskRequestBody:
+      type: object
+      properties:
+        disk_type_id:
+          description: A data disk type currently on sale, one whose `purpose` is `data`. A withdrawn one is rejected
+            even though its identifier still resolves
+          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        size_gb:
+          type: integer
+          format: int64
+          minimum: 1
+        snapshot_id:
+          description: Restore from this snapshot. When given, the capacity need only be no smaller than the snapshot
+          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+        billing:
+          $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+      required:
+      - disk_type_id
+      - name
+      - size_gb
+      - billing
+      additionalProperties: false
+    RenameDiskRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - name
+      additionalProperties: false
+    ResizeDiskRequestBody:
+      type: object
+      properties:
+        size_gb:
+          description: Must be larger than the current capacity
+          type: integer
+          format: int64
+          minimum: 1
+        proration_date:
+          description: The instant used to price the change order. Defaults to the time of the request; it must
+            be a whole second, not in the future and at most 10 minutes old, otherwise the request is refused with
+            `BILLING_CHANGE_INVALID`. Preview the recorded order through Billing using its `order_id`.
+          type: string
+          format: date-time
+      required:
+      - size_gb
+      additionalProperties: false
+    RevertDiskRequestBody:
+      type: object
+      properties:
+        snapshot_id:
+          description: Must be the most recent snapshot of the disk
+          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+      required:
+      - snapshot_id
+      additionalProperties: false
+    AttachDiskRequestBody:
+      type: object
+      properties:
+        disk_id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      required:
+      - disk_id
+      additionalProperties: false
+    CreateDiskResponseBody:
+      description: |-
+        The new disk, `pending` until its order is accepted, and the order. Also returned for a disk restored
+        from a backup.
+      type: object
+      properties:
+        disk:
+          $ref: '#/components/schemas/DiskResource'
+        order:
+          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+      required:
+      - disk
+      - order
+      additionalProperties: false
+    ResizeDiskResponseBody:
+      description: The disk, still at its current size, and the order for the resize.
+      type: object
+      properties:
+        disk:
+          $ref: '#/components/schemas/DiskResource'
+        order:
+          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+      required:
+      - disk
+      - order
+      additionalProperties: false
+    DiskAttachment:
+      type: object
+      properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineDiskID
+        virtual_machine_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+        disk_id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+        role:
+          type: string
+          enum:
+          - boot
+          - data
+        delete_with_virtual_machine:
+          type: boolean
+        state:
+          type: string
+          enum:
+          - reserved
+          - attached
+          - released
+          - unknown
+        attached_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        detached_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        released_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        device:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - virtual_machine_id
+      - disk_id
+      - role
+      - delete_with_virtual_machine
+      - state
+      - attached_at
+      - detached_at
+      - released_at
+      - device
+      additionalProperties: false
+    DiskAttachmentList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DiskAttachment'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    DiskOperation:
+      description: An operation still running on this disk. It is not a separate resource; once it finishes, the
+        disk's `operation` is null again and the disk shows the result.
+      type: object
+      properties:
+        type:
+          description: '`attach` and `detach` accompany the virtual machine''s `attach_disk` and `detach_disk`.
+            `delete` includes release through a Billing cancellation and deletion with a virtual machine.'
+          type: string
+          enum:
+          - create
+          - resize
+          - revert
+          - attach
+          - detach
+          - suspend
+          - resume
+          - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+      - type
+      - started_at
+      additionalProperties: false

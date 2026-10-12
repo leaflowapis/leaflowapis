@@ -1,0 +1,310 @@
+paths:
+  /api/v1/snapshots:
+    get:
+      summary: List snapshots
+      operationId: list-snapshots
+      tags:
+      - snapshots
+      parameters:
+      - name: disk_id
+        in: query
+        description: Return only the snapshots of this disk
+        explode: false
+        schema:
+          description: Return only the snapshots of this disk
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Create a snapshot
+      description: "Creates a snapshot of the disk. A running virtual machine may produce a file-system-inconsistent
+        snapshot; flush pending writes first. A system disk cannot be reverted while attached. Pending snapshots count
+        toward Compute project quotas until creation fails and cleanup is confirmed.\n\nRecords the pending resource
+        before creating its deferred postpaid Billing order. Source ownership and Compute project quotas are checked
+        before placement. No storage is allocated until the order is read back, verified and accepted. Unknown placement
+        leaves the resource pending for recovery rather than treating it as rejected."
+      operationId: create-snapshot
+      tags:
+      - snapshots
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSnapshotRequestBody'
+      responses:
+        '202':
+          description: "Pending resource and deferred Billing order."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateSnapshotResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+  /api/v1/snapshots/{snapshotId}:
+    get:
+      summary: Retrieve a snapshot
+      operationId: get-snapshot
+      tags:
+      - snapshots
+      parameters:
+      - name: snapshotId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    patch:
+      summary: Rename a snapshot
+      operationId: rename-snapshot
+      tags:
+      - snapshots
+      parameters:
+      - name: snapshotId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameSnapshotRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    delete:
+      summary: Delete a snapshot
+      description: "Deletes this resource. Quota capacity and storage metering are released only after cleanup is confirmed.\n\
+        \nA resource with a pending order must have that order canceled through Billing first. A subscribed resource
+        is released through its subscription cancellation. Cleanup must be confirmed before metering is stopped; unknown
+        cleanup is not proof of release."
+      operationId: delete-snapshot
+      tags:
+      - snapshots
+      parameters:
+      - name: snapshotId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+      responses:
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        '202':
+          description: Deletion was accepted. The snapshot shows the `delete` operation until it is deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SnapshotResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    SnapshotResource:
+      description: "A snapshot of a disk. Compute project quotas constrain its count; retained storage is metered independently
+        of that quota."
+      type: object
+      properties:
+        availability_zone_id:
+          description: A disk restored from this snapshot must reside in this availability zone
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        created_at:
+          type: string
+          format: date-time
+        disk_id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+        name:
+          type: string
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        size_gb:
+          description: Capacity of the source disk when the snapshot was created. A disk restored from it cannot be
+            smaller
+          type: integer
+          format: int64
+        status:
+          description: '`pending` once a quota slot is reserved, `provisioning` while the snapshot is taken, then `available`.
+            `failed` means the snapshot was not created; its slot is released once no snapshot data remains. `missing`
+            means the snapshot no longer exists in the cloud.'
+          type: string
+          enum:
+          - pending
+          - provisioning
+          - available
+          - deleted
+          - failed
+          - error
+          - missing
+        operation:
+          description: The operation in progress on this snapshot, or null when none is.
+          anyOf:
+          - $ref: '#/components/schemas/SnapshotOperation'
+          - type: 'null'
+          readOnly: true
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
+        observed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        order_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          readOnly: true
+          description: The Billing order creating this resource.
+        order_item_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          readOnly: true
+          description: The Billing order item for this resource.
+        subscription_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          readOnly: true
+          description: The subscription for this resource; its presence alone does not imply delivery.
+      required:
+      - id
+      - disk_id
+      - name
+      - size_gb
+      - status
+      - availability_zone_id
+      - region_id
+      - created_at
+      - operation
+      - generation
+      - observed_at
+      - order_id
+      - order_item_id
+      - subscription_id
+      additionalProperties: false
+    SnapshotListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/SnapshotResource'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    CreateSnapshotRequestBody:
+      description: "Creation configuration for this resource. Compute project quotas and Billing authorization are checked
+        independently."
+      type: object
+      properties:
+        disk_id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - disk_id
+      - name
+      additionalProperties: false
+    RenameSnapshotRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - name
+      additionalProperties: false
+    SnapshotOperation:
+      description: An operation still running on this snapshot. It is not a separate resource; once it finishes, 
+        the snapshot's `operation` is null again and the snapshot shows the result.
+      type: object
+      properties:
+        type:
+          description: '`restore`: a disk is being reverted to this snapshot or created from it.'
+          type: string
+          enum:
+          - create
+          - restore
+          - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+      - type
+      - started_at
+      additionalProperties: false
+    CreateSnapshotResponseBody:
+      type: object
+      description: The pending resource and its deferred Billing order. Confirm the order through Billing; 
+        infrastructure is allocated only after verified acceptance.
+      properties:
+        snapshot:
+          $ref: '#/components/schemas/SnapshotResource'
+        order:
+          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+      required:
+      - snapshot
+      - order
+      additionalProperties: false

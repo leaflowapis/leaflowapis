@@ -1,0 +1,142 @@
+paths:
+  /api/v1/machine-types:
+    get:
+      summary: List machine types on sale
+      description: Only machine types currently on sale are listed. A withdrawn one disappears from here
+        and can no longer be ordered, while the virtual machines already running it keep running.
+      operationId: list-machine-types
+      tags:
+      - machine-types
+      parameters:
+      - name: region_id
+        in: query
+        required: false
+        explode: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MachineTypeListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/machine-types/{machineTypeId}:
+    get:
+      summary: Get a machine type
+      description: Returns only an on-sale machine type, under the same access rules as listing. Off-sale, retired
+        or absent types return 404.
+      operationId: get-machine-type
+      tags:
+      - machine-types
+      parameters:
+      - name: machineTypeId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MachineType'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    MachineType:
+      type: object
+      properties:
+        availability_zone_id:
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+        max_bandwidth_mbps:
+          description: |-
+            The most public bandwidth a machine of this type may be given, in Mbps. Asking for more
+            when creating a machine, or raising a bound address past it, is refused.
+
+            A ceiling on what can be bought, not a speed. How fast the machine's own interfaces run is
+            `network_egress_kbps` / `network_ingress_kbps`.
+          type: integer
+          format: int64
+        network_egress_kbps:
+          description: |-
+            Outbound ceiling of **each** network interface, in kbps. Null when this type is not
+            rate-limited.
+
+            Per interface rather than per machine: a machine with two interfaces has this ceiling on
+            each of them, not shared between them. `max_network_interfaces` says how many it may have.
+          type:
+          - integer
+          - 'null'
+          format: int64
+        network_ingress_kbps:
+          description: Inbound ceiling of each network interface, in kbps. Null when this type is not rate-limited
+          type:
+          - integer
+          - 'null'
+          format: int64
+        max_elastic_ips:
+          type: integer
+          format: int64
+        max_network_interfaces:
+          type: integer
+          format: int64
+        name:
+          type: string
+        ram_mb:
+          type: integer
+          format: int64
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        vcpus:
+          type: integer
+          format: int64
+        plan_id:
+          description: The actual Billing Plan associated with this resource. Read prices and commercial terms directly
+            from Billing using this identifier.
+          type: string
+          format: uuid
+          readOnly: true
+      required:
+      - id
+      - name
+      - vcpus
+      - ram_mb
+      - region_id
+      - availability_zone_id
+      - max_network_interfaces
+      - max_elastic_ips
+      - max_bandwidth_mbps
+      - network_egress_kbps
+      - network_ingress_kbps
+      - plan_id
+      additionalProperties: false
+    MachineTypeListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/MachineType'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false

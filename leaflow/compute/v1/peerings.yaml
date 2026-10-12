@@ -1,0 +1,256 @@
+paths:
+  /api/v1/peerings:
+    get:
+      summary: List peerings
+      operationId: list-peerings
+      tags:
+      - peerings
+      parameters:
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeringListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Create peering
+      description: Request IPv4 peering between non-overlapping VPCs in the same Region. The target project must
+        accept before any connectivity is created. Does not change security groups or provide transitive routing.
+      operationId: create-peering
+      tags:
+      - peerings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePeeringRequestBody'
+      responses:
+        '201':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeringResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/peerings/{peeringId}:
+    get:
+      summary: Get peering
+      operationId: get-peering
+      tags:
+      - peerings
+      parameters:
+      - name: peeringId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/PeeringID
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeringResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    delete:
+      summary: Delete peering
+      operationId: delete-peering
+      tags:
+      - peerings
+      parameters:
+      - name: peeringId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/PeeringID
+      responses:
+        '202':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeringResource'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/peerings/{peeringId}/accept:
+    post:
+      summary: Accept peering
+      operationId: accept-peering
+      tags:
+      - peerings
+      parameters:
+      - name: peeringId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/PeeringID
+      responses:
+        '202':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeringResource'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/peerings/{peeringId}/reject:
+    post:
+      summary: Reject peering
+      operationId: reject-peering
+      tags:
+      - peerings
+      parameters:
+      - name: peeringId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/PeeringID
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeringResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    PeeringResource:
+      type: object
+      properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/PeeringID
+        name:
+          type: string
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        requester_project_id:
+          type: string
+          format: uuid
+        accepter_project_id:
+          type: string
+          format: uuid
+        requester_network_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+        accepter_network_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+        status:
+          type: string
+          enum:
+          - pending_acceptance
+          - provisioning
+          - active
+          - deleted
+          - rejected
+          - error
+        created_at:
+          type: string
+          format: date-time
+        failure_code:
+          type: string
+        operation:
+          description: The operation in progress on this peering, or null when none is.
+          anyOf:
+          - $ref: '#/components/schemas/PeeringOperation'
+          - type: 'null'
+          readOnly: true
+      required:
+      - id
+      - name
+      - region_id
+      - requester_project_id
+      - accepter_project_id
+      - requester_network_id
+      - accepter_network_id
+      - status
+      - created_at
+      - operation
+      additionalProperties: false
+    PeeringListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PeeringResource'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    CreatePeeringRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        requester_network_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+        accepter_project_id:
+          type: string
+          format: uuid
+        accepter_network_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+      required:
+      - name
+      - requester_network_id
+      - accepter_project_id
+      - accepter_network_id
+      additionalProperties: false
+    PeeringOperation:
+      description: An operation still running on this peering. It is not a separate resource; once it finishes,
+        the peering's `operation` is null again and the peering shows the result.
+      type: object
+      properties:
+        type:
+          description: '`provision` runs after the peering is accepted, until it is `active`.'
+          type: string
+          enum:
+          - provision
+          - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+      - type
+      - started_at
+      additionalProperties: false
