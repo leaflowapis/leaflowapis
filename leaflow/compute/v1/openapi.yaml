@@ -147,12 +147,12 @@ paths:
   /api/v1/virtual-machines/{virtualMachineId}/elastic-ips:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1elastic-ips
   /api/v1/virtual-machines/{virtualMachineId}/elastic-ips/{elasticIpId}:
-    $ref: 
+    $ref:
       ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1elastic-ips~1{elasticIpId}
   /api/v1/virtual-machines/{virtualMachineId}/network-interfaces:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces
   /api/v1/virtual-machines/{virtualMachineId}/network-interfaces/{networkInterfaceId}:
-    $ref: 
+    $ref:
       ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces~1{networkInterfaceId}
   /api/v1/operation-logs:
     $ref: ./operation-logs.yaml#/paths/~1api~1v1~1operation-logs
