@@ -1,0 +1,575 @@
+paths:
+  /api/v1/threads/{thread}/tasks:
+    post:
+      operationId: create-task
+      summary: Create task
+      tags:
+        - Task
+      parameters:
+        - name: thread
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTaskRequestBody"
+    get:
+      operationId: list-tasks
+      summary: List tasks
+      tags:
+        - Task
+      parameters:
+        - name: thread
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskListResponseBody"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/tasks/{task}:
+    get:
+      operationId: get-task
+      summary: Get task
+      tags:
+        - Task
+      parameters:
+        - name: task
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    patch:
+      operationId: update-task
+      summary: Update task
+      tags:
+        - Task
+      parameters:
+        - name: task
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTaskRequestBody"
+    delete:
+      operationId: delete-task
+      summary: Delete task
+      tags:
+        - Task
+      parameters:
+        - name: task
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/tasks/{task}/start:
+    post:
+      operationId: start-task
+      summary: Start task
+      tags:
+        - Task
+      parameters:
+        - name: task
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/tasks/{task}/cancel:
+    post:
+      operationId: cancel-task
+      summary: Cancel task
+      tags:
+        - Task
+      parameters:
+        - name: task
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/threads/{thread}/schedules:
+    post:
+      operationId: create-schedule
+      summary: Create schedule
+      tags:
+        - Schedule
+      parameters:
+        - name: thread
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateScheduleRequestBody"
+    get:
+      operationId: list-schedules
+      summary: List schedules
+      tags:
+        - Schedule
+      parameters:
+        - name: thread
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleListResponseBody"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/schedules/{schedule}:
+    get:
+      operationId: get-schedule
+      summary: Get schedule
+      tags:
+        - Schedule
+      parameters:
+        - name: schedule
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    patch:
+      operationId: update-schedule
+      summary: Update schedule
+      tags:
+        - Schedule
+      parameters:
+        - name: schedule
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateScheduleRequestBody"
+    delete:
+      operationId: delete-schedule
+      summary: Delete schedule
+      tags:
+        - Schedule
+      parameters:
+        - name: schedule
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/schedules/{schedule}/pause:
+    post:
+      operationId: pause-schedule
+      summary: Pause schedule
+      tags:
+        - Schedule
+      parameters:
+        - name: schedule
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/schedules/{schedule}/resume:
+    post:
+      operationId: resume-schedule
+      summary: Resume schedule
+      tags:
+        - Schedule
+      parameters:
+        - name: schedule
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/schedules/{schedule}/trigger:
+    post:
+      operationId: trigger-schedule
+      summary: Trigger schedule
+      tags:
+        - Schedule
+      parameters:
+        - name: schedule
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/schedules:
+    get:
+      operationId: list-workspace-schedules
+      summary: List schedules in the current workspace
+      tags:
+        - Schedule
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Cursor
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduleListResponseBody"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    TaskResource:
+      type: object
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        instanceId:
+          type: string
+        command:
+          type: string
+        timeoutSeconds:
+          type: integer
+          format: int64
+        processStatus:
+          type: string
+        exitCode:
+          type:
+            - integer
+            - "null"
+          format: int64
+        output:
+          type: string
+      required:
+        - id
+        - threadId
+        - name
+        - status
+        - instanceId
+        - command
+        - timeoutSeconds
+        - processStatus
+        - exitCode
+        - output
+      additionalProperties: false
+    TaskListResponseBody:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskResource"
+      required:
+        - tasks
+      additionalProperties: false
+    CreateTaskRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        instanceId:
+          type: string
+          minLength: 1
+        command:
+          type: string
+          minLength: 1
+        timeoutSeconds:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 3600
+          default: 3600
+      required:
+        - name
+        - instanceId
+        - command
+      additionalProperties: false
+    UpdateTaskRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+        - name
+      additionalProperties: false
+    ScheduleResource:
+      type: object
+      properties:
+        id:
+          type: string
+        threadId:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+        prompt:
+          type: string
+        kind:
+          type: string
+        runAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        intervalSeconds:
+          type: integer
+          format: int64
+        anchorAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+        calendar:
+          type: string
+        timezone:
+          type: string
+        overlapPolicy:
+          type: string
+        catchupSeconds:
+          type: integer
+          format: int64
+        nextRunAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - id
+        - threadId
+        - name
+        - status
+        - prompt
+        - kind
+        - runAt
+        - intervalSeconds
+        - anchorAt
+        - calendar
+        - timezone
+        - overlapPolicy
+        - catchupSeconds
+        - nextRunAt
+      additionalProperties: false
+    ScheduleListResponseBody:
+      type: object
+      properties:
+        schedules:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScheduleResource"
+        nextCursor:
+          type:
+            - string
+            - "null"
+      required:
+        - schedules
+      additionalProperties: false
+    CreateScheduleRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        prompt:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum:
+            - once
+            - interval
+            - calendar
+        runAt:
+          type: string
+          format: date-time
+        intervalSeconds:
+          type: integer
+          format: int64
+          minimum: 10
+        anchorAt:
+          type: string
+          format: date-time
+        calendar:
+          type: string
+        timezone:
+          type: string
+          default: UTC
+        overlapPolicy:
+          type: string
+          enum:
+            - skip
+            - buffer_one
+          default: buffer_one
+        catchupSeconds:
+          type: integer
+          format: int64
+          minimum: 10
+          default: 300
+      required:
+        - name
+        - prompt
+        - kind
+      additionalProperties: false
+    UpdateScheduleRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        prompt:
+          type: string
+          minLength: 1
+        kind:
+          type: string
+          enum:
+            - once
+            - interval
+            - calendar
+        runAt:
+          type: string
+          format: date-time
+        intervalSeconds:
+          type: integer
+          format: int64
+          minimum: 10
+        anchorAt:
+          type: string
+          format: date-time
+        calendar:
+          type: string
+        timezone:
+          type: string
+          default: UTC
+        overlapPolicy:
+          type: string
+          enum:
+            - skip
+            - buffer_one
+          default: buffer_one
+        catchupSeconds:
+          type: integer
+          format: int64
+          minimum: 10
+          default: 300
+      required:
+        - name
+        - prompt
+        - kind
+      additionalProperties: false

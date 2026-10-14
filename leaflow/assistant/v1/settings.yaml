@@ -1,0 +1,30 @@
+paths:
+  /api/v1/model-configuration:
+    get:
+      summary: Read assistant model selection policy
+      description:
+        Model metadata is provided by Canopy. This endpoint exposes only assistant deployment
+        policy.
+      operationId: getModelConfiguration
+      tags:
+        - Model
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelConfigurationResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    ModelConfigurationResource:
+      type: object
+      properties:
+        defaultModelId:
+          type: string
+          description: Default Canopy model id. The model catalogue and capabilities are owned by Canopy.
+      required:
+        - defaultModelId
+      additionalProperties: false
