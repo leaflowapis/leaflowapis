@@ -14,8 +14,8 @@ paths:
         `around` opens a window that contains an ordinal, for jumping to a turn from list-thread-turns or
         to a search result.
 
-        Long reasoning, tool arguments and tool output are cut to a preview and marked `truncated`; read
-        the item for all of it. Messages are never cut.
+        Long reasoning and tool arguments are cut to a preview and marked `truncated`; read the item for
+        all of it. Messages are never cut.
 
         When the window reaches the end, `queued` holds the messages waiting for the assistant and
         `streamCursor` is set: subscribe to `thread:{id}` on /api/v1/realtime from it to follow what is
@@ -230,7 +230,7 @@ components:
           description: Left out of model requests since a revert. Shown, but marked.
           type: boolean
         truncated:
-          description: Part of the content was cut from this list; read the item for all of it.
+          description: Long reasoning or tool arguments were cut from this list; read the item for all of it.
           type: boolean
         source:
           description: Who wrote an `external_message`. Null for other items.
@@ -242,11 +242,17 @@ components:
           type:
             - string
             - "null"
+        durationMs:
+          description: How long the reasoning or the tool call took. Null while it runs and for other items.
+          type:
+            - integer
+            - "null"
+          format: int64
         parts:
           description: |-
             The content, in the order it was written. Text arrives as `append` frames on the realtime
-            stream. An attachment belongs where it was written, so render parts in order. For a tool
-            call these are its output.
+            stream. An attachment belongs where it was written, so render parts in order. Empty for
+            tool calls; their outcome is in `toolCall.detail` and `toolCall.presentation`.
           type: array
           items:
             $ref: "#/components/schemas/PartResource"
@@ -279,6 +285,7 @@ components:
         - truncated
         - source
         - modelId
+        - durationMs
         - parts
         - attachments
         - clientContext
@@ -330,11 +337,6 @@ components:
           anyOf:
             - $ref: "#/components/schemas/PresentationResource"
             - type: "null"
-        durationMs:
-          type:
-            - integer
-            - "null"
-          format: int64
         approvalStatus:
           description: |-
             Whether the call needed a decision before it ran. Null for calls that need none.
@@ -386,7 +388,6 @@ components:
         - target
         - detail
         - presentation
-        - durationMs
         - approvalStatus
         - approvalReason
         - decidedAt
