@@ -2,11 +2,10 @@ paths:
   /api/v1/folders:
     get:
       summary: List folders
-      description:
-        "The current account's folders in this project, oldest first. That order is fixed
-        and does not react to what happens inside a folder: a folder is a place on the screen, and a place
-        that moves whenever something is put into it is not one anybody can aim at. Not paginated — there
-        is a cap on how many there can be, and all of them come back at once."
+      description: |-
+        The caller's folders in this project in their own order, inbox first. Every conversation is in
+        exactly one folder; the inbox holds the ones nobody filed. Not paginated: the number of folders
+        is capped and all of them come back at once.
       operationId: list-folders
       tags:
         - Folder
@@ -21,14 +20,12 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
     post:
       summary: Create a folder
-      description:
-        "A folder groups conversations in the sidebar and does nothing else. The assistant
-        is never told which folder a conversation is in, and a conversation behaves exactly the same inside
-        one as outside: no shared instructions, no shared files, no shared memory.
+      description: |-
+        A folder groups conversations on the board and does nothing else: the assistant is never told
+        which folder a conversation is in. New folders go after the existing ones.
 
-
-        Names are unique within an account's folders in this project, because the only way to aim at
-        a folder is to read its name."
+        Names are unique among the caller's folders in this project; a duplicate fails with 409 and
+        code FOLDER_EXISTS.
       operationId: create-folder
       tags:
         - Folder
@@ -48,21 +45,14 @@ paths:
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/folders/{folder}:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/FolderId
     get:
-      summary: Fetch one folder
-      description:
-        "The list returns every folder at once, so this is for the case the list does not cover:
-        a page opened straight at a folder, holding nothing but the id from the address bar. Its conversations
-        are a separate request — `GET /api/v1/threads?folder=<id>`."
+      summary: Get a folder
+      description: Its conversations are read with search-threads and `folderId`.
       operationId: get-folder
       tags:
         - Folder
-      parameters:
-        - name: folder
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         "200":
           description: OK
@@ -74,18 +64,10 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
     patch:
       summary: Rename a folder
-      description:
-        The conversations in it are untouched, and none of them move in the list — a folder's
-        name is not part of what any conversation is about.
+      description: The inbox cannot be renamed and fails with 409 and code INBOX_READ_ONLY.
       operationId: update-folder
       tags:
         - Folder
-      parameters:
-        - name: folder
-          in: path
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
@@ -103,39 +85,30 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
     delete:
       summary: Delete a folder
-      description:
-        "The conversations inside are **not** deleted. They leave the folder and go back to
-        the ungrouped list, where they can be filed again. Emptying a shelf is not the same as throwing
-        out what was on it, and deleting a conversation is a different request.
-
-
-        Idempotent: deleting a folder that is already gone succeeds and changes nothing."
+      description: |-
+        The conversations inside are not deleted; they move to the end of the inbox. The inbox cannot
+        be deleted and fails with 409 and code INBOX_READ_ONLY. Deleting a folder that is already gone
+        succeeds.
       operationId: delete-folder
       tags:
         - Folder
-      parameters:
-        - name: folder
-          in: path
-          required: true
-          schema:
-            type: string
       responses:
         "204":
           description: No Content
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/folders/{folder}/move:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/FolderId
     post:
-      operationId: move-folder
       summary: Reorder a folder
+      description: |-
+        Places the folder before `beforeFolderId`, or last when it is null. The inbox stays first.
+        Fails with 409 and code ORDER_CHANGED when `expectedVersion` is stale; read the folders again
+        and retry.
+      operationId: move-folder
       tags:
         - Folder
-      parameters:
-        - in: path
-          name: folder
-          required: true
-          schema:
-            type: string
       requestBody:
         required: true
         content:
@@ -151,47 +124,99 @@ paths:
                 $ref: "#/components/schemas/FolderResource"
         default:
           $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/folders/{folder}/threads/{thread}:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/FolderId
+      - $ref: ./openapi.yaml#/components/parameters/ThreadId
+    put:
+      summary: Place a conversation in a folder
+      description: |-
+        Puts the conversation into this folder at the given position, moving it out of the folder it
+        was in. Give `beforeThreadId` or `afterThreadId` to place it next to a conversation of this
+        folder; with neither it goes last. Moving does not change the conversation's activity time.
+
+        Subagents are not filed and fail with 409 and code SUBAGENT_NOT_FILED. Fails with 409 and code
+        ORDER_CHANGED when `expectedVersion` is stale.
+      operationId: place-thread
+      tags:
+        - Folder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlaceThreadRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./threads.yaml#/components/schemas/ThreadResource
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
 components:
   schemas:
     FolderResource:
       type: object
       properties:
-        createdAt:
-          type: string
-          format: date-time
         id:
           type: string
+        type:
+          description: "`inbox` holds the conversations nobody filed. Each caller has one per project."
+          type: string
+          enum:
+            - inbox
+            - custom
         name:
           type: string
-        threadCount:
-          description:
-            How many conversations are filed here and would show up in the default list. Archived
-            and deleted ones are not counted, so this is exactly what `GET /api/v1/threads?folder=<id>`
-            returns.
-          type: integer
-          format: int64
-        updatedAt:
-          type: string
-          format: date-time
+        counts:
+          $ref: "#/components/schemas/FolderCountsResource"
         orderVersion:
           type: integer
           format: int64
           minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
       required:
         - id
+        - type
         - name
-        - threadCount
+        - counts
+        - orderVersion
         - createdAt
         - updatedAt
-        - orderVersion
+      additionalProperties: false
+    FolderCountsResource:
+      description: Unarchived conversations in the folder.
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int64
+          minimum: 0
+        needsAction:
+          type: integer
+          format: int64
+          minimum: 0
+        running:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+        - total
+        - needsAction
+        - running
       additionalProperties: false
     FolderListResponseBody:
       type: object
       properties:
         folders:
-          type:
-            - array
-            - "null"
+          type: array
           items:
             $ref: "#/components/schemas/FolderResource"
       required:
@@ -230,5 +255,24 @@ components:
           minimum: 0
       required:
         - beforeFolderId
+        - expectedVersion
+      additionalProperties: false
+    PlaceThreadRequestBody:
+      type: object
+      properties:
+        beforeThreadId:
+          type:
+            - string
+            - "null"
+        afterThreadId:
+          type:
+            - string
+            - "null"
+        expectedVersion:
+          description: The conversation's `orderVersion`.
+          type: integer
+          format: int64
+          minimum: 0
+      required:
         - expectedVersion
       additionalProperties: false

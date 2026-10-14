@@ -9,7 +9,7 @@ paths:
         can be, and all of them come back at once."
       operationId: list-memories
       tags:
-        - Thread
+        - Memory
       responses:
         "200":
           description: OK
@@ -27,7 +27,7 @@ paths:
         will not carry it. The assistant may well learn the same thing again.
       operationId: delete-memory
       tags:
-        - Thread
+        - Memory
       parameters:
         - name: memory
           in: path

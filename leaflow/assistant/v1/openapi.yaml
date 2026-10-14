@@ -1,49 +1,118 @@
 openapi: 3.2.1
 info:
   title: Leaflow Assistant API
-  version: 1.0.0
+  version: 2.0.0
   description:
-    "Assistant conversations, subagents, background tasks, schedules and uploaded files.
+    "Conversations with agents that operate the Leaflow platform, plus their folders, tasks,
+    files and
+
+    chat-app channels.
 
 
-    Create a thread, send message parts, then follow its document and SSE stream. Subagents use the same
-    turn engine, context compaction and approval controls. Temporal owns execution, waiting, retries and
-    schedule runtime state.
+    A conversation is a thread. A person talks to the main thread; the agent in it can start subagents,
+
+    which are threads too and run on their own: stopping the main thread does not stop them, and each
+
+    subagent tells its parent when it ends. A thread runs in turns; each turn records the model and
+
+    reasoning effort it used and its token usage.
 
 
-    Canopy owns model metadata and reasoning tiers. The frontend reads Canopy directly. Assistant exposes
-    only its selection policy through /api/v1/model-configuration. Model and reasoning changes apply at
-    the next model request boundary; an in-flight request retains its captured settings. New approval
-    batches use the current approval mode, while existing batches retain their reviewer and decisions.
+    Models come from the Canopy catalogue. A new thread uses the model it names, the caller's default
+
+    from /api/v1/settings, or the first catalogue model that can run an agent. Reasoning models take one
+
+    of three efforts — low, medium or high — which are sent to the model unchanged.
 
 
-    Read /api/v1/upload-configuration before creating an upload. Echo the policy ID, total limit and part
-    size in the upload manifest. Stream exact-sized parts, then complete the upload and send its attachment
-    ID. The whole-file default limit is 512 MiB and is configurable; chunking never bypasses it. Cancelled
-    and expired parts are removed. The direct /attachments endpoint remains a convenience route for small
-    files under the HTTP body limit.
+    Read a thread's state with get-thread and its transcript with list-thread-items. Follow both live
+
+    over the WebSocket described under /api/v1/realtime/tickets. Slash commands such as /status and
+
+    /compact are listed by list-commands and work the same in the console and in chat apps.
 
 
-    Images enter model history as file references and are read on demand. Text files can be paged or searched;
-    other binaries can be fetched to an authorized instance for processing. Context compaction retains
-    the latest user message verbatim and checks the resulting request against the target model window.
-    Empty summaries do not replace history.
+    Upload large files with /api/v1/uploads: read /api/v1/upload-configuration first, send exact-sized
 
-
-    Rewinding hides message history from subsequent model requests and invalidates affected compaction
-    checkpoints. It does not undo executed tools or external changes. Original execution records remain
-    available for audit and verification before retrying an operation.
-
-
-    SSE paths and tickets come from the thread document. Resume with the supplied cursor or Last-Event-ID.
-    Waiting for approval or user input does not imply completion; worker replacement resumes unfinished
-    execution without resolving those waits."
+    parts, then complete the upload and send its attachment id in a message."
 servers:
   - url: https://assistant.leaflow.cloud
     description: Threads, messages and tool calls
 security:
   - bearerAuth: []
+tags:
+  - name: Thread
+  - name: Item
+  - name: Turn
+  - name: Command
+  - name: Folder
+  - name: Task
+  - name: Setting
+  - name: Realtime
+  - name: Attachment
+  - name: Upload
+  - name: Memory
+  - name: Skill
+  - name: Channel
 paths:
+  /api/v1/threads:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads
+  /api/v1/threads/{thread}:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}
+  /api/v1/threads/{thread}/interrupt:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1interrupt
+  /api/v1/threads/{thread}/resume:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1resume
+  /api/v1/threads/{thread}/compact:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1compact
+  /api/v1/threads/{thread}/revert:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1revert
+  /api/v1/threads/{thread}/read:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1read
+  /api/v1/threads/{thread}/items:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1items
+  /api/v1/threads/{thread}/messages:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1messages
+  /api/v1/threads/{thread}/approvals:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1approvals
+  /api/v1/threads/{thread}/items/{item}/answer:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1items~1{item}~1answer
+  /api/v1/threads/{thread}/items/{item}/result:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1items~1{item}~1result
+  /api/v1/threads/{thread}/turns:
+    $ref: ./thread-turns.yaml#/paths/~1api~1v1~1threads~1{thread}~1turns
+  /api/v1/commands:
+    $ref: ./commands.yaml#/paths/~1api~1v1~1commands
+  /api/v1/threads/{thread}/commands:
+    $ref: ./commands.yaml#/paths/~1api~1v1~1threads~1{thread}~1commands
+  /api/v1/folders:
+    $ref: ./folders.yaml#/paths/~1api~1v1~1folders
+  /api/v1/folders/{folder}:
+    $ref: ./folders.yaml#/paths/~1api~1v1~1folders~1{folder}
+  /api/v1/folders/{folder}/move:
+    $ref: ./folders.yaml#/paths/~1api~1v1~1folders~1{folder}~1move
+  /api/v1/folders/{folder}/threads/{thread}:
+    $ref: ./folders.yaml#/paths/~1api~1v1~1folders~1{folder}~1threads~1{thread}
+  /api/v1/tasks:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks
+  /api/v1/tasks/{task}:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}
+  /api/v1/tasks/{task}/run:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1run
+  /api/v1/tasks/{task}/pause:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1pause
+  /api/v1/tasks/{task}/resume:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1resume
+  /api/v1/tasks/{task}/cancel:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1cancel
+  /api/v1/tasks/{task}/runs:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1runs
+  /api/v1/settings:
+    $ref: ./settings.yaml#/paths/~1api~1v1~1settings
+  /api/v1/realtime/tickets:
+    $ref: ./realtime.yaml#/paths/~1api~1v1~1realtime~1tickets
+  /api/v1/realtime:
+    $ref: ./realtime.yaml#/paths/~1api~1v1~1realtime
   /api/v1/attachments:
     $ref: ./attachments.yaml#/paths/~1api~1v1~1attachments
   /api/v1/attachments/{attachment}:
@@ -60,6 +129,14 @@ paths:
     $ref: ./attachments.yaml#/paths/~1api~1v1~1uploads~1{upload}~1complete
   /api/v1/uploads/{upload}/parts/{part}:
     $ref: ./attachments.yaml#/paths/~1api~1v1~1uploads~1{upload}~1parts~1{part}
+  /api/v1/memories:
+    $ref: ./memories.yaml#/paths/~1api~1v1~1memories
+  /api/v1/memories/{memory}:
+    $ref: ./memories.yaml#/paths/~1api~1v1~1memories~1{memory}
+  /api/v1/skills:
+    $ref: ./skills.yaml#/paths/~1api~1v1~1skills
+  /api/v1/skills/{skill}:
+    $ref: ./skills.yaml#/paths/~1api~1v1~1skills~1{skill}
   /api/v1/bindings:
     $ref: ./channels.yaml#/paths/~1api~1v1~1bindings
   /api/v1/bindings/{binding}:
@@ -84,79 +161,43 @@ paths:
     $ref: ./channels.yaml#/paths/~1api~1v1~1weixin-logins~1{login}
   /api/v1/weixin-logins/{login}/verify-code:
     $ref: ./channels.yaml#/paths/~1api~1v1~1weixin-logins~1{login}~1verify-code
-  /api/v1/folders:
-    $ref: ./folders.yaml#/paths/~1api~1v1~1folders
-  /api/v1/folders/{folder}:
-    $ref: ./folders.yaml#/paths/~1api~1v1~1folders~1{folder}
-  /api/v1/folders/{folder}/move:
-    $ref: ./folders.yaml#/paths/~1api~1v1~1folders~1{folder}~1move
-  /api/v1/memories:
-    $ref: ./memories.yaml#/paths/~1api~1v1~1memories
-  /api/v1/memories/{memory}:
-    $ref: ./memories.yaml#/paths/~1api~1v1~1memories~1{memory}
-  /api/v1/model-configuration:
-    $ref: ./settings.yaml#/paths/~1api~1v1~1model-configuration
-  /api/v1/skills:
-    $ref: ./skills.yaml#/paths/~1api~1v1~1skills
-  /api/v1/skills/{skill}:
-    $ref: ./skills.yaml#/paths/~1api~1v1~1skills~1{skill}
-  /api/v1/threads/{thread}/tasks:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1threads~1{thread}~1tasks
-  /api/v1/tasks/{task}:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}
-  /api/v1/tasks/{task}/start:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1start
-  /api/v1/tasks/{task}/cancel:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1cancel
-  /api/v1/threads/{thread}/schedules:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1threads~1{thread}~1schedules
-  /api/v1/schedules/{schedule}:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1schedules~1{schedule}
-  /api/v1/schedules/{schedule}/pause:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1schedules~1{schedule}~1pause
-  /api/v1/schedules/{schedule}/resume:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1schedules~1{schedule}~1resume
-  /api/v1/schedules/{schedule}/trigger:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1schedules~1{schedule}~1trigger
-  /api/v1/schedules:
-    $ref: ./tasks.yaml#/paths/~1api~1v1~1schedules
-  /api/v1/dynamic-calls/{call}/result:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1dynamic-calls~1{call}~1result
-  /api/v1/threads:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads
-  /api/v1/threads/{thread}:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}
-  /api/v1/threads/{thread}/approvals/{batch}:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1approvals~1{batch}
-  /api/v1/threads/{thread}/earlier:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1earlier
-  /api/v1/threads/{thread}/interrupt:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1interrupt
-  /api/v1/threads/{thread}/messages:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1messages
-  /api/v1/threads/{thread}/questions/{item}:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1questions~1{item}
-  /api/v1/threads/{thread}/read:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1read
-  /api/v1/threads/{thread}/revert:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1revert
-  /api/v1/threads/{thread}/subagents:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1subagents
-  /api/v1/threads/{thread}/subagents/{subagent}:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1subagents~1{subagent}
-  /api/v1/threads/{thread}/subagents/{subagent}/messages:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1subagents~1{subagent}~1messages
-  /api/v1/threads/{thread}/subagents/{subagent}/interrupt:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1subagents~1{subagent}~1interrupt
-  /api/v1/threads/{thread}/move:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}~1move
 components:
   securitySchemes:
     bearerAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
-  schemas:
-    Error:
-      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  parameters:
+    ThreadId:
+      name: thread
+      in: path
+      required: true
+      description: A thread id. Subagents are threads as well.
+      schema:
+        type: string
+        maxLength: 64
+    ItemId:
+      name: item
+      in: path
+      required: true
+      description: A transcript item id.
+      schema:
+        type: string
+        maxLength: 64
+    FolderId:
+      name: folder
+      in: path
+      required: true
+      description: A folder id.
+      schema:
+        type: string
+        maxLength: 64
+    TaskId:
+      name: task
+      in: path
+      required: true
+      description: A task id.
+      schema:
+        type: string
+        maxLength: 64
   responses:
     Error:
       description: Error
@@ -164,3 +205,98 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    Usage:
+      description: Tokens reported by Canopy. Cache hit rate is cachedInputTokens / inputTokens.
+      type: object
+      properties:
+        inputTokens:
+          description: Prompt tokens, including cached ones.
+          type: integer
+          format: int64
+          minimum: 0
+        cachedInputTokens:
+          description: Prompt tokens read from the provider's cache.
+          type: integer
+          format: int64
+          minimum: 0
+        cacheWriteTokens:
+          description:
+            Prompt tokens written to the provider's cache. Zero for providers that do not report
+            it.
+          type: integer
+          format: int64
+          minimum: 0
+        outputTokens:
+          description: Output tokens, including reasoning.
+          type: integer
+          format: int64
+          minimum: 0
+        reasoningTokens:
+          description: Output tokens spent on reasoning.
+          type: integer
+          format: int64
+          minimum: 0
+        totalTokens:
+          type: integer
+          format: int64
+          minimum: 0
+        requests:
+          description: Model requests made.
+          type: integer
+          format: int64
+          minimum: 0
+        complete:
+          description:
+            False while a request has not reported its usage yet, so the numbers may still
+            grow.
+          type: boolean
+      required:
+        - inputTokens
+        - cachedInputTokens
+        - cacheWriteTokens
+        - outputTokens
+        - reasoningTokens
+        - totalTokens
+        - requests
+        - complete
+      additionalProperties: false
+    ReasoningEffort:
+      description: How much the model reasons before answering. Sent to the model unchanged.
+      type: string
+      enum:
+        - low
+        - medium
+        - high
+    ApprovalMode:
+      description:
+        "`manual` asks a person before tools that change something, `guardian` lets an automatic
+        reviewer decide, `yolo` runs them without asking."
+      type: string
+      enum:
+        - manual
+        - guardian
+        - yolo
+    ThreadStatus:
+      description:
+        What the thread is doing. `waiting` is waiting for subagents or tasks it started; `awaiting_approval`
+        and `awaiting_input` wait for a person.
+      type: string
+      enum:
+        - idle
+        - starting
+        - running
+        - waiting
+        - awaiting_approval
+        - awaiting_input
+    TurnStatus:
+      description: "`declined` ended because a person declined a tool call; `cancelled` was stopped."
+      type: string
+      enum:
+        - running
+        - completed
+        - failed
+        - declined
+        - cancelled

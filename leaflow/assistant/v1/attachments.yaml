@@ -3,7 +3,7 @@ paths:
     post:
       summary: Upload a file
       description:
-        "The body is the file bytes themselves, not multipart, one file per request. The kind
+        "The body is the file bytes themselves, not multipart, one file per request. The type
         is determined from the content, not from Content-Type or from the name. Put the returned id in
         attachmentIds when sending a message.
 
@@ -12,7 +12,7 @@ paths:
         in the response says when this one goes. Sending a message with the id makes it permanent.
 
 
-        The returned `kind` says how the assistant will see it. An `image` is read directly, and only
+        The returned `type` says how the assistant will see it. An `image` is read directly, and only
         by models that accept image input. A small `text` file is placed inline in the message. A large
         `text` file, and anything `binary`, arrives as a reference the assistant reads on demand — for
         a binary that usually means downloading it onto one of the project's cloud instances."
@@ -54,7 +54,7 @@ paths:
         not belong to the current user.
 
 
-        Only an attachment whose `kind` is `image` comes back with its own image type and is usable as
+        Only an attachment whose `type` is `image` comes back with its own image type and is usable as
         the address of an `<img>`. Everything else is served as `application/octet-stream` with `Content-Disposition:
         attachment`, deliberately: an uploaded file is arbitrary bytes under a name its uploader chose,
         and serving it back inline would run it on this origin."
@@ -322,14 +322,14 @@ components:
         filename:
           type: string
         height:
-          description: Null unless kind is image.
+          description: Null unless type is image.
           type:
             - integer
             - "null"
           format: int64
         id:
           type: string
-        kind:
+        type:
           description: "How the assistant will see this file.
 
 
@@ -345,14 +345,14 @@ components:
             - text
             - binary
         width:
-          description: Null unless kind is image.
+          description: Null unless type is image.
           type:
             - integer
             - "null"
           format: int64
       required:
         - id
-        - kind
+        - type
         - filename
         - byteSize
         - width

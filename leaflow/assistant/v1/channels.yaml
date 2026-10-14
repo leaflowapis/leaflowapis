@@ -5,7 +5,7 @@ paths:
       description: Filter by channelId to show, per channel, who is bound to it.
       operationId: list-bindings
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
@@ -41,7 +41,7 @@ paths:
       summary: Get a binding
       operationId: get-binding
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: binding
           in: path
@@ -62,7 +62,7 @@ paths:
       summary: Remove a binding
       operationId: delete-binding
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: binding
           in: path
@@ -80,7 +80,7 @@ paths:
       summary: List channels
       operationId: list-channels
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
@@ -115,7 +115,7 @@ paths:
         platform's own console, and webhookSecret in the response is null.
       operationId: create-channel
       tags:
-        - Onboarding
+        - Channel
       requestBody:
         required: true
         content:
@@ -136,7 +136,7 @@ paths:
       summary: Get a channel
       operationId: get-channel
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: channel
           in: path
@@ -161,7 +161,7 @@ paths:
         applies once that connection is rebuilt; for webhook platforms it applies at once.
       operationId: update-channel
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: channel
           in: path
@@ -191,7 +191,7 @@ paths:
         This operation remains available while the project is suspended or being cleaned up.
       operationId: delete-channel
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: channel
           in: path
@@ -214,7 +214,7 @@ paths:
         directly. Codes expire and have to be reissued.
       operationId: create-binding-code
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: channel
           in: path
@@ -240,7 +240,7 @@ paths:
         reason is that the sender is not bound yet.
       operationId: list-channel-rejections
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: channel
           in: path
@@ -277,7 +277,7 @@ paths:
         you must pass the new secret from that platform's own console.
       operationId: rotate-channel-secret
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: channel
           in: path
@@ -309,7 +309,7 @@ paths:
         depends on what the sender actually wrote."
       operationId: check-sender
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: channel
           in: path
@@ -354,7 +354,7 @@ paths:
         and when the status asks for a verification code, submit it with `POST /v1/weixin-logins/{login}/verify-code`.
       operationId: begin-weixin-login
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: channel
           in: path
@@ -381,7 +381,7 @@ paths:
         and secretSource decides whether there is a webhook secret field at all."
       operationId: list-platforms
       tags:
-        - Onboarding
+        - Channel
       responses:
         "200":
           description: OK
@@ -399,7 +399,7 @@ paths:
         code, submit it with the verification-code operation.
       operationId: get-weixin-login
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: login
           in: path
@@ -424,7 +424,7 @@ paths:
         the login gets that code on their own phone.
       operationId: submit-weixin-verify-code
       tags:
-        - Onboarding
+        - Channel
       parameters:
         - name: login
           in: path
@@ -455,7 +455,7 @@ components:
         channelId:
           type: string
           format: uuid
-        connState:
+        connectionStatus:
           type: string
           enum:
             - logged_out
@@ -489,7 +489,7 @@ components:
         - platform
         - peerName
         - status
-        - connState
+        - connectionStatus
         - verifiedAt
         - createdAt
       additionalProperties: false
@@ -528,7 +528,7 @@ components:
             - "null"
           items:
             type: string
-        connState:
+        connectionStatus:
           description:
             How far this channel is from working. Only `online` receives messages and can issue
             binding codes
@@ -548,7 +548,7 @@ components:
           type: string
         platform:
           type: string
-        runtimeState:
+        runtimeStatus:
           description:
             The state of the long-lived connection right now. Always `stopped` for webhook
             platforms
@@ -585,8 +585,8 @@ components:
         - platform
         - name
         - status
-        - connState
-        - runtimeState
+        - connectionStatus
+        - runtimeStatus
         - senderPolicy
         - allowFrom
         - webhookUrl
@@ -665,7 +665,7 @@ components:
             - "null"
           items:
             type: string
-        connState:
+        connectionStatus:
           description:
             How far this channel is from working. Only `online` receives messages and can issue
             binding codes
@@ -685,7 +685,7 @@ components:
           type: string
         platform:
           type: string
-        runtimeState:
+        runtimeStatus:
           description:
             The state of the long-lived connection right now. Always `stopped` for webhook
             platforms
@@ -731,8 +731,8 @@ components:
         - platform
         - name
         - status
-        - connState
-        - runtimeState
+        - connectionStatus
+        - runtimeStatus
         - senderPolicy
         - allowFrom
         - webhookUrl
