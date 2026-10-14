@@ -182,7 +182,7 @@ paths:
       - $ref: ./openapi.yaml#/components/parameters/TaskId
     get:
       summary: List a task's runs
-      description: Newest first.
+      description: Newest first, without output; read a run with get-task-run for it.
       operationId: list-task-runs
       tags:
         - Task
@@ -196,6 +196,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/TaskRunListResponseBody"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/tasks/{task}/runs/{run}:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/TaskId
+      - name: run
+        in: path
+        required: true
+        description: A task run id.
+        schema:
+          type: string
+          maxLength: 128
+    get:
+      summary: Get a task run
+      description: One run with the end of its output.
+      operationId: get-task-run
+      tags:
+        - Task
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskRunResource"
         default:
           $ref: ./openapi.yaml#/components/responses/Error
 components:
@@ -375,8 +400,10 @@ components:
             - "null"
           format: int64
         output:
-          description: The end of a command's output. Empty for prompts.
-          type: string
+          description: The last 16 KiB of a command's output. Empty for prompts; null in lists, read the run for it.
+          type:
+            - string
+            - "null"
         errorCode:
           description: Why the run failed. Null unless status is failed.
           type:

@@ -109,6 +109,8 @@ paths:
     $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1cancel
   /api/v1/tasks/{task}/runs:
     $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1runs
+  /api/v1/tasks/{task}/runs/{run}:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1runs~1{run}
   /api/v1/settings:
     $ref: ./settings.yaml#/paths/~1api~1v1~1settings
   /api/v1/realtime/tickets:
