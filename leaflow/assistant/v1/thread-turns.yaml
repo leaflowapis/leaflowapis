@@ -8,6 +8,9 @@ paths:
         The conversation's turns, newest first, each with the model and reasoning effort it ran with,
         how long it took and the tokens it used. Cache hit rate is `cachedInputTokens / inputTokens`.
 
+        Each turn names the ordinals it wrote and the message that started it, so a client can draw a
+        timeline from this list and open a turn with list-thread-items `around`.
+
         `ids` reads the turns behind a page of transcript items in one request and cannot be combined
         with a cursor.
       operationId: list-thread-turns
@@ -56,6 +59,23 @@ components:
           $ref: "#/components/schemas/TurnType"
         status:
           $ref: ./openapi.yaml#/components/schemas/TurnStatus
+        firstOrdinal:
+          description: The first item the turn wrote. Null before it has written one.
+          type:
+            - integer
+            - "null"
+          format: int64
+        lastOrdinal:
+          description: The last item the turn wrote so far.
+          type:
+            - integer
+            - "null"
+          format: int64
+        preview:
+          description: The beginning of the message that started the turn. Null for compaction turns and turns started by the assistant itself.
+          type:
+            - string
+            - "null"
         modelId:
           type: string
         reasoningEffort:
@@ -97,6 +117,9 @@ components:
         - threadId
         - type
         - status
+        - firstOrdinal
+        - lastOrdinal
+        - preview
         - modelId
         - reasoningEffort
         - approvalMode

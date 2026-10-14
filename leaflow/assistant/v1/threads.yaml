@@ -39,6 +39,9 @@ paths:
         Subagents are conversations too. They are excluded unless `parentId` or `role` asks for them.
         `ids` reads a bounded batch, including subagents and archived conversations, and cannot be
         combined with a cursor.
+
+        Counts over everything the criteria match cost more than the page itself; ask for them with
+        `include: [counts]`, typically on the first page only.
       operationId: search-threads
       tags:
         - Thread
@@ -563,6 +566,14 @@ components:
           minimum: 1
           maximum: 200
           default: 50
+        include:
+          description: Optional parts of the response. `counts` adds `counts`.
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - counts
       additionalProperties: false
     ThreadListResponseBody:
       type: object
@@ -577,7 +588,10 @@ components:
             - string
             - "null"
         counts:
-          $ref: "#/components/schemas/ThreadCountsResource"
+          description: Null unless `include` asked for it.
+          anyOf:
+            - $ref: "#/components/schemas/ThreadCountsResource"
+            - type: "null"
       required:
         - threads
         - nextCursor

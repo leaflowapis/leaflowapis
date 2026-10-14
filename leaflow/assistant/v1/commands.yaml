@@ -28,8 +28,9 @@ paths:
         The result carries a plain-text `message`, which is what a chat app shows, and structured fields
         for clients that render more, such as `status` for /status.
 
-        Fails with 404 and code COMMAND_NOT_FOUND for an unknown command, and with 422 and code
-        COMMAND_ARGUMENTS_INVALID when the arguments do not fit.
+        /new is carried out by the client, which opens an empty conversation, and fails here with 422
+        and code COMMAND_CLIENT_ONLY. Fails with 404 and code COMMAND_NOT_FOUND for an unknown command,
+        and with 422 and code COMMAND_ARGUMENTS_INVALID when the arguments do not fit.
       operationId: run-command
       tags:
         - Command
@@ -107,7 +108,7 @@ components:
           description: The result as plain text.
           type: string
         thread:
-          description: The conversation after the command, or the new conversation for /new.
+          description: The conversation after the command.
           anyOf:
             - $ref: ./threads.yaml#/components/schemas/ThreadResource
             - type: "null"

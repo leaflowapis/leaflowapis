@@ -5,38 +5,54 @@ paths:
     get:
       summary: List transcript items
       description: |-
-        The conversation's transcript, oldest first: messages, reasoning, tool calls and compaction
-        markers. Without `before` or `after` the latest page is returned.
+        A window of the conversation's transcript, oldest first: messages, reasoning, tool calls and
+        compaction markers. A window holds whole turns, so a turn's messages and tool calls arrive
+        together; a single turn larger than the size limit is split across windows.
 
-        Pass `earlier` from the response as `before` to read further up; null means the top has been
-        reached. `after` returns what was written after an ordinal, which a client uses to catch up
-        after a reconnect. Subscribe to `thread:{id}` on /api/v1/realtime with `streamCursor` to follow
-        what is written next.
+        Without a position the window ends at the latest item. `before` reads the window above an
+        ordinal and `after` the window below it; pass `startOrdinal` and `endOrdinal` from the response.
+        `around` opens a window that contains an ordinal, for jumping to a turn from list-thread-turns or
+        to a search result.
+
+        Long reasoning, tool arguments and tool output are cut to a preview and marked `truncated`; read
+        the item for all of it. Messages are never cut.
+
+        When the window reaches the end, `queued` holds the messages waiting for the assistant and
+        `streamCursor` is set: subscribe to `thread:{id}` on /api/v1/realtime from it to follow what is
+        written next.
       operationId: list-thread-items
       tags:
         - Item
       parameters:
         - name: before
           in: query
-          description: Return items with a smaller ordinal.
+          description: Return the window ending just above this ordinal.
           schema:
             type: integer
             format: int64
             minimum: 0
         - name: after
           in: query
-          description: Return items with a greater ordinal. Cannot be combined with before.
+          description: Return the window starting just below this ordinal.
           schema:
             type: integer
             format: int64
             minimum: 0
-        - name: limit
+        - name: around
           in: query
+          description: Return a window containing this ordinal. Only one of before, after and around may be given.
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: turns
+          in: query
+          description: How many turns a window holds at most.
           schema:
             type: integer
             minimum: 1
-            maximum: 200
-            default: 100
+            maximum: 50
+            default: 10
       responses:
         "200":
           description: OK
@@ -44,6 +60,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ThreadItemListResponseBody"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/threads/{thread}/items/{item}:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/ThreadId
+      - $ref: ./openapi.yaml#/components/parameters/ItemId
+    get:
+      summary: Get a transcript item
+      description: One item in full, including what list-thread-items cut from it.
+      operationId: get-thread-item
+      tags:
+        - Item
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ThreadItemResource"
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/threads/{thread}/messages:
@@ -159,8 +194,10 @@ components:
         id:
           type: string
         ordinal:
-          description: The position in the transcript. Never renumbered.
-          type: integer
+          description: The position in the transcript. Never renumbered. Null for a message waiting in the queue.
+          type:
+            - integer
+            - "null"
           format: int64
         turnId:
           description: The turn that wrote this item. Null for messages waiting in the queue.
@@ -192,22 +229,14 @@ components:
         reverted:
           description: Left out of model requests since a revert. Shown, but marked.
           type: boolean
-        sourceType:
-          description: |-
-            Who wrote an `external_message`: `subagent` for a subagent reporting to its parent,
-            `task` for a task, `channel` for a chat app.
-          type:
-            - string
-            - "null"
-          enum:
-            - subagent
-            - task
-            - channel
-        sourceId:
-          description: The subagent conversation, task or channel the message came from.
-          type:
-            - string
-            - "null"
+        truncated:
+          description: Part of the content was cut from this list; read the item for all of it.
+          type: boolean
+        source:
+          description: Who wrote an `external_message`. Null for other items.
+          anyOf:
+            - $ref: "#/components/schemas/ItemSourceResource"
+            - type: "null"
         modelId:
           description: The Canopy model that produced this item. Null for messages a person or another source sent.
           type:
@@ -216,7 +245,8 @@ components:
         parts:
           description: |-
             The content, in the order it was written. Text arrives as `append` frames on the realtime
-            stream. An attachment belongs where it was written, so render parts in order.
+            stream. An attachment belongs where it was written, so render parts in order. For a tool
+            call these are its output.
           type: array
           items:
             $ref: "#/components/schemas/PartResource"
@@ -231,27 +261,68 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ClientContextPart"
+        toolCall:
+          description: The call, for a `tool_call` item. Null for other items.
+          anyOf:
+            - $ref: "#/components/schemas/ToolCallResource"
+            - type: "null"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - ordinal
+        - turnId
+        - type
+        - status
+        - reverted
+        - truncated
+        - source
+        - modelId
+        - parts
+        - attachments
+        - clientContext
+        - toolCall
+        - createdAt
+      additionalProperties: false
+    ItemSourceResource:
+      type: object
+      properties:
+        type:
+          description: |-
+            `subagent` for a subagent reporting to its parent, `thread` for another of the person's
+            conversations, `task` for a task, `channel` for a chat app.
+          type: string
+          enum:
+            - subagent
+            - thread
+            - task
+            - channel
+        id:
+          description: The conversation, task or channel the message came from.
+          type: string
+      required:
+        - type
+        - id
+      additionalProperties: false
+    ToolCallResource:
+      type: object
+      properties:
         namespace:
-          description: The tool's group, for example `instance`, `platform`, `agent` or `client`.
-          type:
-            - string
-            - "null"
+          description: The tool's group, for example `instance`, `leaflow`, `agent` or `client`. Empty for tools without one.
+          type: string
         tool:
-          type:
-            - string
-            - "null"
+          type: string
         arguments:
-          description: The tool call's arguments as JSON text.
-          type:
-            - string
-            - "null"
+          description: The arguments as JSON text. Cut in lists when long; then it is no longer valid JSON.
+          type: string
         target:
-          description: What the tool call acts on, for display, such as a file path or an instance name.
+          description: What the call acts on, for display, such as a file path or an instance name.
           type:
             - string
             - "null"
         detail:
-          description: A one-line description of what the tool call did.
+          description: A one-line description of what the call did.
           type:
             - string
             - "null"
@@ -266,49 +337,49 @@ components:
           format: int64
         approvalStatus:
           description: |-
-            Whether the tool call needed a decision before it ran. Null for tool calls that need none.
+            Whether the call needed a decision before it ran. Null for calls that need none.
             `auto_approved` was approved by the automatic reviewer.
           type:
             - string
             - "null"
           enum:
             - pending
+            - reviewing
             - approved
-            - declined
             - auto_approved
+            - declined
+            - unreviewed
         approvalReason:
           type:
             - string
             - "null"
+        decidedAt:
+          description: When a person or the reviewer decided the call or answered its questions.
+          type:
+            - string
+            - "null"
+          format: date-time
         questions:
-          description: The questions of an `ask` tool call. Null for other items.
+          description: The questions of an `ask` call. Null for other calls.
           type:
             - array
             - "null"
           items:
             $ref: "#/components/schemas/QuestionResource"
+        answers:
+          description: The answers given so far, by question id. Null for other calls.
+          type:
+            - object
+            - "null"
+          additionalProperties:
+            type: string
         autoAnswerMs:
-          description: How long an `ask` tool call waits before it continues with its default answers. Null when it waits indefinitely.
+          description: How long an `ask` call waits before it continues with its default answers. Null when it waits indefinitely.
           type:
             - integer
             - "null"
           format: int64
-        createdAt:
-          type: string
-          format: date-time
       required:
-        - id
-        - ordinal
-        - turnId
-        - type
-        - status
-        - reverted
-        - sourceType
-        - sourceId
-        - modelId
-        - parts
-        - attachments
-        - clientContext
         - namespace
         - tool
         - arguments
@@ -318,9 +389,10 @@ components:
         - durationMs
         - approvalStatus
         - approvalReason
+        - decidedAt
         - questions
+        - answers
         - autoAnswerMs
-        - createdAt
       additionalProperties: false
     PartResource:
       type: object
@@ -493,20 +565,41 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ThreadItemResource"
-        earlier:
-          description: Pass as `before` to read the page above. Null at the top.
+        startOrdinal:
+          description: The first ordinal of the window; pass as `before` to read the window above. Null when the window is empty.
           type:
             - integer
             - "null"
           format: int64
+        endOrdinal:
+          description: The last ordinal of the window; pass as `after` to read the window below. Null when the window is empty.
+          type:
+            - integer
+            - "null"
+          format: int64
+        hasEarlier:
+          type: boolean
+        hasLater:
+          type: boolean
+        queued:
+          description: Messages waiting for the assistant, in the order they were sent. Empty unless the window reaches the end.
+          type: array
+          items:
+            $ref: "#/components/schemas/ThreadItemResource"
         streamCursor:
-          description: Subscribe to the conversation on /api/v1/realtime from this cursor to receive what is written after this page.
+          description: |-
+            Subscribe to the conversation on /api/v1/realtime from this cursor to receive what is
+            written after this window. Null unless the window reaches the end.
           type:
             - string
             - "null"
       required:
         - items
-        - earlier
+        - startOrdinal
+        - endOrdinal
+        - hasEarlier
+        - hasLater
+        - queued
         - streamCursor
       additionalProperties: false
     SendMessageRequestBody:
