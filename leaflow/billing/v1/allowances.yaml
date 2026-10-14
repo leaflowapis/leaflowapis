@@ -2,14 +2,7 @@ paths:
   /api/v1/allowances:
     get:
       summary: List allowances
-      description: |-
-        Lists remaining usage quantities, such as bytes, seconds or tokens. Applicable allowances are
-        consumed before usage is charged. Lower priority values are consumed first, followed by earlier
-        expiry and earlier issuance.
-
-        Unused quantity expires without a refund or carry-over. Promotional allowances apply to usage paid
-        by their holding account. Included allowances apply only to the associated subscription, including
-        after its project moves to another billing account.
+      description: 'Remaining usage quantities, such as bytes, seconds or tokens. Applicable allowances are consumed before usage is charged: lower priority values first, then earlier expiry, then earlier issuance. Unused quantity expires without refund or carry-over. Promotional allowances apply to usage paid by their holding account; included allowances apply only to their subscription, also after its project moves to another billing account.'
       operationId: list-allowances
       tags:
       - allowances
@@ -74,7 +67,7 @@ components:
           description: The unit it is counted in, such as `MiB`.
           type: string
         category:
-          description: Whether the quantity was paid for or granted free of charge. Both are consumed the same way.
+          description: Whether the quantity was paid for or granted free; both are consumed the same way.
           type: string
           enum:
           - paid
@@ -95,9 +88,7 @@ components:
           description: How much is left.
           type: string
         priority:
-          description: |-
-            Lower values are consumed first. At equal priority, earlier expiry and then earlier issuance take
-            precedence.
+          description: Lower values are consumed first; at equal priority, earlier expiry and then earlier issuance.
           type: integer
         status:
           type: string
@@ -110,9 +101,7 @@ components:
           type: string
           format: date-time
         valid_until:
-          description: |-
-            When it lapses. Anything unused at that point is lost; it is not refunded and does
-            not carry over. Absent when it does not expire on its own.
+          description: When the allowance lapses; unused quantity is lost. Absent when it does not expire.
           type:
           - string
           - 'null'

@@ -9,9 +9,7 @@ paths:
         format: uuid
     get:
       summary: Get a sellable item
-      description: |-
-        Resolves a stored identifier into something that can be displayed. Returns items that are
-        no longer on sale: an existing purchase still refers to one.
+      description: A plan, including one no longer on sale.
       operationId: get-plan
       tags:
       - plans
@@ -43,7 +41,7 @@ paths:
         $ref: ./products.yaml#/components/schemas/ProductID
     get:
       summary: List catalog plans
-      description: Paginated active plans for the required product_id, with their feature allocations. An unknown product returns 404; If-None-Match can return 304 for an unchanged page.
+      description: Active plans of product_id with their features. An unknown product returns 404; If-None-Match returns 304 for an unchanged page.
       operationId: list-plans
       tags:
       - plans
@@ -57,9 +55,7 @@ paths:
           description: OK
           headers:
             ETag:
-              description: |-
-                Changes whenever the catalogue changes. Send it back as `If-None-Match`
-                to be told `304` instead of receiving the same listing again.
+              description: Changes whenever the catalogue changes. Send it as `If-None-Match` to receive `304` for an unchanged response.
               schema:
                 type: string
           content:

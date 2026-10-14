@@ -20,10 +20,7 @@ paths:
       - name: order_id
         in: query
         required: false
-        description: |-
-          Only the refunds that belong to this order: those of its invoice, such as the refund of a
-          purchase that could not be delivered, and those it caused on an earlier invoice, such as
-          the difference returned after a downgrade.
+        description: 'Refunds of this order: those of its invoice, such as for an undeliverable purchase, and those it caused on an earlier invoice, such as a downgrade difference.'
         schema:
           type: string
           format: uuid
@@ -48,7 +45,7 @@ components:
           type: string
           format: uuid
         transactions:
-          description: Original funds-return split and each result. Unknown gateway results remain pending.
+          description: The refund split by original payment source, with each result. Unknown gateway results stay pending.
           type: array
           items:
             $ref: ./transactions.yaml#/components/schemas/Transaction
@@ -64,9 +61,7 @@ components:
           - 'null'
           format: uuid
         order_id:
-          description: |-
-            The order the refund belongs to: the order that caused it, such as a downgrade, otherwise
-            the order of the refunded invoice. Null for refunds of top-ups and of usage invoices.
+          description: 'The order the refund belongs to: the order that caused it, such as a downgrade, otherwise the order of the refunded invoice. Null for refunds of top-ups and usage invoices.'
           type:
           - string
           - 'null'
@@ -94,7 +89,7 @@ components:
         currency:
           type: string
         destination:
-          description: Use balance_amount, credit_amount and gateway_amount, which also show a refund split between several destinations.
+          description: Use balance_amount, credit_amount and gateway_amount, which also show a refund split between destinations.
           type: string
           enum:
           - balance
@@ -140,22 +135,19 @@ components:
       - transactions
     RefundReason:
       description: |-
-        Why the refund was made. Clients map the code to their own wording. More codes may be added;
-        treat an unknown code as a refund without a stated reason.
+        Why the refund was made. New codes may be added; treat an unknown code as unspecified.
 
         - `provisioning_failed`: the purchase could not be delivered.
-        - `order_expired`: the order expired after part of it had been paid.
-        - `order_canceled`: the account holder canceled the order after part of it had been paid.
-        - `change_canceled`: a scheduled change was withdrawn after part of it had been paid.
-        - `change_expired`: a scheduled change could not take effect before its time passed.
-        - `subscription_canceled`: the subscription was canceled and its unused value returned under
-          its refund terms.
-        - `future_period_canceled`: a renewal that had not started yet was withdrawn.
-        - `downgrade_difference`: after a downgrade, the remaining value of what was paid, valued as refund
-          policy `prorated` describes, minus the new configuration's cost for the remaining time at the
-          change item's `refund_monthly_amount` and `refund_hourly_amount`. Nothing is refunded when that is
-          zero or less.
-        - `usage_true_up`: usage priced again over the whole month cost less than was charged.
+        - `order_expired`: the order expired after part of it was paid.
+        - `order_canceled`: the order was canceled after part of it was paid.
+        - `change_canceled`: a scheduled change was withdrawn after part of it was paid.
+        - `change_expired`: a scheduled change could not take effect in time.
+        - `subscription_canceled`: the unused value of a canceled subscription, under its refund terms.
+        - `future_period_canceled`: a renewal that had not started was withdrawn.
+        - `downgrade_difference`: after a downgrade, the remaining paid value, valued as refund policy `prorated`
+          describes, minus the new configuration's cost for the remaining time at the change item's
+          `refund_monthly_amount` and `refund_hourly_amount`.
+        - `usage_true_up`: usage priced over the whole month cost less than was charged.
         - `payment_not_applied`: a payment arrived after its invoice could no longer be paid.
         - `operator`: made by the platform operator.
       type: string

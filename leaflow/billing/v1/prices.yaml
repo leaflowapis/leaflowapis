@@ -28,14 +28,7 @@ paths:
   /api/v1/prices:
     get:
       summary: List what is on sale, with prices
-      description: |-
-        Every sellable thing and what it costs, in one request. A plan appears once per price.
-
-        `currency` is required: a plan has a price in each currency it is sold in, so "what does
-        this cost" has no answer without one.
-
-        Archived prices are left out. Existing subscriptions keep the terms they were bought at, so
-        this is not the place to look up what an existing purchase is paying.
+      description: Every active price in the currency, one entry per plan and price. Archived prices are not listed; existing subscriptions keep the terms they were bought at.
       operationId: list-prices
       tags:
       - prices
@@ -95,7 +88,7 @@ paths:
         format: uuid
     get:
       summary: Get a price
-      description: Returns the catalog price, including archived prices. Fixed purchase history and renewal agreements are shown on orders and subscriptions rather than reconstructed from today's catalog.
+      description: A catalog price, archived prices included. The terms of past purchases are on their orders and subscriptions.
       operationId: get-price
       tags:
       - prices
@@ -123,9 +116,7 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/PlanId
     get:
       summary: List catalog prices
-      description: |-
-        Public list prices only. An account holding a negotiated agreement may be charged less;
-        it is never charged more.
+      description: Public list prices. An account with a negotiated agreement may be charged less, never more.
       operationId: list-prices-by-plan
       tags:
       - prices
@@ -144,9 +135,7 @@ paths:
           description: OK
           headers:
             ETag:
-              description: |-
-                Changes whenever the catalogue changes. Send it back as `If-None-Match`
-                to be told `304` instead of receiving the same listing again.
+              description: Changes whenever the catalogue changes. Send it as `If-None-Match` to receive `304` for an unchanged response.
               schema:
                 type: string
           content:
@@ -162,9 +151,7 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/RateCardId
     get:
       summary: List catalog rates
-      description: |-
-        Only public price lists are readable here. A list written for a single agreement is not,
-        and its identifier cannot be used to reach it.
+      description: Rules of a public rate card; contract cards are not readable here.
       operationId: list-rates
       tags:
       - prices
@@ -183,7 +170,7 @@ paths:
       - name: at
         in: query
         required: false
-        description: Return the rates in effect at this moment. Defaults to now.
+        description: Rates in effect at this moment; defaults to now.
         schema:
           type: string
           format: date-time
@@ -192,9 +179,7 @@ paths:
           description: OK
           headers:
             ETag:
-              description: |-
-                Changes whenever the catalogue changes. Send it back as `If-None-Match`
-                to be told `304` instead of receiving the same listing again.
+              description: Changes whenever the catalogue changes. Send it as `If-None-Match` to receive `304` for an unchanged response.
               schema:
                 type: string
           content:
@@ -228,23 +213,13 @@ components:
       - per_unit
       - tiered
     TerminationPolicy:
-      description: Whether a fulfilled purchase may end immediately or only after its paid term. Does not grant a refund. When absent, the terms are not configured and termination requires review.
+      description: Whether a delivered purchase may end immediately or only at the end of its paid term; refunds follow the refund policy. When absent, no termination terms were agreed.
       type: string
       enum:
       - immediate
       - period_end
     RefundPolicy:
-      description: |-
-        none refunds nothing. prorated refunds the amount paid for the current period minus the value of
-        the time used, never below zero and never more than what remains unrefunded. The time used runs
-        from the period start to the effective cancellation time and is valued at the plan's
-        shorter-period prices in the same currency, frozen at purchase as the order item's
-        refund_monthly_amount and refund_hourly_amount: each full calendar month at the one-month licensed
-        price, the remainder at the metered hourly price or, without one, at the one-month price by the
-        second. When the plan has no licensed period shorter than the one bought, the time used is valued
-        at the price paid, pro rata by the second. Discounts are not refunded, as they were never paid,
-        and setup fees are excluded. The refunded part returns to the payment sources it came from. Tax
-        paid is refunded in the same proportion as the amount it was paid on.
+      description: '`none` refunds nothing. `prorated` refunds the amount paid for the current period minus the value of the time used, never below zero or above what remains unrefunded. Time used runs from the period start to the effective cancellation and is valued at prices frozen on the order item: each full calendar month at `refund_monthly_amount`, the rest at `refund_hourly_amount` or, without it, at the monthly price by the second. When the plan has no licensed period shorter than the one bought, time used is valued pro rata at the price paid. Discounts and setup fees are not refunded. Refunds return to the original payment sources, with tax refunded in proportion.'
       type: string
       enum:
       - none
@@ -275,9 +250,7 @@ components:
         currency:
           type: string
         current:
-          description: |-
-            The term this item already bills at. Renewing for it uses the price bought
-            originally, so a later price change does not affect it.
+          description: The term the subscription renews at now; renewing for it keeps the agreed price.
           type: boolean
       required:
       - price_id
@@ -297,7 +270,7 @@ components:
       - items
       - pagination
     PriceOption:
-      description: A price's display terms, including archived prices referenced by an applicability list.
+      description: A price's display terms, including archived prices referenced by an applicability.
       type: object
       properties:
         product:
@@ -393,11 +366,7 @@ components:
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         tiers_mode:
-          description: |-
-            `none` for a price that is not tiered, which is most of them.
-
-            Otherwise `graduated` charges each band at its own rate, and `volume` charges
-            everything at the rate of the band the total falls in.
+          description: 'How a ladder is walked: `graduated` charges each band at its own rate, `volume` charges everything at the rate of the band the total falls in. `none` when not tiered.'
           type: string
           enum:
           - none
@@ -416,9 +385,7 @@ components:
           description: The smallest quantity that can be bought. Absent means no lower bound.
           type: string
         max_quantity:
-          description: |-
-            The largest purchasable quantity. Omitted when no maximum applies. A quantity above this limit is
-            rejected with BILLING_PRICE_INVALID and field=max_quantity.
+          description: The largest quantity that may be bought; absent when there is no limit. A larger quantity is refused with `BILLING_PRICE_INVALID` and `field` `max_quantity`.
           type: string
         quantity_step:
           description: Quantities must be a multiple of this. Absent means any quantity within the bounds.
@@ -464,10 +431,10 @@ components:
         meter:
           $ref: ./openapi.yaml#/components/schemas/ObjectIdentity
         unit:
-          description: The unit readings arrive in, such as `core-second`.
+          description: The unit readings are reported in, such as `core-second`.
           type: string
         dimensions:
-          description: The attributes this rate applies to, such as region and machine type.
+          description: The dimension values this rate applies to, such as region and machine type.
           type: object
           additionalProperties:
             type: string
@@ -506,9 +473,7 @@ components:
           items:
             $ref: '#/components/schemas/Tier'
         unit_quantity:
-          description: |-
-            How many measured units one amount covers. An hourly rate on a per-second meter is
-            `"3600"`.
+          description: How many measured units one amount covers; an hourly rate on a per-second meter is `"3600"`.
           type: string
         currency:
           type: string
@@ -545,7 +510,7 @@ components:
       type: object
       properties:
         up_to:
-          description: The upper bound of this band. Null on the last band, which has no bound.
+          description: The band's inclusive upper bound; null for the last band.
           type:
           - string
           - 'null'

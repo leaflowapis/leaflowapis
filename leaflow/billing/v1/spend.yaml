@@ -17,13 +17,7 @@ paths:
       - name: group_by
         in: query
         required: false
-        description: |-
-          `plan` groups by the plan of the price each charge was priced with, which stays the same after the
-          subscription changes plan. `resource` groups by the resource each charge names. Items billed under their own
-          identifier — a disk, a public address — appear as their own rows rather than under
-          the machine they are attached to, since the relationship between them is known to
-          the owning service and not here. `meter` groups by meter and by the values of its presentation dimensions,
-          such as the model and token kind, and gives the quantity used.
+        description: '`plan` groups by the plan of the price each charge was priced with, unchanged after the subscription changes plan. `resource` groups by the resource each charge names; a disk or an address billed under its own identifier is its own row. `meter` groups by meter and the values of its presentation dimensions, such as the model and token kind, and includes the quantity used.'
         schema:
           type: string
           enum:
@@ -43,7 +37,7 @@ paths:
       - name: billing_account_id
         in: query
         required: true
-        description: The authorized billing account whose currency and charges are used for this report.
+        description: The billing account whose currency and charges the report uses; it must be authorized.
         schema:
           type: integer
           format: int64
@@ -102,7 +96,7 @@ components:
           items:
             $ref: '#/components/schemas/SpendRow'
         total:
-          description: The sum over the whole period, not only the page returned.
+          description: The total over all matching groups, not only the page returned.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         currency:

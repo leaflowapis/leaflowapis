@@ -2,7 +2,7 @@ paths:
   /api/v1/withdrawals:
     get:
       summary: List withdrawals
-      description: Paginated account withdrawal history, newest first. Account authorization applies to every record.
+      description: Withdrawals, newest first.
       operationId: list-withdrawals
       tags:
       - withdrawals
@@ -25,7 +25,7 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
     post:
       summary: Create withdrawal
-      description: Withdraws the requested account balance through the original top-ups in receipt order. Fees are calculated independently per source. expected_items and expected_refund_amount must match the accepted preview. Reusing the same ID with different terms fails. Only successful items collect a fee.
+      description: Withdraws the requested balance through the original top-ups, oldest first, with fees calculated per source. expected_items and expected_refund_amount must match the preview. Reusing the ID with different terms fails. Only successful items are charged a fee.
       operationId: create-withdrawal
       tags:
       - withdrawals
@@ -47,7 +47,7 @@ paths:
   /api/v1/withdrawals/preview:
     query:
       summary: Preview withdrawal
-      description: Previews the available balance deduction, fees and exact refund allocation by original source. Omit amount to preview all available principal. Creates no withdrawal and reserves no funds. Fails if a selected source has no configured refund route or its original processing cost is not yet available.
+      description: Previews the balance deduction, fees and refund split by original top-up. Omit amount to preview all available balance. Nothing is created or reserved. Fails when a selected source has no refund route or its original processing cost is not yet known.
       operationId: preview-withdrawal
       tags:
       - withdrawals
@@ -76,7 +76,7 @@ paths:
         format: uuid
     get:
       summary: Get withdrawal
-      description: Reads the accepted amounts and aggregate outcome of an authorized withdrawal. List its source items for each original-method refund result.
+      description: A withdrawal with its accepted amounts and overall outcome; list its items for each refund result.
       operationId: get-withdrawal
       tags:
       - withdrawals
@@ -99,7 +99,7 @@ paths:
         format: uuid
     get:
       summary: List withdrawal items
-      description: Paginated fixed source allocations and their outcomes. A failed source does not undo refunds already completed through other sources.
+      description: The withdrawal's items and their outcomes. A failed item does not undo refunds completed through other items.
       operationId: list-withdrawal-items
       tags:
       - withdrawals
@@ -139,7 +139,7 @@ components:
       - refund_amount
       additionalProperties: false
     WithdrawalItem:
-      description: The fixed principal deduction, withdrawal fee and exact refund obligation for one original top-up. Each item has its own refund; payment_gateway and method_type identify the original route.
+      description: 'For one original top-up: the principal deducted, the withdrawal fee and the amount refunded, through its own refund. payment_gateway and method_type identify the original route.'
       type: object
       properties:
         source_transaction_id:
@@ -190,7 +190,7 @@ components:
         source:
           $ref: '#/components/schemas/WithdrawalSource'
         failure_code:
-          description: The original gateway failure code when a refund failed, or refund_reversed when a completed refund was reversed. Absent while pending or successful.
+          description: The gateway's failure code when a refund failed, or `refund_reversed` when a completed refund was reversed. Absent while pending or successful.
           type: string
       required:
       - source_transaction_id
@@ -208,7 +208,7 @@ components:
       - source
       additionalProperties: false
     Withdrawal:
-      description: An account withdrawal to the original payment methods of its unused top-ups. Accepted amounts are fixed. deducted_amount, settled_amount and charged_fee_amount report completed source items. Failed items release their principal and fee reservations; successful items are retained when another source fails.
+      description: A withdrawal of account balance to the original payment methods of its unused top-ups. Accepted amounts are fixed. deducted_amount, settled_amount and charged_fee_amount cover completed items. A failed item releases its principal and fee; successful items stand when another item fails.
       type: object
       properties:
         id:
@@ -255,7 +255,7 @@ components:
           type: string
           format: date-time
         created_by:
-          description: Identity that submitted this withdrawal. It can differ from the billing account owner.
+          description: Who submitted the withdrawal; may differ from the account owner.
           type: string
       required:
       - id
@@ -373,7 +373,7 @@ components:
       - pagination
       additionalProperties: false
     WithdrawalSource:
-      description: The original top-up and its refund destination. Card details are included when the original payment method was saved; missing card details do not change the original refund route.
+      description: The original top-up and where its refund goes. Card details are included when the original payment method was saved.
       type: object
       properties:
         amount:

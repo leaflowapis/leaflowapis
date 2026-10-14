@@ -9,7 +9,7 @@ paths:
         format: int64
     get:
       summary: List contacts
-      description: Paginated contact profiles belonging to the billing account in the path, including inactive contacts. Returns 404 if the account does not exist.
+      description: Contacts of the billing account, inactive ones included. Returns 404 if the account does not exist.
       operationId: list-contacts
       tags:
       - accounts
@@ -27,7 +27,7 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
     post:
       summary: Create contact
-      description: Creates a contact profile for the billing account in the path. Creating a contact does not select it for invoicing; set the account invoice_contact_id separately.
+      description: Creates a contact for the billing account. To use it on invoices, set the account's invoice_contact_id.
       operationId: create-contact
       tags:
       - accounts
@@ -57,7 +57,7 @@ paths:
         format: uuid
     get:
       summary: Get contact
-      description: Returns a contact belonging to this billing account. Returns 404 if the contact does not exist in this account.
+      description: A contact of this billing account. Returns 404 if it does not exist in the account.
       operationId: get-contact
       tags:
       - accounts
@@ -72,7 +72,7 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
     patch:
       summary: Update contact
-      description: Updates a contact belonging to this billing account. Returns 404 if the contact does not exist in this account.
+      description: Updates a contact of this billing account. Returns 404 if it does not exist in the account.
       operationId: update-contact
       tags:
       - accounts
@@ -93,7 +93,7 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
     delete:
       summary: Delete contact
-      description: Deletes a contact belonging to this billing account. Returns 404 if the contact does not exist in this account. The selected invoice contact must be cleared or replaced before deletion. Issued invoice snapshots are retained.
+      description: Deletes a contact of this billing account; 404 if it does not exist in the account. A contact selected for invoices must be cleared or replaced first. Issued invoices keep their copy.
       operationId: delete-contact
       tags:
       - accounts
@@ -105,7 +105,7 @@ paths:
 components:
   schemas:
     Contact:
-      description: A billing-account contact profile with one address. An account can hold multiple contacts; this is not a login identity.
+      description: A contact of a billing account with one address. An account can hold several; a contact is not a login.
       type: object
       properties:
         id:
@@ -146,10 +146,7 @@ components:
           type: string
           pattern: ^([A-Z]{2})?$
         tax_exempt:
-          description: |-
-            How tax applies to the customer, as in Stripe. `none` taxes normally. `exempt` charges no tax.
-            `reverse` charges no tax and leaves it to the customer under the reverse-charge mechanism;
-            invoices state this. Only operators change it.
+          description: 'How tax applies to the customer, as in Stripe: `none` taxes normally, `exempt` charges no tax, `reverse` charges no tax under the reverse-charge mechanism, stated on invoices. Only operators change it.'
           type: string
           enum:
           - none

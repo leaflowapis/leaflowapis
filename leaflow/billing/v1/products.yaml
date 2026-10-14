@@ -2,7 +2,7 @@ paths:
   /api/v1/products:
     get:
       summary: List catalog products
-      description: Paginated registered catalog products with their service identities and descriptions. Supports If- None-Match and returns 304 when the selected page has not changed.
+      description: Registered products. If-None-Match returns 304 for an unchanged page.
       operationId: list-products
       tags:
       - products
@@ -16,9 +16,7 @@ paths:
           description: OK
           headers:
             ETag:
-              description: |-
-                Changes whenever the catalogue changes. Send it back as `If-None-Match`
-                to be told `304` instead of receiving the same listing again.
+              description: Changes whenever the catalogue changes. Send it as `If-None-Match` to receive `304` for an unchanged response.
               schema:
                 type: string
           content:
@@ -38,9 +36,7 @@ paths:
         $ref: '#/components/schemas/ProductID'
     get:
       summary: Get a service
-      description: |-
-        Resolves an identifier that was stored elsewhere — on an order line, an invoice line, or
-        the terms of a credit — into something that can be displayed.
+      description: A product by its ID.
       operationId: get-product
       tags:
       - products
@@ -78,7 +74,7 @@ components:
       - id
       - name
     ProductID:
-      description: Immutable platform service identifier, such as compute, canopy or assistant.
+      description: The platform service's fixed identifier, such as compute, canopy or assistant.
       type: string
       minLength: 1
       maxLength: 64

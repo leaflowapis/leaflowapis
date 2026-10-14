@@ -2,14 +2,7 @@ paths:
   /api/v1/entitlements:
     get:
       summary: List entitlements
-      description: |-
-        Capabilities that come with what has been bought. A capability that is not held simply
-        does not appear, so that "this does not exist" and "this has not been bought" cannot be
-        confused.
-
-        Derived from live subscriptions and active feature grants rather than stored, so this always
-        agrees with what is being paid for and granted. It stops being listed as soon as the
-        subscription or grant providing it ends.
+      description: Capabilities granted by live subscriptions and active feature grants. A capability not held is not listed, and one stops being listed when the subscription or grant providing it ends.
       operationId: list-entitlements
       tags:
       - entitlements
@@ -35,10 +28,7 @@ paths:
   /api/v1/feature-grants:
     get:
       summary: List feature grants
-      description: |-
-        Access to features held by a billing account for a period, for example through a membership. While a grant
-        is active, every project whose current billing account holds it has the feature, in addition to the
-        features of its own subscriptions.
+      description: Features held by a billing account for a period, for example through a membership. While a grant is active, every project whose current billing account holds it has the feature, in addition to its subscriptions' features.
       operationId: list-feature-grants
       tags:
       - entitlements
@@ -136,9 +126,7 @@ components:
         enabled:
           type: boolean
         expires_at:
-          description: |-
-            When the subscription providing it ends. Absent for a metered subscription, which
-            has no end date.
+          description: When the providing subscription ends. Absent for a metered subscription.
           type:
           - string
           - 'null'

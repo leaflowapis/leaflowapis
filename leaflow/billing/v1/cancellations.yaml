@@ -2,7 +2,7 @@ paths:
   /api/v1/cancellations:
     get:
       summary: List cancellations
-      description: Newest first. Filter by `subscription_id` and `status=open` to find the cancellation now under way for a subscription.
+      description: Newest first. Filter by `subscription_id` and `status=open` to find a subscription's cancellation in progress.
       operationId: list-cancellations
       tags:
       - cancellations
@@ -44,46 +44,36 @@ paths:
     post:
       summary: Cancel subscriptions
       description: |-
-        Ends a set of subscriptions of one service together, at one time. Deleting a resource that a
-        subscription pays for is an `immediate` cancellation of every subscription released with it,
-        such as a server with the disks deleted along with it, or an address with its bandwidth.
+        Ends subscriptions of one service together. Deleting a resource is an `immediate` cancellation of every
+        subscription released with it, such as a server with its disks or an address with its bandwidth.
 
-        The service that provides the resources releases them: at once for `immediate`, or at
-        `scheduled_at`, the end of the paid term, for `period_end`. When release is confirmed, the
-        unused value is returned the way it was paid, under the refund terms agreed when each
-        subscription was bought. For `immediate` the refund is computed as of `proration_date`, so the
-        amount confirmed here is the amount returned: licensed service used while the resources are
-        being released is not deducted from it. Usage of a metered subscription is charged until its
-        resources are released, as usual.
+        The owning service releases the resources at once for `immediate`, or at `scheduled_at`, the end of the paid
+        term, for `period_end`. When release is confirmed, the unused value is returned to the original payment
+        sources under each subscription's refund terms. For `immediate` the refund is computed as of `proration_date`
+        and is not reduced by service used during release. Metered usage is charged until release.
 
-        `mode` must be allowed for every subscription. Metered and one-time subscriptions end only
-        `immediate`. A licensed subscription ends `period_end` while its paid term lasts, and
-        `immediate` unless its termination terms allow only the end of the paid term and that term has
-        not ended yet. For `period_end` the paid terms of all the subscriptions must end at the same
+        `mode` must be allowed for every subscription. Metered and one-time subscriptions end only `immediate`. A
+        licensed subscription ends `period_end` while its paid term lasts, and `immediate` unless its terms allow only
+        the end of the paid term and that term has not ended. For `period_end` all paid terms must end at the same
         time.
 
         Refused with:
-        - 400 `BILLING_CANCELLATION_INVALID` when `subscription_ids` or `proration_date` is not
-          acceptable (`meta.field`), or the subscriptions do not all belong to one service, project,
-          account and currency;
-        - 409 `BILLING_CANCELLATION_CONFLICT` when a subscription has not started or has ended;
-        - 422 `BILLING_CANCELLATION_MODE_FIXED` when `mode` is not allowed for a subscription, and
-          `BILLING_CANCELLATION_TERMS_UNSET` when a licensed subscription has no termination terms;
-          both carry `meta.subscription_id`;
-        - 409 `BILLING_CANCELLATION_SCHEDULES_DIFFER` when, for `period_end`, the paid terms end at
-          different times;
-        - 409 `BILLING_SUBSCRIPTION_OPERATION_PENDING` when a subscription is already being canceled
-          (`meta.cancellation_id`) or reclaimed (`meta.reason` `reclaim_requested`), or has a paid
-          change still waiting to switch (`meta.order_id`);
-        - 409 `BILLING_ORDER_PAYMENT_IN_FLIGHT` while an online payment for a renewal of one of them
-          is in progress;
-        - 409 `BILLING_CANCELLATION_REFUND_CHANGED` when the refund is no longer
-          `expected_refundable_amount`; quote again.
 
-        Sending the same request again, for the same subscriptions, mode and amount while that
-        cancellation is still open, returns it with 200 rather than creating another. Renewal orders
-        still waiting for payment are canceled along with it, and automatic renewal is turned off for
-        every subscription in the set, for `period_end` as well as `immediate`.
+        - 400 `BILLING_CANCELLATION_INVALID` when `subscription_ids` or `proration_date` is invalid (`meta.field`), or
+          the subscriptions do not share one service, project, account and currency;
+        - 409 `BILLING_CANCELLATION_CONFLICT` when a subscription has not started or has ended;
+        - 422 `BILLING_CANCELLATION_MODE_FIXED` when `mode` is not allowed, and `BILLING_CANCELLATION_TERMS_UNSET`
+          when a licensed subscription has no termination terms, both with `meta.subscription_id`;
+        - 409 `BILLING_CANCELLATION_SCHEDULES_DIFFER` when, for `period_end`, the paid terms end at different times;
+        - 409 `BILLING_SUBSCRIPTION_OPERATION_PENDING` when a subscription is already being canceled
+          (`meta.cancellation_id`) or reclaimed (`meta.reason` `reclaim_requested`), or has a paid change waiting to
+          switch (`meta.order_id`);
+        - 409 `BILLING_ORDER_PAYMENT_IN_FLIGHT` while an online renewal payment for one of them is in progress;
+        - 409 `BILLING_CANCELLATION_REFUND_CHANGED` when the refund no longer equals `expected_refundable_amount`.
+
+        Repeating the request for the same subscriptions, mode and amount while the cancellation is open returns it
+        with 200. Unpaid renewal orders are canceled with it, and automatic renewal is turned off for every
+        subscription.
       operationId: create-cancellation
       tags:
       - cancellations
@@ -113,7 +103,7 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/CancellationId
     get:
       summary: Get a cancellation
-      description: Returns a cancellation for an authorized billing account with its schedule, expected refundable amount and individual subscription outcomes. Read individual item states for per-subscription outcomes, including partial success.
+      description: A cancellation of your billing account with its schedule, expected refundable amount and the outcome for each subscription, including partial success.
       operationId: get-cancellation
       tags:
       - cancellations
@@ -131,12 +121,7 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/CancellationId
     post:
       summary: Withdraw a cancellation
-      description: |-
-        Withdraws the whole cancellation while none of its resources has begun to be released; the
-        subscriptions continue as before, except that automatic renewal, turned off when the
-        cancellation was created, stays off until it is turned on again. After that it is refused with
-        409 `BILLING_CANCELLATION_CONFLICT`. Withdrawing one that is already withdrawn returns it
-        unchanged.
+      description: Withdraws the whole cancellation while no resource has begun to be released; afterwards it is refused with 409 `BILLING_CANCELLATION_CONFLICT`. The subscriptions continue, but automatic renewal, turned off when the cancellation was created, stays off until it is turned on again. Withdrawing a withdrawn cancellation returns it unchanged.
       operationId: withdraw-cancellation
       tags:
       - cancellations
@@ -166,19 +151,17 @@ components:
         mode:
           $ref: ./prices.yaml#/components/schemas/TerminationPolicy
         proration_date:
-          description: |-
-            For `immediate`, the `proration_date` of the quote: a whole second, not in the future and
-            at most ten minutes old. The refund is computed as of it. Now when omitted.
+          description: 'For `immediate`, the quote''s `proration_date`: a whole second, not in the future and at most ten minutes old; the refund is computed as of it. Now when omitted.'
           type: string
           format: date-time
         expected_refundable_amount:
-          description: The `refundable_amount` of the quote. The cancellation is refused when the refund differs.
+          description: The quote's `refundable_amount`; the cancellation is refused when the refund differs.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
           - type: string
             pattern: ^[0-9]{1,15}([.][0-9]{1,10})?$
         reason:
-          description: A note from the account holder. It is kept with the cancellation and not shown elsewhere.
+          description: A note from the account holder, kept with the cancellation.
           type: string
           maxLength: 1024
       required:
@@ -221,28 +204,24 @@ components:
           type: string
           format: date-time
         origin:
-          description: Who asked for it. `project_deletion` means the project was deleted.
+          description: Who requested it; `project_deletion` means the project was deleted.
           type: string
           enum:
           - customer
           - operator
           - project_deletion
         billing_account_id:
-          description: |-
-            The billing account that paid for these subscriptions when the cancellation was created: the
-            account of an account-level purchase, or the account the project was linked to.
+          description: 'The billing account paying for these subscriptions when the cancellation was created: the purchasing account of an account-level purchase, or the project''s linked account.'
           type: integer
           format: int64
         currency:
           type: string
         expected_refundable_amount:
-          description: The refund confirmed when it was created. Absent when the platform created it.
+          description: The refund confirmed when the cancellation was created. Absent when the platform created it.
           allOf:
           - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         failure_code:
-          description: |-
-            Present with `failed`. A code of the service that provides the resources, such as a disk
-            that can only be released with its server. Clients map it to their own wording.
+          description: 'Present with `failed`: the owning service''s code, such as for a disk that can only be released with its server.'
           type: string
         requested_at:
           type: string
@@ -271,7 +250,7 @@ components:
       type: object
       properties:
         id:
-          description: The cancellation item of this subscription, the same as `Subscription.cancellation.id`.
+          description: The subscription's cancellation item, the same as `Subscription.cancellation.id`.
           type: string
           format: uuid
         subscription_id:
@@ -300,7 +279,7 @@ components:
           - canceled
           - failed
         failure_code:
-          description: Execution stopped or its result is unknown. Present while release still requires resolution; it does not establish refund eligibility.
+          description: The release stopped or its result is unknown; present while the release needs resolution.
           type: string
         release_started_at:
           type: string
@@ -342,16 +321,13 @@ components:
       - items
       - pagination
     SubscriptionCancellation:
-      description: |-
-        The latest cancellation that includes the subscription, with this subscription's item. `id` is the
-        item; `cancellation_id` is the cancellation. scheduled_at is the intended time; effective_at is the
-        confirmed end of service. A cancellation alone does not stop metering or issue a refund.
+      description: 'The latest cancellation including the subscription, with this subscription''s item: `id` is the item and `cancellation_id` the cancellation. scheduled_at is the intended time and effective_at the confirmed end of service.'
       type: object
       properties:
         reason:
           type: string
         cancellation_id:
-          description: The cancellation this request belongs to, with the other subscriptions released together.
+          description: The cancellation this item belongs to, with the other subscriptions released together.
           type: string
           format: uuid
         id:
