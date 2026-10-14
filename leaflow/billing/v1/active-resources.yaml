@@ -2,11 +2,10 @@ paths:
   /api/v1/active-resources:
     get:
       summary: List active resources
-      description: 'Lists continuous metering registrations paid for by your billing accounts. Their state does not
-
+      description: |-
+        Lists continuous metering registrations paid for by your billing accounts. Their state does not
         describe machine runtime or health. Project filters narrow the authorized accounts; they do not
-
-        grant project-based access.'
+        grant project-based access.
       operationId: list-active-resources
       tags:
       - active-resources
@@ -69,7 +68,7 @@ components:
           type: string
           format: date-time
         subscription_id:
-          description: The postpaid subscription charged for this metering record, including shared services.
+          description: The metered subscription charged for this metering record, including shared services.
           type: string
           format: uuid
         resource_id:

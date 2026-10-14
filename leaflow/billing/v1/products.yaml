@@ -2,18 +2,17 @@ paths:
   /api/v1/products:
     get:
       summary: List catalog products
-      description: Paginated registered catalog products with their service identities and descriptions. Supports If-
-        None-Match and returns 304 when the selected page has not changed.
+      description: Paginated registered catalog products with their service identities and descriptions. Supports If- None-Match and returns 304 when the selected page has not changed.
       operationId: list-products
       tags:
-        - products
+      - products
       security: []
       parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-        - $ref: ./openapi.yaml#/components/parameters/IfNoneMatch
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      - $ref: ./openapi.yaml#/components/parameters/IfNoneMatch
       responses:
-        "200":
+        '200':
           description: OK
           headers:
             ETag:
@@ -25,18 +24,18 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProductList"
-        "304":
+                $ref: '#/components/schemas/ProductList'
+        '304':
           $ref: ./openapi.yaml#/components/responses/NotModified
         default:
           $ref: ./openapi.yaml#/components/responses/Error
   /api/v1/products/{productId}:
     parameters:
-      - name: productId
-        in: path
-        required: true
-        schema:
-          $ref: "#/components/schemas/ProductID"
+    - name: productId
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ProductID'
     get:
       summary: Get a service
       description: |-
@@ -44,12 +43,12 @@ paths:
         the terms of a credit — into something that can be displayed.
       operationId: get-product
       tags:
-        - products
+      - products
       security: []
       parameters:
-        - $ref: ./openapi.yaml#/components/parameters/IfNoneMatch
+      - $ref: ./openapi.yaml#/components/parameters/IfNoneMatch
       responses:
-        "200":
+        '200':
           description: OK
           headers:
             ETag:
@@ -59,8 +58,8 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Product"
-        "304":
+                $ref: '#/components/schemas/Product'
+        '304':
           description: Not Modified
         default:
           $ref: ./openapi.yaml#/components/responses/Error
@@ -70,14 +69,14 @@ components:
       type: object
       properties:
         id:
-          $ref: "#/components/schemas/ProductID"
+          $ref: '#/components/schemas/ProductID'
         name:
           type: string
         description:
           type: string
       required:
-        - id
-        - name
+      - id
+      - name
     ProductID:
       description: Immutable platform service identifier, such as compute, canopy or assistant.
       type: string
@@ -90,9 +89,9 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/Product"
+            $ref: '#/components/schemas/Product'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
-        - items
-        - pagination
+      - items
+      - pagination

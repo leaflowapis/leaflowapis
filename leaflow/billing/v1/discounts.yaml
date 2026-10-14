@@ -7,18 +7,18 @@ paths:
         entered. A coupon reached through a code is not listed here.
       operationId: list-account-discounts
       tags:
-        - discounts
+      - discounts
       parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-        - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
       responses:
-        "200":
+        '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/DiscountList"
+                $ref: '#/components/schemas/DiscountList'
         default:
           $ref: ./openapi.yaml#/components/responses/Error
 components:
@@ -46,20 +46,20 @@ components:
             `voided` once Leaflow withdrew it.
           type: string
           enum:
-            - scheduled
-            - active
-            - expired
-            - voided
+          - scheduled
+          - active
+          - expired
+          - voided
         voided_at:
           type: string
           format: date-time
         type:
           type: string
           enum:
-            - percentage
-            - fixed_amount
-            - price_override
-            - free_setup
+          - percentage
+          - fixed_amount
+          - price_override
+          - free_setup
         frequency:
           description: |-
             Whether the discount continues on renewals of the purchased item. `once` applies only to the
@@ -67,9 +67,9 @@ components:
             periods including the first, and `forever` continues on every renewal.
           type: string
           enum:
-            - once
-            - recurring
-            - forever
+          - once
+          - recurring
+          - forever
         frequency_duration:
           type: integer
           minimum: 1
@@ -87,7 +87,7 @@ components:
         max_discount:
           description: Caps a percentage discount.
           allOf:
-            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         currency:
           type: string
         applies_to:
@@ -95,7 +95,7 @@ components:
             What it may be used for. Absent means it applies to anything on the account,
             including setup fees and traffic.
           allOf:
-            - $ref: "#/components/schemas/Applicability"
+          - $ref: '#/components/schemas/Applicability'
         first_purchase_only:
           description: Restricted to your first purchase of anything it applies to.
           type: boolean
@@ -105,31 +105,31 @@ components:
         valid_until:
           description: Absent follows the coupon's own validity.
           type:
-            - string
-            - "null"
+          - string
+          - 'null'
           format: date-time
       required:
-        - type
-        - applies_to
-        - coupon_id
-        - status
-        - id
+      - type
+      - applies_to
+      - coupon_id
+      - status
+      - id
     DiscountList:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/Discount"
+            $ref: '#/components/schemas/Discount'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
-        - items
-        - pagination
+      - items
+      - pagination
     Applicability:
       description: |-
         Anything not excluded that matches an inclusion, or anything not excluded when no inclusion is
-        given, subject to the charge type, operation and term conditions. Entries always include their
+        given, subject to the price type, usage type, operation and term conditions. Entries always include their
         display fields; archived plans and prices stay listed with active set to false.
       type: object
       properties:
@@ -140,15 +140,21 @@ components:
         plans:
           type: array
           items:
-            $ref: "#/components/schemas/ApplicablePlan"
+            $ref: '#/components/schemas/ApplicablePlan'
         prices:
           type: array
           items:
             $ref: ./prices.yaml#/components/schemas/PriceOption
         price_types:
+          description: The price types covered; empty covers both.
           type: array
           items:
-            type: string
+            $ref: ./prices.yaml#/components/schemas/PriceType
+        usage_types:
+          description: The usage types covered; empty covers both.
+          type: array
+          items:
+            $ref: ./prices.yaml#/components/schemas/UsageType
         operations:
           type: array
           items:
@@ -168,7 +174,7 @@ components:
         excluded_plans:
           type: array
           items:
-            $ref: "#/components/schemas/ApplicablePlan"
+            $ref: '#/components/schemas/ApplicablePlan'
         excluded_prices:
           type: array
           items:
@@ -185,6 +191,6 @@ components:
         active:
           type: boolean
       required:
-        - id
-        - name
-        - active
+      - id
+      - name
+      - active

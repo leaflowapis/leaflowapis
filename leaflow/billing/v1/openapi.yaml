@@ -2,8 +2,7 @@ openapi: 3.2.1
 info:
   title: Leaflow Billing API
   version: v1
-  description: Products, prices, orders, subscriptions and account billing. Financial operations require an account access
-    token and billing-account authorization. Public catalogue operations declare no security requirement.
+  description: Products, prices, orders, subscriptions and account billing. Financial operations require an account access token and billing-account authorization. Public catalogue operations declare no security requirement.
 servers:
 - url: https://billing.leaflow.cloud
   description: Billing API
@@ -502,12 +501,11 @@ components:
       name: If-None-Match
       in: header
       required: false
-      description: 'The `ETag` from an earlier reply. When the catalogue has not changed since, the
-
+      description: |-
+        The `ETag` from an earlier reply. When the catalogue has not changed since, the
         answer is `304` with no body.
 
-
-        Send it on every catalogue read. An unchanged catalogue is answered without a body.'
+        Send it on every catalogue read. An unchanged catalogue is answered without a body.
       schema:
         type: string
     PlanId:
@@ -543,8 +541,7 @@ components:
       name: project_ids
       in: query
       required: false
-      description: Restrict the account-authorized results to these projects. Omit for all projects and account-level records.
-        This filter does not grant access to another billing account.
+      description: Restrict the account-authorized results to these projects. Omit for all projects and account-level records. This filter does not grant access to another billing account.
       style: form
       explode: false
       schema:

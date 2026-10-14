@@ -2,8 +2,7 @@ paths:
   /api/v1/invoices:
     get:
       summary: List invoices
-      description: Paginated issued invoices belonging to owned billing accounts, filtered by billing_account_id, subscription_id, status and creation interval. Drafts are excluded, including the draft invoice of an order awaiting payment,
-        which is reached through its order; top-ups do not create invoices.
+      description: Paginated issued invoices belonging to owned billing accounts, filtered by billing_account_id, subscription_id, status and creation interval. Drafts are excluded, including the draft invoice of an order awaiting payment, which is reached through its order; top-ups do not create invoices.
       operationId: list-invoices
       tags:
       - invoices
@@ -39,9 +38,7 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/InvoiceId
     get:
       summary: Get invoice
-      description: Returns an invoice for an owned billing account with its amounts, tax lines and payment state,
-        whether issued or the draft invoice of an order. Returns 404 for a missing invoice or another draft and 403
-        when its account belongs to another user.
+      description: Returns an invoice for an owned billing account with its amounts, tax lines and payment state, whether issued or the draft invoice of an order. Returns 404 for a missing invoice or another draft and 403 when its account belongs to another user.
       operationId: get-invoice
       tags:
       - invoices
@@ -59,9 +56,7 @@ paths:
     - $ref: ./openapi.yaml#/components/parameters/InvoiceId
     get:
       summary: List invoice items
-      description: Paginated lines of an invoice belonging to an owned billing account, issued or the draft invoice
-        of an order, including their service periods and project references. A missing invoice or another draft
-        returns 404; another user account returns 403.
+      description: Paginated lines of an invoice belonging to an owned billing account, issued or the draft invoice of an order, including their service periods and project references. A missing invoice or another draft returns 404; another user account returns 403.
       operationId: list-invoice-items
       tags:
       - invoices
@@ -184,9 +179,9 @@ components:
             charged because the customer accounts for it under the reverse-charge mechanism.
           type: string
           enum:
-            - none
-            - exempt
-            - reverse
+          - none
+          - exempt
+          - reverse
         customer_address_line1:
           type: string
         customer_address_line2:
@@ -307,6 +302,11 @@ components:
           - string
           - 'null'
           format: date-time
+        dimensions:
+          description: For a usage line, the values of its meter's presentation dimensions, such as the model and token kind. Empty for other lines.
+          type: object
+          additionalProperties:
+            type: string
         prorations:
           description: |-
             Present on a line that changes a subscription immediately, one entry for each paid period it
