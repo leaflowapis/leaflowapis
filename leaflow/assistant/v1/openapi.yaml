@@ -3266,8 +3266,8 @@ components:
           - yolo
         preferredModelId:
           description: A Canopy model id to prefer. Omit or pass null to follow the platform default.
-            Non-null requires allowModelSelection; a disallowed, retired or removed id falls back to the
-            default without clearing the preference.
+            The model must be available in Canopy and support Assistant conversations. A retired or
+            removed id falls back to the default without clearing the preference.
           type:
           - string
           - 'null'
@@ -4664,21 +4664,11 @@ components:
     ModelConfigurationResource:
       type: object
       properties:
-        allowModelSelection:
-          type: boolean
         defaultModelId:
           type: string
-        allowedModelIds:
-          type: array
-          items:
-            type: string
-        defaultReasoningEffort:
-          type: string
+          description: Default Canopy model id. The model catalogue and capabilities are owned by Canopy.
       required:
-      - allowModelSelection
       - defaultModelId
-      - allowedModelIds
-      - defaultReasoningEffort
       additionalProperties: false
     UsageResource:
       type: object
