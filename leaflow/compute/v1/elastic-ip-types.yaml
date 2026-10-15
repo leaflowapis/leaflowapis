@@ -1,0 +1,160 @@
+paths:
+  /api/v1/elastic-ip-types:
+    get:
+      operationId: list-elastic-ip-types
+      summary: List public elastic IP products
+      tags:
+      - elastic-ip-types
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElasticIPTypeListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+      description: Lists on-sale products. Region is optional. Prices, commercial terms and checkout are
+        read directly from Billing.
+      parameters:
+      - name: region_id
+        in: query
+        required: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+  /api/v1/elastic-ip-types/search:
+    get:
+      operationId: search-elastic-ip-types
+      summary: Search public elastic IP products
+      tags:
+      - elastic-ip-types
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElasticIPTypeListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+      description: Search on-sale product names and descriptions. Filters use AND; pagination is independent.
+      parameters:
+      - name: region_id
+        in: query
+        required: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+      - name: q
+        in: query
+        required: true
+        description: Search text; combined with the other filters using AND.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 255
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+  /api/v1/elastic-ip-types/{elasticIpTypeId}:
+    get:
+      operationId: get-elastic-ip-type
+      summary: Get an elastic IP product
+      tags:
+      - elastic-ip-types
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ElasticIPType'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+      description: Includes off-sale or retired products referenced by existing elastic IPs. No inventory
+        or gateway facts are returned.
+      parameters:
+      - name: elasticIpTypeId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
+components:
+  schemas:
+    ElasticIPType:
+      description: The IPv4 public network product and its Billing Plan references. Contains no supply ranges,
+        gateways or backend execution state.
+      type: object
+      properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          minLength: 0
+          maxLength: 255
+        plan_id: &id001
+          type: string
+          format: uuid
+        traffic_plan_id:
+          description: The traffic Billing Plan, when configured. Traffic billing is not currently available for creation.
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+          - on_sale
+          - off_sale
+          - retired
+        catalog_revision:
+          type: integer
+          format: int64
+          minimum: 1
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - region_id
+      - name
+      - description
+      - plan_id
+      - status
+      - catalog_revision
+      - created_at
+      - updated_at
+      additionalProperties: false
+    ElasticIPTypeListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ElasticIPType'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false

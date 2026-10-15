@@ -1,0 +1,84 @@
+components:
+  schemas:
+    ReleaseSetItem:
+      description: One subscription of a release set and the resource it pays for.
+      type: object
+      properties:
+        subscription_id:
+          type: string
+          format: uuid
+        resource:
+          $ref: '#/components/schemas/ReleaseResource'
+      required:
+      - subscription_id
+      - resource
+      additionalProperties: false
+    ReleaseResource:
+      description: A resource a release set releases.
+      oneOf:
+      - $ref: '#/components/schemas/VirtualMachineReleaseResource'
+      - $ref: '#/components/schemas/DiskReleaseResource'
+      - $ref: '#/components/schemas/ElasticIpReleaseResource'
+      discriminator:
+        propertyName: type
+        mapping:
+          virtual_machine: '#/components/schemas/VirtualMachineReleaseResource'
+          disk: '#/components/schemas/DiskReleaseResource'
+          elastic_ip: '#/components/schemas/ElasticIpReleaseResource'
+    VirtualMachineReleaseResource:
+      description: A resource a release set releases.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - virtual_machine
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+          description: The identifier of the resource selected by type.
+        name:
+          description: The current display name of the selected resource.
+          type: string
+      required:
+      - type
+      - id
+      - name
+      additionalProperties: false
+    DiskReleaseResource:
+      description: A resource a release set releases.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - disk
+        id:
+          description: The identifier of the resource selected by type.
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+        name:
+          description: The current display name of the selected resource.
+          type: string
+      required:
+      - type
+      - id
+      - name
+      additionalProperties: false
+    ElasticIpReleaseResource:
+      description: A resource a release set releases.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - elastic_ip
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
+          description: The identifier of the resource selected by type.
+        name:
+          description: The current display name of the selected resource.
+          type: string
+      required:
+      - type
+      - id
+      - name
+      additionalProperties: false

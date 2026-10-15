@@ -1,0 +1,113 @@
+paths:
+  /api/v1/quotas:
+    get:
+      summary: List project quotas
+      description: Reads only the IAM project authorized by the scoped token; callers cannot select another project.
+        Returns all supported resource limits through shared pagination, including defaults for resources without
+        an override. No cross-domain usage total is returned.
+      operationId: list-quotas
+      tags:
+      - quotas
+      parameters:
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: The effective project quota limits.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectQuotaListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/quotas/{resource}:
+    parameters:
+    - name: resource
+      in: path
+      required: true
+      schema:
+        $ref: '#/components/schemas/ProjectQuotaResource'
+    get:
+      summary: Get a project quota
+      description: Reads only the IAM project authorized by the scoped token; callers cannot select another project.
+        Returns the effective limit, including its default when no override exists. Unknown resource values are
+        rejected.
+      operationId: get-quota
+      tags:
+      - quotas
+      responses:
+        '200':
+          description: The effective project quota limits.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectQuota'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    ProjectQuotaResource:
+      description: 'The resource or capacity constrained by a project quota. Defaults when no override exists: virtual_machines=5;
+        vcpus=16; memory_mib=32768; disks=20; disk_gib=500; virtual_private_clouds=3; subnets=20; network_interfaces=20;
+        elastic_ips=3; nat_gateways=1; security_groups=10; security_group_rules=100; snapshots=20; backups=20; private_images=10.
+        memory_mib is measured in MiB and disk_gib in GiB. A zero limit permits no additional capacity; it is not
+        unlimited.'
+      type: string
+      enum:
+      - virtual_machines
+      - vcpus
+      - memory_mib
+      - disks
+      - disk_gib
+      - virtual_private_clouds
+      - subnets
+      - network_interfaces
+      - elastic_ips
+      - nat_gateways
+      - security_groups
+      - security_group_rules
+      - snapshots
+      - backups
+      - private_images
+    ProjectQuota:
+      description: The effective limit for one IAM platform project and resource. Includes the default when no project
+        override exists. This representation contains no aggregated usage counter.
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+          readOnly: true
+        resource:
+          $ref: '#/components/schemas/ProjectQuotaResource'
+          readOnly: true
+        limit:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - project_id
+      - resource
+      - limit
+      additionalProperties: false
+    ProjectQuotaListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectQuota'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false

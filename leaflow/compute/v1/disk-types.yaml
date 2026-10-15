@@ -1,0 +1,174 @@
+paths:
+  /api/v1/disk-types:
+    get:
+      summary: List disk types on sale
+      description: Only disk types currently on sale are listed, both system disk types and data disk types; `purpose`
+        narrows the list to one of the two. A withdrawn one disappears from here and can no longer be bought, while
+        the disks already on it keep working and can still be resized.
+      operationId: list-disk-types
+      tags:
+      - disk-types
+      parameters:
+      - name: region_id
+        in: query
+        required: false
+        explode: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+      - name: purpose
+        in: query
+        required: false
+        description: Filter by intended creation use. Omit to include both system and data disk types.
+        schema:
+          $ref: '#/components/schemas/DiskTypePurpose'
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiskTypeListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/disk-types/{diskTypeId}:
+    get:
+      summary: Get a disk type
+      description: Retrieve capacity and performance constraints for an existing disk, including system disk types
+        and types withdrawn from sale.
+      operationId: get-disk-type
+      tags:
+      - disk-types
+      parameters:
+      - name: diskTypeId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DiskTypeResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    DiskTypePurpose:
+      description: The intended creation use of a disk type, not the current boot role or deletion policy of an
+        individual disk.
+      type: string
+      enum:
+      - system
+      - data
+    DiskTypeResource:
+      type: object
+      properties:
+        availability_zone_id:
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
+        purpose:
+          $ref: '#/components/schemas/DiskTypePurpose'
+        iops_at_min_size:
+          description: |-
+            IOPS a disk of `min_size_gb` gets. Null when this type is not rate-limited.
+
+            Performance grows with capacity, so this and `iops_at_max_size` are the two ends of the
+            range. The exact figure for the size actually bought appears on the disk itself once it
+            exists.
+          type:
+          - integer
+          - 'null'
+          format: int64
+        iops_at_max_size:
+          description: IOPS a disk of `max_size_gb` gets. Null when this type is not rate-limited
+          type:
+          - integer
+          - 'null'
+          format: int64
+        max_size_gb:
+          type: integer
+          format: int64
+        media:
+          type: string
+          enum:
+          - ssd
+          - hdd
+          - nvme
+        min_size_gb:
+          type: integer
+          format: int64
+        name:
+          type: string
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        step_gb:
+          type: integer
+          format: int64
+        throughput_at_min_size:
+          description: |-
+            Throughput a disk of `min_size_gb` gets, in **bytes per second**. Null when this type is
+            not rate-limited.
+
+            Bytes rather than MiB so the number needs no rounding on the way out; divide by 1048576
+            for MiB/s at the point of display.
+          type:
+          - integer
+          - 'null'
+          format: int64
+        throughput_at_max_size:
+          description: Throughput a disk of `max_size_gb` gets, in bytes per second. Null when this type is not
+            rate-limited
+          type:
+          - integer
+          - 'null'
+          format: int64
+        plan_id:
+          description: The actual Billing Plan associated with this resource. Read prices and commercial terms directly
+            from Billing using this identifier.
+          type: string
+          format: uuid
+          readOnly: true
+      required:
+      - id
+      - name
+      - media
+      - purpose
+      - region_id
+      - availability_zone_id
+      - min_size_gb
+      - max_size_gb
+      - step_gb
+      - iops_at_min_size
+      - iops_at_max_size
+      - throughput_at_min_size
+      - throughput_at_max_size
+      - plan_id
+      additionalProperties: false
+    DiskTypeListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/DiskTypeResource'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
