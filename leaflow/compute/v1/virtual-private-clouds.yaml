@@ -80,9 +80,10 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
-      summary: Rename a virtual private cloud
-      description: Changes the display name only. The CIDR, the routes and the internet gateway are immutable.
-      operationId: rename-virtual-private-cloud
+      summary: Update a virtual private cloud
+      description: Only the name can change. The CIDR is fixed for the network's life, because every subnet and
+        address inside it was allocated from it.
+      operationId: update-virtual-private-cloud
       tags:
       - virtual-private-clouds
       parameters:
@@ -96,7 +97,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RenameVirtualPrivateCloudRequestBody'
+              $ref: '#/components/schemas/UpdateVirtualPrivateCloudRequestBody'
       responses:
         '200':
           description: OK
@@ -139,53 +140,47 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
   /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/ipv6:
+    parameters:
+    - name: virtualPrivateCloudId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
     get:
-      summary: Retrieve the IPv6 prefix enabled on a virtual private cloud
-      description: Returns the business prefix and enabled state, not backend provisioning or routing diagnostics.
+      summary: Get the IPv6 prefix of a virtual private cloud
+      description: Refused with `VIRTUAL_PRIVATE_CLOUD_IPV6_NOT_ENABLED` while IPv6 is not enabled.
       operationId: get-virtual-private-cloud-ipv6
       tags:
       - virtual-private-clouds
-      parameters:
-      - name: virtualPrivateCloudId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IPv6ResponseBody'
+                $ref: '#/components/schemas/VirtualPrivateCloudIPv6'
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-    post:
+    put:
       summary: Enable IPv6 on a virtual private cloud
       description: |-
-        Delegates and routes an IPv6 prefix to the virtual private cloud. It requires no elastic IP or NAT gateway. Addresses are assigned to virtual machines by the network and use its security groups; they cannot be requested or released individually.
+        Delegates and routes a /64 prefix to the virtual private cloud and creates its IPv6 subnet. It requires no elastic IP or NAT gateway: IPv6 is routed, not translated. Virtual machines receive an address from the prefix when their network interface is created; addresses cannot be requested or released individually, and security groups apply to them as to IPv4.
 
-        If the virtual private cloud is not yet connected to the internet, connectivity is established as part of this call.
-      operationId: enable-virtual-private-cloud-ipv6
+        Enabling IPv6 that is already enabled returns the current prefix.
+      operationId: put-virtual-private-cloud-ipv6
       tags:
       - virtual-private-clouds
-      parameters:
-      - name: virtualPrivateCloudId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
       responses:
         '202':
           description: Enabling IPv6 was accepted.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IPv6ResponseBody'
+                $ref: '#/components/schemas/VirtualPrivateCloudIPv6'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -196,8 +191,28 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
       summary: Disable IPv6 on a virtual private cloud
-      description: A released prefix is not re-allocated immediately.
-      operationId: disable-virtual-private-cloud-ipv6
+      description: Removes the IPv6 subnet and returns the prefix. Refused while a network interface still holds an
+        IPv6 address. A returned prefix is never handed out again.
+      operationId: delete-virtual-private-cloud-ipv6
+      tags:
+      - virtual-private-clouds
+      responses:
+        '202':
+          description: Disabling IPv6 was accepted.
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/free-subnet-cidr:
+    get:
+      summary: Get a free subnet CIDR
+      description: The first CIDR of the given prefix length inside the virtual private cloud that no subnet
+        overlaps. It is not reserved; creating the subnet checks it again.
+      operationId: get-virtual-private-cloud-free-subnet-cidr
       tags:
       - virtual-private-clouds
       parameters:
@@ -206,15 +221,21 @@ paths:
         required: true
         schema:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+      - name: prefix_length
+        in: query
+        schema:
+          type: integer
+          format: int64
+          default: 24
+          minimum: 16
+          maximum: 30
       responses:
-        '202':
-          description: Disabling IPv6 was accepted.
+        '200':
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/IPv6ResponseBody'
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
+                $ref: '#/components/schemas/FreeSubnetCidr'
         default:
           description: Error
           content:
@@ -226,25 +247,31 @@ components:
     VirtualPrivateCloud:
       type: object
       properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        name:
+          type: string
         cidr:
           type: string
+        ipv6_cidr:
+          description: The /64 prefix routed to the network, null while IPv6 is not enabled.
+          type:
+          - string
+          - 'null'
         created_at:
           type: string
           format: date-time
-        id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
-        name:
-          type: string
-        region_id:
-          $ref: ./identifiers.yaml#/components/schemas/RegionID
         updated_at:
           type: string
           format: date-time
       required:
       - id
-      - name
       - region_id
+      - name
       - cidr
+      - ipv6_cidr
       - created_at
       - updated_at
       additionalProperties: false
@@ -252,9 +279,7 @@ components:
       type: object
       properties:
         items:
-          type:
-          - array
-          - 'null'
+          type: array
           items:
             $ref: '#/components/schemas/VirtualPrivateCloud'
         pagination:
@@ -266,41 +291,56 @@ components:
     CreateVirtualPrivateCloudRequestBody:
       type: object
       properties:
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
         cidr:
-          description: Must be an RFC 1918 private CIDR with a prefix length between /8 and /24, for example `10.0.0.0/16`
+          description: An RFC 1918 private CIDR with a prefix length between /8 and /24, for example `10.0.0.0/16`.
           type: string
           minLength: 1
           maxLength: 32
-        name:
-          type: string
-          minLength: 1
-          maxLength: 128
-        region_id:
-          $ref: ./identifiers.yaml#/components/schemas/RegionID
       required:
-      - name
       - region_id
+      - name
       - cidr
       additionalProperties: false
-    RenameVirtualPrivateCloudRequestBody:
+    UpdateVirtualPrivateCloudRequestBody:
       type: object
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 128
-      required:
-      - name
+      minProperties: 1
       additionalProperties: false
-    IPv6ResponseBody:
+    VirtualPrivateCloudIPv6:
       type: object
       properties:
         cidr:
-          description: The allocated /64 prefix; empty while IPv6 is disabled
+          description: The /64 prefix routed to the virtual private cloud.
           type: string
-        enabled:
-          type: boolean
+        subnet_id:
+          description: The IPv6 subnet carrying the prefix.
+          $ref: ./identifiers.yaml#/components/schemas/SubnetID
       required:
-      - enabled
+      - cidr
+      - subnet_id
+      additionalProperties: false
+    FreeSubnetCidr:
+      type: object
+      properties:
+        prefix_length:
+          type: integer
+          format: int64
+        cidr:
+          description: Null when no CIDR of that prefix length is free.
+          type:
+          - string
+          - 'null'
+      required:
+      - prefix_length
       - cidr
       additionalProperties: false
