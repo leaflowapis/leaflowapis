@@ -39,10 +39,14 @@ tags:
   description: Disk types resources and operations.
 - name: disks
   description: Disks resources and operations.
+- name: elastic-ip-types
+  description: Public network products; prices and checkout belong to Billing.
 - name: elastic-ips
   description: Elastic IP resources, bandwidth and bindings.
 - name: images
   description: Images resources and operations.
+- name: machine-types
+  description: Virtual machine specifications and their Billing Plan references.
 - name: network-interfaces
   description: Network interfaces, addresses and attachments.
 - name: operation-logs
@@ -63,23 +67,13 @@ tags:
   description: Snapshots resources and operations.
 - name: subnets
   description: Subnets resources and operations.
-- name: machine-types
-  description: Virtual machine specifications and their Billing Plan references.
 - name: virtual-machines
   description: Virtual machines and their lifecycle operations.
 - name: virtual-private-clouds
   description: Virtual private clouds and regional connectivity.
-- name: elastic-ip-types
-  description: Public network products; prices and checkout belong to Billing.
 paths:
-  /api/v1/machine-types/{machineTypeId}:
-    $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types~1{machineTypeId}
-  /api/v1/elastic-ip-types:
-    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types
-  /api/v1/elastic-ip-types/search:
-    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types~1search
-  /api/v1/elastic-ip-types/{elasticIpTypeId}:
-    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types~1{elasticIpTypeId}
+  /api/v1/regions/{regionId}/availability-zones:
+    $ref: ./availability-zones.yaml#/paths/~1api~1v1~1regions~1{regionId}~1availability-zones
   /api/v1/backups:
     $ref: ./backups.yaml#/paths/~1api~1v1~1backups
   /api/v1/backups/{backupId}:
@@ -90,16 +84,6 @@ paths:
     $ref: ./disk-types.yaml#/paths/~1api~1v1~1disk-types
   /api/v1/disk-types/{diskTypeId}:
     $ref: ./disk-types.yaml#/paths/~1api~1v1~1disk-types~1{diskTypeId}
-  /api/v1/images:
-    $ref: ./images.yaml#/paths/~1api~1v1~1images
-  /api/v1/images/{imageId}:
-    $ref: ./images.yaml#/paths/~1api~1v1~1images~1{imageId}
-  /api/v1/machine-types:
-    $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types
-  /api/v1/regions:
-    $ref: ./regions.yaml#/paths/~1api~1v1~1regions
-  /api/v1/regions/{regionId}/availability-zones:
-    $ref: ./availability-zones.yaml#/paths/~1api~1v1~1regions~1{regionId}~1availability-zones
   /api/v1/disks:
     $ref: ./disks.yaml#/paths/~1api~1v1~1disks
   /api/v1/disks/{diskId}:
@@ -108,6 +92,12 @@ paths:
     $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}~1resize
   /api/v1/disks/{diskId}/revert:
     $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}~1revert
+  /api/v1/elastic-ip-types:
+    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types
+  /api/v1/elastic-ip-types/search:
+    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types~1search
+  /api/v1/elastic-ip-types/{elasticIpTypeId}:
+    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types~1{elasticIpTypeId}
   /api/v1/elastic-ips:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips
   /api/v1/elastic-ips/{elasticIpId}:
@@ -116,6 +106,54 @@ paths:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1bandwidth
   /api/v1/elastic-ips/{elasticIpId}/binding:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1binding
+  /api/v1/images:
+    $ref: ./images.yaml#/paths/~1api~1v1~1images
+  /api/v1/images/{imageId}:
+    $ref: ./images.yaml#/paths/~1api~1v1~1images~1{imageId}
+  /api/v1/machine-types:
+    $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types
+  /api/v1/machine-types/{machineTypeId}:
+    $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types~1{machineTypeId}
+  /api/v1/network-interfaces:
+    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces
+  /api/v1/network-interfaces/{networkInterfaceId}:
+    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}
+  /api/v1/operation-logs:
+    $ref: ./operation-logs.yaml#/paths/~1api~1v1~1operation-logs
+  /api/v1/peerings:
+    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings
+  /api/v1/peerings/{peeringId}:
+    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}
+  /api/v1/peerings/{peeringId}/accept:
+    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}~1accept
+  /api/v1/peerings/{peeringId}/reject:
+    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}~1reject
+  /api/v1/quotas:
+    $ref: ./quotas.yaml#/paths/~1api~1v1~1quotas
+  /api/v1/quotas/{resource}:
+    $ref: ./quotas.yaml#/paths/~1api~1v1~1quotas~1{resource}
+  /api/v1/regions:
+    $ref: ./regions.yaml#/paths/~1api~1v1~1regions
+  /api/v1/routes:
+    $ref: ./routes.yaml#/paths/~1api~1v1~1routes
+  /api/v1/routes/{routeId}:
+    $ref: ./routes.yaml#/paths/~1api~1v1~1routes~1{routeId}
+  /api/v1/security-groups:
+    $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups
+  /api/v1/security-groups/{securityGroupId}:
+    $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}
+  /api/v1/security-groups/{securityGroupId}/rules:
+    $ref: ./security-rules.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}~1rules
+  /api/v1/security-groups/{securityGroupId}/rules/{ruleId}:
+    $ref: ./security-rules.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}~1rules~1{ruleId}
+  /api/v1/snapshots:
+    $ref: ./snapshots.yaml#/paths/~1api~1v1~1snapshots
+  /api/v1/snapshots/{snapshotId}:
+    $ref: ./snapshots.yaml#/paths/~1api~1v1~1snapshots~1{snapshotId}
+  /api/v1/subnets:
+    $ref: ./subnets.yaml#/paths/~1api~1v1~1subnets
+  /api/v1/subnets/{subnetId}:
+    $ref: ./subnets.yaml#/paths/~1api~1v1~1subnets~1{subnetId}
   /api/v1/virtual-machines:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines
   /api/v1/virtual-machines/{virtualMachineId}:
@@ -147,68 +185,126 @@ paths:
   /api/v1/virtual-machines/{virtualMachineId}/elastic-ips:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1elastic-ips
   /api/v1/virtual-machines/{virtualMachineId}/elastic-ips/{elasticIpId}:
-    $ref:
-      ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1elastic-ips~1{elasticIpId}
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1elastic-ips~1{elasticIpId}
   /api/v1/virtual-machines/{virtualMachineId}/network-interfaces:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces
   /api/v1/virtual-machines/{virtualMachineId}/network-interfaces/{networkInterfaceId}:
-    $ref:
-      ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces~1{networkInterfaceId}
-  /api/v1/operation-logs:
-    $ref: ./operation-logs.yaml#/paths/~1api~1v1~1operation-logs
-  /api/v1/network-interfaces:
-    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces
-  /api/v1/network-interfaces/{networkInterfaceId}:
-    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces~1{networkInterfaceId}
+  /api/v1/virtual-machines/{virtualMachineId}/rescue:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rescue
+  /api/v1/virtual-machines/{virtualMachineId}/unrescue:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1unrescue
   /api/v1/virtual-private-clouds:
     $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds
   /api/v1/virtual-private-clouds/{virtualPrivateCloudId}:
     $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}
   /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/ipv6:
     $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1ipv6
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/routes:
-    $ref: ./routes.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1routes
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/routes/{routeId}:
-    $ref: ./routes.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1routes~1{routeId}
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/subnets:
-    $ref: ./subnets.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1subnets
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/subnets/next-free-cidr:
-    $ref: ./subnets.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1subnets~1next-free-cidr
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/subnets/{subnetId}:
-    $ref: ./subnets.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1subnets~1{subnetId}
-  /api/v1/security-groups:
-    $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups
-  /api/v1/security-groups/{securityGroupId}:
-    $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}
-  /api/v1/security-groups/{securityGroupId}/rules:
-    $ref: ./security-rules.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}~1rules
-  /api/v1/security-groups/{securityGroupId}/rules/{ruleId}:
-    $ref: ./security-rules.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}~1rules~1{ruleId}
-  /api/v1/snapshots:
-    $ref: ./snapshots.yaml#/paths/~1api~1v1~1snapshots
-  /api/v1/snapshots/{snapshotId}:
-    $ref: ./snapshots.yaml#/paths/~1api~1v1~1snapshots~1{snapshotId}
-  /api/v1/peerings:
-    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings
-  /api/v1/peerings/{peeringId}:
-    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}
-  /api/v1/peerings/{peeringId}/accept:
-    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}~1accept
-  /api/v1/peerings/{peeringId}/reject:
-    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}~1reject
-  /api/v1/quotas:
-    $ref: ./quotas.yaml#/paths/~1api~1v1~1quotas
-  /api/v1/quotas/{resource}:
-    $ref: ./quotas.yaml#/paths/~1api~1v1~1quotas~1{resource}
-  /api/v1/virtual-machines/{virtualMachineId}/rescue:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rescue
-  /api/v1/virtual-machines/{virtualMachineId}/unrescue:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1unrescue
+  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/free-subnet-cidr:
+    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1free-subnet-cidr
 components:
   securitySchemes:
     scopedTokenAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
   schemas:
+    ZoneResource:
+      $ref: ./availability-zones.yaml#/components/schemas/ZoneResource
+    ZoneListResponseBody:
+      $ref: ./availability-zones.yaml#/components/schemas/ZoneListResponseBody
+    BackupResource:
+      $ref: ./backups.yaml#/components/schemas/BackupResource
+    BackupListResponseBody:
+      $ref: ./backups.yaml#/components/schemas/BackupListResponseBody
+    CreateBackupRequestBody:
+      $ref: ./backups.yaml#/components/schemas/CreateBackupRequestBody
+    RenameBackupRequestBody:
+      $ref: ./backups.yaml#/components/schemas/RenameBackupRequestBody
+    RestoreBackupRequestBody:
+      $ref: ./backups.yaml#/components/schemas/RestoreBackupRequestBody
+    BackupOperation:
+      $ref: ./backups.yaml#/components/schemas/BackupOperation
+    CreateBackupResponseBody:
+      $ref: ./backups.yaml#/components/schemas/CreateBackupResponseBody
+    BillingPeriod:
+      $ref: ./billing-terms.yaml#/components/schemas/BillingPeriod
+    BillingChoice:
+      $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+    TerminationPolicy:
+      $ref: ./billing-terms.yaml#/components/schemas/TerminationPolicy
+    PlacedOrder:
+      $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+    DiskTypePurpose:
+      $ref: ./disk-types.yaml#/components/schemas/DiskTypePurpose
+    DiskTypeResource:
+      $ref: ./disk-types.yaml#/components/schemas/DiskTypeResource
+    DiskTypeListResponseBody:
+      $ref: ./disk-types.yaml#/components/schemas/DiskTypeListResponseBody
+    DiskResource:
+      $ref: ./disks.yaml#/components/schemas/DiskResource
+    DiskListResponseBody:
+      $ref: ./disks.yaml#/components/schemas/DiskListResponseBody
+    CreateDiskRequestBody:
+      $ref: ./disks.yaml#/components/schemas/CreateDiskRequestBody
+    RenameDiskRequestBody:
+      $ref: ./disks.yaml#/components/schemas/RenameDiskRequestBody
+    ResizeDiskRequestBody:
+      $ref: ./disks.yaml#/components/schemas/ResizeDiskRequestBody
+    RevertDiskRequestBody:
+      $ref: ./disks.yaml#/components/schemas/RevertDiskRequestBody
+    AttachDiskRequestBody:
+      $ref: ./disks.yaml#/components/schemas/AttachDiskRequestBody
+    CreateDiskResponseBody:
+      $ref: ./disks.yaml#/components/schemas/CreateDiskResponseBody
+    ResizeDiskResponseBody:
+      $ref: ./disks.yaml#/components/schemas/ResizeDiskResponseBody
+    DiskAttachment:
+      $ref: ./disks.yaml#/components/schemas/DiskAttachment
+    DiskAttachmentList:
+      $ref: ./disks.yaml#/components/schemas/DiskAttachmentList
+    DiskOperation:
+      $ref: ./disks.yaml#/components/schemas/DiskOperation
+    ElasticIPType:
+      $ref: ./elastic-ip-types.yaml#/components/schemas/ElasticIPType
+    ElasticIPTypeListResponseBody:
+      $ref: ./elastic-ip-types.yaml#/components/schemas/ElasticIPTypeListResponseBody
+    InternetChargeType:
+      $ref: ./elastic-ips.yaml#/components/schemas/InternetChargeType
+    IPv4HostAddress:
+      $ref: ./elastic-ips.yaml#/components/schemas/IPv4HostAddress
+    ElasticIP:
+      $ref: ./elastic-ips.yaml#/components/schemas/ElasticIP
+    ElasticIPListResponseBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPListResponseBody
+    CreateElasticIPRequestBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPRequestBody
+    SetElasticIPBandwidthRequestBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/SetElasticIPBandwidthRequestBody
+    BindElasticIPRequestBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/BindElasticIPRequestBody
+    AttachElasticIPRequestBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/AttachElasticIPRequestBody
+    CreateElasticIPResponseBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPResponseBody
+    SetElasticIPBandwidthResponseBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/SetElasticIPBandwidthResponseBody
+    IPv4Binding:
+      $ref: ./elastic-ips.yaml#/components/schemas/IPv4Binding
+    ElasticIPOperation:
+      $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPOperation
+    VirtualMachineID:
+      $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+    NetworkInterfaceID:
+      $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+    VirtualPrivateCloudID:
+      $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+    ElasticIPID:
+      $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
+    ElasticIPTypeID:
+      $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
+    RegionID:
+      $ref: ./identifiers.yaml#/components/schemas/RegionID
+    MachineTypeID:
+      $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
     AvailabilityZoneID:
       $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
     DiskID:
@@ -243,83 +339,114 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/SecurityGroupRuleID
     VirtualMachineRestrictionID:
       $ref: ./identifiers.yaml#/components/schemas/VirtualMachineRestrictionID
-    MachineTypeID:
-      $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
-    IPv4HostAddress:
-      $ref: ./elastic-ips.yaml#/components/schemas/IPv4HostAddress
-    RegionID:
-      $ref: ./identifiers.yaml#/components/schemas/RegionID
-    ElasticIPTypeID:
-      $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
-    ElasticIPType:
-      $ref: ./elastic-ip-types.yaml#/components/schemas/ElasticIPType
-    ElasticIPTypeListResponseBody:
-      $ref: ./elastic-ip-types.yaml#/components/schemas/ElasticIPTypeListResponseBody
-    PeeringResource:
-      $ref: ./peerings.yaml#/components/schemas/PeeringResource
-    PeeringListResponseBody:
-      $ref: ./peerings.yaml#/components/schemas/PeeringListResponseBody
-    CreatePeeringRequestBody:
-      $ref: ./peerings.yaml#/components/schemas/CreatePeeringRequestBody
-    Error:
-      $ref: ../../type/v1/error.yaml#/components/schemas/Error
-      required: []
-    BackupResource:
-      $ref: ./backups.yaml#/components/schemas/BackupResource
-    BackupListResponseBody:
-      $ref: ./backups.yaml#/components/schemas/BackupListResponseBody
-    CreateBackupRequestBody:
-      $ref: ./backups.yaml#/components/schemas/CreateBackupRequestBody
-    RenameBackupRequestBody:
-      $ref: ./backups.yaml#/components/schemas/RenameBackupRequestBody
-    RestoreBackupRequestBody:
-      $ref: ./backups.yaml#/components/schemas/RestoreBackupRequestBody
-    DiskResource:
-      $ref: ./disks.yaml#/components/schemas/DiskResource
-    DiskTypePurpose:
-      $ref: ./disk-types.yaml#/components/schemas/DiskTypePurpose
-    DiskTypeResource:
-      $ref: ./disk-types.yaml#/components/schemas/DiskTypeResource
-    DiskTypeListResponseBody:
-      $ref: ./disk-types.yaml#/components/schemas/DiskTypeListResponseBody
     ImageVisibility:
       $ref: ./images.yaml#/components/schemas/ImageVisibility
     ImageResource:
       $ref: ./images.yaml#/components/schemas/ImageResource
     ImageListResponseBody:
       $ref: ./images.yaml#/components/schemas/ImageListResponseBody
+    CreateImageRequestBody:
+      $ref: ./images.yaml#/components/schemas/CreateImageRequestBody
+    RenameImageRequestBody:
+      $ref: ./images.yaml#/components/schemas/RenameImageRequestBody
+    CreateImageResponseBody:
+      $ref: ./images.yaml#/components/schemas/CreateImageResponseBody
+    ImageOperation:
+      $ref: ./images.yaml#/components/schemas/ImageOperation
     MachineType:
       $ref: ./machine-types.yaml#/components/schemas/MachineType
     MachineTypeListResponseBody:
       $ref: ./machine-types.yaml#/components/schemas/MachineTypeListResponseBody
+    NetworkInterface:
+      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterface
+    NetworkInterfaceListResponseBody:
+      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceListResponseBody
+    AttachNetworkInterfaceRequestBody:
+      $ref: ./network-interfaces.yaml#/components/schemas/AttachNetworkInterfaceRequestBody
+    CreateNetworkInterfaceRequestBody:
+      $ref: ./network-interfaces.yaml#/components/schemas/CreateNetworkInterfaceRequestBody
+    NetworkInterfaceAddress:
+      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAddress
+    NetworkInterfaceAttachment:
+      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAttachment
+    NetworkInterfaceAttachmentList:
+      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAttachmentList
+    NetworkInterfaceOperation:
+      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceOperation
+    OperationLogResource:
+      $ref: ./operation-logs.yaml#/components/schemas/OperationLogResource
+    OperationLogListResponseBody:
+      $ref: ./operation-logs.yaml#/components/schemas/OperationLogListResponseBody
+    PeeringResource:
+      $ref: ./peerings.yaml#/components/schemas/PeeringResource
+    PeeringListResponseBody:
+      $ref: ./peerings.yaml#/components/schemas/PeeringListResponseBody
+    CreatePeeringRequestBody:
+      $ref: ./peerings.yaml#/components/schemas/CreatePeeringRequestBody
+    PeeringOperation:
+      $ref: ./peerings.yaml#/components/schemas/PeeringOperation
+    ProjectQuotaResource:
+      $ref: ./quotas.yaml#/components/schemas/ProjectQuotaResource
+    ProjectQuota:
+      $ref: ./quotas.yaml#/components/schemas/ProjectQuota
+    ProjectQuotaListResponseBody:
+      $ref: ./quotas.yaml#/components/schemas/ProjectQuotaListResponseBody
     RegionResource:
       $ref: ./regions.yaml#/components/schemas/RegionResource
     RegionListResponseBody:
       $ref: ./regions.yaml#/components/schemas/RegionListResponseBody
-    ZoneResource:
-      $ref: ./availability-zones.yaml#/components/schemas/ZoneResource
-    ZoneListResponseBody:
-      $ref: ./availability-zones.yaml#/components/schemas/ZoneListResponseBody
-    DiskListResponseBody:
-      $ref: ./disks.yaml#/components/schemas/DiskListResponseBody
-    CreateDiskRequestBody:
-      $ref: ./disks.yaml#/components/schemas/CreateDiskRequestBody
-    RenameDiskRequestBody:
-      $ref: ./disks.yaml#/components/schemas/RenameDiskRequestBody
-    ResizeDiskRequestBody:
-      $ref: ./disks.yaml#/components/schemas/ResizeDiskRequestBody
-    RevertDiskRequestBody:
-      $ref: ./disks.yaml#/components/schemas/RevertDiskRequestBody
-    ElasticIP:
-      $ref: ./elastic-ips.yaml#/components/schemas/ElasticIP
-    ElasticIPListResponseBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPListResponseBody
-    CreateElasticIPRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPRequestBody
-    SetElasticIPBandwidthRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/SetElasticIPBandwidthRequestBody
-    BindElasticIPRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/BindElasticIPRequestBody
+    ReleaseSetItem:
+      $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
+    ReleaseResource:
+      $ref: ./release-sets.yaml#/components/schemas/ReleaseResource
+    VirtualMachineReleaseResource:
+      $ref: ./release-sets.yaml#/components/schemas/VirtualMachineReleaseResource
+    DiskReleaseResource:
+      $ref: ./release-sets.yaml#/components/schemas/DiskReleaseResource
+    ElasticIpReleaseResource:
+      $ref: ./release-sets.yaml#/components/schemas/ElasticIpReleaseResource
+    RouteOrigin:
+      $ref: ./routes.yaml#/components/schemas/RouteOrigin
+    RouteResource:
+      $ref: ./routes.yaml#/components/schemas/RouteResource
+    RouteListResponseBody:
+      $ref: ./routes.yaml#/components/schemas/RouteListResponseBody
+    CreateRouteRequestBody:
+      $ref: ./routes.yaml#/components/schemas/CreateRouteRequestBody
+    SecurityGroupResource:
+      $ref: ./security-groups.yaml#/components/schemas/SecurityGroupResource
+    SecurityGroupListResponseBody:
+      $ref: ./security-groups.yaml#/components/schemas/SecurityGroupListResponseBody
+    CreateSecurityGroupRequestBody:
+      $ref: ./security-groups.yaml#/components/schemas/CreateSecurityGroupRequestBody
+    RenameSecurityGroupRequestBody:
+      $ref: ./security-groups.yaml#/components/schemas/RenameSecurityGroupRequestBody
+    SecurityRuleResource:
+      $ref: ./security-rules.yaml#/components/schemas/SecurityRuleResource
+    SecurityRuleListResponseBody:
+      $ref: ./security-rules.yaml#/components/schemas/SecurityRuleListResponseBody
+    CreateSecurityRuleRequestBody:
+      $ref: ./security-rules.yaml#/components/schemas/CreateSecurityRuleRequestBody
+    SnapshotResource:
+      $ref: ./snapshots.yaml#/components/schemas/SnapshotResource
+    SnapshotListResponseBody:
+      $ref: ./snapshots.yaml#/components/schemas/SnapshotListResponseBody
+    CreateSnapshotRequestBody:
+      $ref: ./snapshots.yaml#/components/schemas/CreateSnapshotRequestBody
+    RenameSnapshotRequestBody:
+      $ref: ./snapshots.yaml#/components/schemas/RenameSnapshotRequestBody
+    SnapshotOperation:
+      $ref: ./snapshots.yaml#/components/schemas/SnapshotOperation
+    CreateSnapshotResponseBody:
+      $ref: ./snapshots.yaml#/components/schemas/CreateSnapshotResponseBody
+    Subnet:
+      $ref: ./subnets.yaml#/components/schemas/Subnet
+    SubnetListResponseBody:
+      $ref: ./subnets.yaml#/components/schemas/SubnetListResponseBody
+    CreateSubnetRequestBody:
+      $ref: ./subnets.yaml#/components/schemas/CreateSubnetRequestBody
+    UpdateSubnetRequestBody:
+      $ref: ./subnets.yaml#/components/schemas/UpdateSubnetRequestBody
     VirtualMachine:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachine
     VirtualMachineListResponseBody:
@@ -350,98 +477,14 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/RebuildVirtualMachineResponseBody
     ResizeVirtualMachineRequestBody:
       $ref: ./virtual-machines.yaml#/components/schemas/ResizeVirtualMachineRequestBody
-    AttachDiskRequestBody:
-      $ref: ./disks.yaml#/components/schemas/AttachDiskRequestBody
-    AttachElasticIPRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/AttachElasticIPRequestBody
-    NetworkInterface:
-      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterface
-    NetworkInterfaceListResponseBody:
-      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceListResponseBody
-    AttachNetworkInterfaceRequestBody:
-      $ref: ./network-interfaces.yaml#/components/schemas/AttachNetworkInterfaceRequestBody
-    OperationLogResource:
-      $ref: ./operation-logs.yaml#/components/schemas/OperationLogResource
-    OperationLogListResponseBody:
-      $ref: ./operation-logs.yaml#/components/schemas/OperationLogListResponseBody
-    CreateNetworkInterfaceRequestBody:
-      $ref: ./network-interfaces.yaml#/components/schemas/CreateNetworkInterfaceRequestBody
-    CreateImageRequestBody:
-      $ref: ./images.yaml#/components/schemas/CreateImageRequestBody
-    RenameImageRequestBody:
-      $ref: ./images.yaml#/components/schemas/RenameImageRequestBody
-    VirtualPrivateCloud:
-      $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloud
-    VirtualPrivateCloudListResponseBody:
-      $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloudListResponseBody
-    CreateVirtualPrivateCloudRequestBody:
-      $ref: ./virtual-private-clouds.yaml#/components/schemas/CreateVirtualPrivateCloudRequestBody
-    RenameVirtualPrivateCloudRequestBody:
-      $ref: ./virtual-private-clouds.yaml#/components/schemas/RenameVirtualPrivateCloudRequestBody
-    IPv6ResponseBody:
-      $ref: ./virtual-private-clouds.yaml#/components/schemas/IPv6ResponseBody
-    RouteResource:
-      $ref: ./routes.yaml#/components/schemas/RouteResource
-    RouteListResponseBody:
-      $ref: ./routes.yaml#/components/schemas/RouteListResponseBody
-    CreateRouteRequestBody:
-      $ref: ./routes.yaml#/components/schemas/CreateRouteRequestBody
-    SubnetResource:
-      $ref: ./subnets.yaml#/components/schemas/SubnetResource
-    SubnetListResponseBody:
-      $ref: ./subnets.yaml#/components/schemas/SubnetListResponseBody
-    CreateSubnetRequestBody:
-      $ref: ./subnets.yaml#/components/schemas/CreateSubnetRequestBody
-    NextFreeCidrResponseBody:
-      $ref: ./subnets.yaml#/components/schemas/NextFreeCidrResponseBody
-    SecurityGroupResource:
-      $ref: ./security-groups.yaml#/components/schemas/SecurityGroupResource
-    SecurityGroupListResponseBody:
-      $ref: ./security-groups.yaml#/components/schemas/SecurityGroupListResponseBody
-    CreateSecurityGroupRequestBody:
-      $ref: ./security-groups.yaml#/components/schemas/CreateSecurityGroupRequestBody
-    SecurityRuleResource:
-      $ref: ./security-rules.yaml#/components/schemas/SecurityRuleResource
-    SecurityRuleListResponseBody:
-      $ref: ./security-rules.yaml#/components/schemas/SecurityRuleListResponseBody
-    CreateSecurityRuleRequestBody:
-      $ref: ./security-rules.yaml#/components/schemas/CreateSecurityRuleRequestBody
-    SnapshotResource:
-      $ref: ./snapshots.yaml#/components/schemas/SnapshotResource
-    SnapshotListResponseBody:
-      $ref: ./snapshots.yaml#/components/schemas/SnapshotListResponseBody
-    CreateSnapshotRequestBody:
-      $ref: ./snapshots.yaml#/components/schemas/CreateSnapshotRequestBody
-    RenameSecurityGroupRequestBody:
-      $ref: ./security-groups.yaml#/components/schemas/RenameSecurityGroupRequestBody
-    RenameSnapshotRequestBody:
-      $ref: ./snapshots.yaml#/components/schemas/RenameSnapshotRequestBody
-    BillingPeriod:
-      $ref: ./billing-terms.yaml#/components/schemas/BillingPeriod
-    BillingChoice:
-      $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
-    TerminationPolicy:
-      $ref: ./billing-terms.yaml#/components/schemas/TerminationPolicy
     NewCompute:
       $ref: ./virtual-machines.yaml#/components/schemas/NewCompute
     BootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/BootDisk
     ExistingBootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/ExistingBootDisk
-    PlacedOrder:
-      $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
-    CreateDiskResponseBody:
-      $ref: ./disks.yaml#/components/schemas/CreateDiskResponseBody
-    CreateImageResponseBody:
-      $ref: ./images.yaml#/components/schemas/CreateImageResponseBody
-    CreateElasticIPResponseBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPResponseBody
-    ResizeDiskResponseBody:
-      $ref: ./disks.yaml#/components/schemas/ResizeDiskResponseBody
     ResizeVirtualMachineResponseBody:
       $ref: ./virtual-machines.yaml#/components/schemas/ResizeVirtualMachineResponseBody
-    SetElasticIPBandwidthResponseBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/SetElasticIPBandwidthResponseBody
     NewBootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/NewBootDisk
     NewElasticIP:
@@ -450,64 +493,26 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachineRestriction
     PowerRequest:
       $ref: ./virtual-machines.yaml#/components/schemas/PowerRequest
-    NetworkInterfaceAddress:
-      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAddress
-    DiskAttachment:
-      $ref: ./disks.yaml#/components/schemas/DiskAttachment
-    DiskAttachmentList:
-      $ref: ./disks.yaml#/components/schemas/DiskAttachmentList
-    NetworkInterfaceAttachment:
-      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAttachment
-    NetworkInterfaceAttachmentList:
-      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAttachmentList
     CreateVirtualMachineResponseBody:
       $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineResponseBody
-    IPv4Binding:
-      $ref: ./elastic-ips.yaml#/components/schemas/IPv4Binding
-    ReleaseSetItem:
-      $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
-    ReleaseResource:
-      $ref: ./release-sets.yaml#/components/schemas/ReleaseResource
     VirtualMachineOperation:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachineOperation
-    DiskOperation:
-      $ref: ./disks.yaml#/components/schemas/DiskOperation
-    SnapshotOperation:
-      $ref: ./snapshots.yaml#/components/schemas/SnapshotOperation
-    BackupOperation:
-      $ref: ./backups.yaml#/components/schemas/BackupOperation
-    ImageOperation:
-      $ref: ./images.yaml#/components/schemas/ImageOperation
-    ElasticIPOperation:
-      $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPOperation
-    NetworkInterfaceOperation:
-      $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceOperation
-    PeeringOperation:
-      $ref: ./peerings.yaml#/components/schemas/PeeringOperation
-    VirtualMachineID:
-      $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-    NetworkInterfaceID:
-      $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
-    VirtualPrivateCloudID:
-      $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
-    ElasticIPID:
-      $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
-    VirtualMachineReleaseResource:
-      $ref: ./release-sets.yaml#/components/schemas/VirtualMachineReleaseResource
-    DiskReleaseResource:
-      $ref: ./release-sets.yaml#/components/schemas/DiskReleaseResource
-    ElasticIpReleaseResource:
-      $ref: ./release-sets.yaml#/components/schemas/ElasticIpReleaseResource
-    ProjectQuotaResource:
-      $ref: ./quotas.yaml#/components/schemas/ProjectQuotaResource
-    ProjectQuota:
-      $ref: ./quotas.yaml#/components/schemas/ProjectQuota
-    ProjectQuotaListResponseBody:
-      $ref: ./quotas.yaml#/components/schemas/ProjectQuotaListResponseBody
-    CreateSnapshotResponseBody:
-      $ref: ./snapshots.yaml#/components/schemas/CreateSnapshotResponseBody
-    CreateBackupResponseBody:
-      $ref: ./backups.yaml#/components/schemas/CreateBackupResponseBody
+    RescueVirtualMachineRequestBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/RescueVirtualMachineRequestBody
+    RescueVirtualMachineResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/RescueVirtualMachineResponseBody
+    VirtualPrivateCloud:
+      $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloud
+    VirtualPrivateCloudListResponseBody:
+      $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloudListResponseBody
+    CreateVirtualPrivateCloudRequestBody:
+      $ref: ./virtual-private-clouds.yaml#/components/schemas/CreateVirtualPrivateCloudRequestBody
+    UpdateVirtualPrivateCloudRequestBody:
+      $ref: ./virtual-private-clouds.yaml#/components/schemas/UpdateVirtualPrivateCloudRequestBody
+    VirtualPrivateCloudIPv6:
+      $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloudIPv6
+    FreeSubnetCidr:
+      $ref: ./virtual-private-clouds.yaml#/components/schemas/FreeSubnetCidr
   responses:
     Conflict:
       description: |-
