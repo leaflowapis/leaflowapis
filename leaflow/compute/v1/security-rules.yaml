@@ -1,0 +1,194 @@
+paths:
+  /api/v1/security-groups/{securityGroupId}/rules:
+    get:
+      summary: List security group rules
+      operationId: list-security-group-rules
+      tags:
+      - security-rules
+      parameters:
+      - name: securityGroupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityRuleListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Create a security group rule
+      description: Adding an identical rule twice is rejected. For that comparison `0.0.0.0/0`, `::/0` and an omitted
+        value are treated as equivalent.
+      operationId: create-security-group-rule
+      tags:
+      - security-rules
+      parameters:
+      - name: securityGroupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSecurityRuleRequestBody'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SecurityRuleResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/security-groups/{securityGroupId}/rules/{ruleId}:
+    delete:
+      summary: Delete a security group rule
+      operationId: delete-security-group-rule
+      tags:
+      - security-rules
+      parameters:
+      - name: securityGroupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+      - name: ruleId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupRuleID
+      responses:
+        '204':
+          description: No Content
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    SecurityRuleResource:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        description:
+          type: string
+        direction:
+          type: string
+          enum:
+          - ingress
+          - egress
+        ethertype:
+          type: string
+          enum:
+          - IPv4
+          - IPv6
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupRuleID
+        port_range_max:
+          description: Denotes the ICMP code rather than a port when the protocol is ICMP
+          type:
+          - integer
+          - 'null'
+          format: int64
+        port_range_min:
+          description: Denotes the ICMP type rather than a port when the protocol is ICMP
+          type:
+          - integer
+          - 'null'
+          format: int64
+        protocol:
+          type:
+          - string
+          - 'null'
+        remote_ip_prefix:
+          type:
+          - string
+          - 'null'
+      required:
+      - id
+      - direction
+      - ethertype
+      - protocol
+      - port_range_min
+      - port_range_max
+      - remote_ip_prefix
+      - description
+      - created_at
+      additionalProperties: false
+    SecurityRuleListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/SecurityRuleResource'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    CreateSecurityRuleRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+          maxLength: 255
+        direction:
+          type: string
+          enum:
+          - ingress
+          - egress
+        ethertype:
+          type: string
+          enum:
+          - IPv4
+          - IPv6
+        port_range_max:
+          description: Denotes the ICMP code (0–255) rather than a port when the protocol is ICMP
+          type:
+          - integer
+          - 'null'
+          format: int64
+        port_range_min:
+          description: Denotes the ICMP type (0–255) rather than a port when the protocol is ICMP
+          type:
+          - integer
+          - 'null'
+          format: int64
+        protocol:
+          description: For example `tcp`, `udp`, `icmp` or `ipv6-icmp`. All protocols when omitted
+          type: string
+          maxLength: 16
+        remote_ip_prefix:
+          description: Equivalent to `0.0.0.0/0` or `::/0` when omitted
+          type: string
+          maxLength: 64
+      required:
+      - direction
+      - ethertype
+      additionalProperties: false

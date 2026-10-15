@@ -1,0 +1,380 @@
+paths:
+  /api/v1/backups:
+    get:
+      summary: List backups
+      operationId: list-backups
+      tags:
+      - backups
+      parameters:
+      - name: disk_id
+        in: query
+        description: Return only the backups of this disk
+        explode: false
+        schema:
+          description: Return only the backups of this disk
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    post:
+      summary: Create a backup
+      description: "Creates a backup of the disk. It remains restorable after the source disk is deleted and may be restored
+        to another availability zone in the same region. A running virtual machine may produce a file-system-inconsistent
+        backup. Pending backups count toward Compute project quotas until cleanup is confirmed.\n\nRecords the pending
+        resource before creating its deferred postpaid Billing order. Source ownership and Compute project quotas are
+        checked before placement. No storage is allocated until the order is read back, verified and accepted. Unknown
+        placement leaves the resource pending for recovery rather than treating it as rejected."
+      operationId: create-backup
+      tags:
+      - backups
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackupRequestBody'
+      responses:
+        '202':
+          description: "Pending resource and deferred Billing order."
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateBackupResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/backups/{backupId}:
+    get:
+      summary: Retrieve a backup
+      description: Returns the stored state of the backup; it does not query the cloud. Use it to poll creation 
+        progress.
+      operationId: get-backup
+      tags:
+      - backups
+      parameters:
+      - name: backupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    patch:
+      summary: Rename a backup
+      operationId: rename-backup
+      tags:
+      - backups
+      parameters:
+      - name: backupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenameBackupRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    delete:
+      summary: Delete a backup
+      description: "Independent of the source disk: deletion succeeds whether or not that disk still exists. Metering
+        of the backup ends once it is deleted.\n\nQuota capacity and storage metering are released only after cleanup
+        is confirmed. Billing determines whether its commercial subscription must be canceled first.\n\nA resource with
+        a pending order must have that order canceled through Billing first. A subscribed resource is released through
+        its subscription cancellation. Cleanup must be confirmed before metering is stopped; unknown cleanup is not proof
+        of release."
+      operationId: delete-backup
+      tags:
+      - backups
+      parameters:
+      - name: backupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
+      responses:
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        '202':
+          description: Deletion was accepted. The backup shows the `delete` operation until it is deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackupResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/backups/{backupId}/restore:
+    post:
+      summary: Restore from a backup
+      description: |-
+        Restores onto a **newly created** disk. The source disk is unaffected and need not still exist.
+
+        The target disk type may belong to another availability zone of the same region, and its capacity must not be smaller than the backup. Returns the new disk as `pending` with its order; it cannot be attached until it is `available`.
+      operationId: restore-backup
+      tags:
+      - backups
+      parameters:
+      - name: backupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RestoreBackupRequestBody'
+      responses:
+        '202':
+          description: The new disk and its order were created; restoration has not started.
+          content:
+            application/json:
+              schema:
+                $ref: ./disks.yaml#/components/schemas/CreateDiskResponseBody
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+components:
+  schemas:
+    BackupResource:
+      description: "A retained copy of a disk, restorable after its source disk is deleted. Compute project quotas constrain
+        its count; retained storage is metered independently."
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
+        name:
+          type: string
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+        size_gb:
+          description: Capacity of the source disk when the backup was created. A restored disk cannot be smaller 
+            than this
+          type: integer
+          format: int64
+        capacity_gib:
+          description: 'The capacity metered for this backup, in GiB: the size of the source disk when the backup was
+            taken. Usage is this capacity multiplied by the time the backup is retained.'
+          type: integer
+          format: int64
+        source_disk_id:
+          description: The disk this backup was taken from. The backup remains usable after that disk is deleted
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+        status:
+          description: '`provisioning` while the backup is taken, then `available`. `failed` means the backup was not
+            created. `missing` means the backup no longer exists in the cloud.'
+          type: string
+          enum:
+          - pending
+          - provisioning
+          - available
+          - deleted
+          - failed
+          - error
+          - missing
+        operation:
+          description: The operation in progress on this backup, or null when none is.
+          anyOf:
+          - $ref: '#/components/schemas/BackupOperation'
+          - type: 'null'
+          readOnly: true
+        generation:
+          type: integer
+          format: int64
+          minimum: 1
+        observed_at:
+          type:
+          - string
+          - 'null'
+          format: date-time
+        source_availability_zone_id:
+          description: Availability zone of the source disk. A restore may target another zone in the same region
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        order_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          readOnly: true
+          description: The Billing order creating this resource.
+        order_item_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          readOnly: true
+          description: The Billing order item for this resource.
+        subscription_id:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          readOnly: true
+          description: The subscription for this resource; its presence alone does not imply delivery.
+      required:
+      - id
+      - source_disk_id
+      - name
+      - size_gb
+      - capacity_gib
+      - status
+      - region_id
+      - source_availability_zone_id
+      - created_at
+      - operation
+      - generation
+      - observed_at
+      - order_id
+      - order_item_id
+      - subscription_id
+      additionalProperties: false
+    BackupListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+          - array
+          - 'null'
+          items:
+            $ref: '#/components/schemas/BackupResource'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
+      additionalProperties: false
+    CreateBackupRequestBody:
+      type: object
+      properties:
+        disk_id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - disk_id
+      - name
+      additionalProperties: false
+    RenameBackupRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+      - name
+      additionalProperties: false
+    RestoreBackupRequestBody:
+      type: object
+      properties:
+        disk_type_id:
+          description: May differ from the availability zone of the source disk, but must be in the same region. It
+            has to be a data disk type on sale — restoring creates a new data disk, so a withdrawn type or a system
+            disk type is rejected here as well
+          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        size_gb:
+          description: Matches the size of the backup when omitted. When given, it must not be smaller than the 
+            backup
+          type: integer
+          format: int64
+          minimum: 0
+        billing:
+          $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+      required:
+      - disk_type_id
+      - name
+      - billing
+      additionalProperties: false
+    BackupOperation:
+      description: An operation still running on this backup. It is not a separate resource; once it finishes, the 
+        backup's `operation` is null again and the backup shows the result.
+      type: object
+      properties:
+        type:
+          description: '`restore`: a disk is being restored from this backup.'
+          type: string
+          enum:
+          - create
+          - restore
+          - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+      - type
+      - started_at
+      additionalProperties: false
+    CreateBackupResponseBody:
+      type: object
+      description: The pending resource and its deferred Billing order. Confirm the order through Billing; 
+        infrastructure is allocated only after verified acceptance.
+      properties:
+        backup:
+          $ref: '#/components/schemas/BackupResource'
+        order:
+          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+      required:
+      - backup
+      - order
+      additionalProperties: false
