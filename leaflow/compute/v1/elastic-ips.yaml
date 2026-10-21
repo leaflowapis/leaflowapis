@@ -192,7 +192,7 @@ paths:
       description: |-
         Points the elastic IP at a target: a virtual machine, which means the primary private IPv4 address of its primary network interface, or a network interface address (`network_interface_address_id`) given directly. Exactly one of `virtual_machine_id` and `network_interface_address_id`. A network interface address must be an assigned, unreleased IPv4 address on a network interface in this project and region; IPv6 addresses are rejected.
 
-        The target becomes what the elastic IP points at; an existing association is replaced. The elastic IP shows the `bind` operation until the association is confirmed, and with a virtual machine as the target that virtual machine shows the `bind_elastic_ip` operation as well, so the virtual machine must not have another operation in progress.
+        The target becomes what the elastic IP points at. Repeating the request for the target it already points at changes nothing; an elastic IP associated with another target is refused with `ELASTIC_IP_ALREADY_ASSOCIATED` (409), and is moved by deleting the association first, so that the moment traffic stops reaching the old target is one the caller chose. The elastic IP shows the `bind` operation until the association is confirmed, and with a virtual machine as the target that virtual machine shows the `bind_elastic_ip` operation as well, so the virtual machine must not have another operation in progress.
 
         The elastic IP must be in the same region as the target. With a virtual machine as the target, the elastic IP's `bandwidth_mbps` must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `INSTANCE_BANDWIDTH_CEILING`.
       operationId: put-elastic-ip-association
