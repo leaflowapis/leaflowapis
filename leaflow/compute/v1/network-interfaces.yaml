@@ -164,14 +164,13 @@ components:
           - $ref: '#/components/schemas/NetworkInterfaceAttachment'
           - type: 'null'
         status:
-          description: '`missing` means the interface no longer exists in the cloud.'
+          description: '`pending` until the interface is created, then `available`. `error` means its creation failed
+            or the cloud reports it broken; delete it and create another.'
           type: string
           enum:
           - pending
           - available
           - error
-          - unknown
-          - missing
         operation:
           description: The operation in progress on this network interface, or null when none is.
           anyOf:
@@ -267,7 +266,6 @@ components:
           - reserved
           - assigned
           - released
-          - unknown
         assigned_at:
           type:
           - string
@@ -309,7 +307,6 @@ components:
           - reserved
           - attached
           - released
-          - unknown
         attached_at:
           type:
           - string

@@ -75,9 +75,9 @@ paths:
     patch:
       summary: Accept or reject a peering
       description: |-
-        The accepter project writes its decision as `acceptance`. Only the accepter project may write it; the requester project is refused, because a peering would otherwise be accepted by the party who asked for it. The decision is written once: a peering that is no longer `pending_acceptance` refuses it.
+        The accepter project writes its decision as `acceptance`. Only the accepter project may write it; the requester project is refused, because a peering would otherwise be accepted by the party who asked for it. The decision is written once: a peering whose `acceptance` is no longer `pending` refuses it.
 
-        `accepted` starts the provisioning of the connectivity and returns 202; the peering shows the `provision` operation until it is `active`. `rejected` returns 200 with the peering `rejected`, and no connectivity is ever created. Does not change security groups or provide transitive routing.
+        `accepted` starts the provisioning of the connectivity and returns 202; the peering shows the `provision` operation until it is `active`. `rejected` returns 200 with the peering's `acceptance` `rejected` and its `status` `deleted`, and no connectivity is ever created. Does not change security groups or provide transitive routing.
       operationId: update-peering
       tags:
       - peerings
@@ -163,21 +163,21 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         acceptance:
           description: The accepter project's decision. `pending` until it writes one; `accepted` and `rejected` follow
-            the `acceptance` of `update-peering`, consistent with `status` being `pending_acceptance`, any of the
-            states after acceptance, or `rejected`.
+            the `acceptance` of `update-peering`. A rejected peering is `deleted`.
           type: string
           enum:
           - pending
           - accepted
           - rejected
         status:
+          description: '`pending` until the connectivity exists: while acceptance is pending, and after it is accepted
+            while the `provision` operation builds the link. Then `active`. `failed` means the link could not be built;
+            `failure_reason` states why. `deleted` once deleted or rejected.'
           type: string
           enum:
-          - pending_acceptance
-          - provisioning
+          - pending
           - active
           - deleted
-          - rejected
           - failed
         created_at:
           type: string

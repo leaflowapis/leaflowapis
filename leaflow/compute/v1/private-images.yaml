@@ -198,19 +198,17 @@ components:
             image
           type: boolean
         status:
-          description: Only available images can install virtual machines. A capture starts pending, then provisioning and uploading before available. Failed means no usable image 
-            was produced; failure describes the outcome. Missing means the image is absent from the 
-            infrastructure.
+          description: Only available images can install virtual machines. A capture is pending until it finishes and
+            shows the `create` operation while it runs, then becomes available. Failed means no usable image was
+            produced; failure describes the outcome. Error means the image service broke the image or no longer holds
+            it, and nothing can be installed from it.
           type: string
           enum:
           - pending
-          - provisioning
-          - uploading
           - available
           - deleted
           - failed
           - error
-          - missing
         failure:
           description: Details of why the capture failed; non-empty only when `status` is `failed`
           type:

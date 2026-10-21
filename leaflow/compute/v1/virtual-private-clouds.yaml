@@ -262,7 +262,7 @@ components:
           - 'null'
         status:
           description: '`pending` until the virtual private cloud''s network and router exist. `failed` means creation
-            failed or the backend lost the network; virtual machines cannot be created in it then and are refused
+            failed or the cloud reports the network broken; virtual machines cannot be created in it then and are refused
             with `VIRTUAL_PRIVATE_CLOUD_UNAVAILABLE`. `deleting` from the moment its deletion began until it is gone:
             subnets, security groups and routes in it can no longer be created, changed or deleted, and are refused
             with `VIRTUAL_PRIVATE_CLOUD_DELETING`. A deletion that stopped before the end leaves it `deleting` with no

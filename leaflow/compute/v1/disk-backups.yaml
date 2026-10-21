@@ -180,17 +180,15 @@ components:
           description: The disk this backup was taken from. The backup remains usable after that disk is deleted
           $ref: ./identifiers.yaml#/components/schemas/DiskID
         status:
-          description: '`provisioning` while the backup is taken, then `available`. `failed` means the backup was not
-            created. `missing` means the backup no longer exists in the cloud.'
+          description: '`pending` from the purchase until the backup is taken, then `available`; while it is taken the
+            backup shows the `create` operation. `failed` means the backup was not created.'
           type: string
           enum:
           - pending
-          - provisioning
           - available
           - deleted
           - failed
           - error
-          - missing
         operation:
           description: The operation in progress on this backup, or null when none is.
           anyOf:

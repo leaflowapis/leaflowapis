@@ -245,19 +245,18 @@ components:
         performance:
           $ref: '#/components/schemas/DiskPerformance'
         status:
-          description: '`pending` until the order is accepted, with no storage allocated; `provisioning` while the
-            disk is created; then `available`, or `in_use` once attached. `failed` means the disk was not created;
-            `failure_reason` states why. `missing` means the disk no longer exists in the cloud.'
+          description: '`pending` until the disk is created, with no storage allocated before the order is accepted
+            and the `create` operation shown while it is created; then `available`, or `in_use` once attached.
+            `failed` means the disk was not created; `failure_reason` states why. `error` means the cloud reports the
+            disk broken.'
           type: string
           enum:
           - pending
-          - provisioning
           - available
           - in_use
           - deleted
           - failed
           - error
-          - missing
         checkout_session_id:
           description: The Billing Checkout Session that bought this resource; `order_id` and `order_item_id` stay null
             until its checkout completes. Null when the resource was not bought through one.
@@ -514,7 +513,6 @@ components:
           - reserved
           - attached
           - released
-          - unknown
         attached_at:
           type:
           - string

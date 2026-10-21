@@ -174,18 +174,16 @@ components:
           type: integer
           format: int64
         status:
-          description: '`pending` once a quota slot is reserved, `provisioning` while the snapshot is taken, then `available`.
-            `failed` means the snapshot was not created; its slot is released once no snapshot data remains. `missing`
-            means the snapshot no longer exists in the cloud.'
+          description: '`pending` once a quota slot is reserved and until the snapshot is taken, showing the `create`
+            operation while it is taken; then `available`. `failed` means the snapshot was not created; its slot is
+            released once no snapshot data remains. `error` means the cloud reports the snapshot broken.'
           type: string
           enum:
           - pending
-          - provisioning
           - available
           - deleted
           - failed
           - error
-          - missing
         operation:
           description: The operation in progress on this snapshot, or null when none is.
           anyOf:
