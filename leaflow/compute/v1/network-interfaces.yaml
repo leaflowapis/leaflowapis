@@ -355,11 +355,14 @@ components:
       type: object
       properties:
         type:
+          description: '`associate_elastic_ip` holds the network interface while an elastic IP is associated with it
+            directly rather than through a virtual machine.'
           type: string
           enum:
           - create
           - attach
           - detach
+          - associate_elastic_ip
           - delete
         started_at:
           type: string
