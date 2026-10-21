@@ -403,6 +403,12 @@ components:
       $ref: ./release-sets.yaml#/components/schemas/DiskReleaseResource
     ElasticIPReleaseResource:
       $ref: ./release-sets.yaml#/components/schemas/ElasticIPReleaseResource
+    SnapshotReleaseResource:
+      $ref: ./release-sets.yaml#/components/schemas/SnapshotReleaseResource
+    DiskBackupReleaseResource:
+      $ref: ./release-sets.yaml#/components/schemas/DiskBackupReleaseResource
+    PrivateImageReleaseResource:
+      $ref: ./release-sets.yaml#/components/schemas/PrivateImageReleaseResource
     RouteOrigin:
       $ref: ./routes.yaml#/components/schemas/RouteOrigin
     RouteResource:

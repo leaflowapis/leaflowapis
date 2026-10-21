@@ -19,12 +19,18 @@ components:
       - $ref: '#/components/schemas/VirtualMachineReleaseResource'
       - $ref: '#/components/schemas/DiskReleaseResource'
       - $ref: '#/components/schemas/ElasticIPReleaseResource'
+      - $ref: '#/components/schemas/SnapshotReleaseResource'
+      - $ref: '#/components/schemas/DiskBackupReleaseResource'
+      - $ref: '#/components/schemas/PrivateImageReleaseResource'
       discriminator:
         propertyName: type
         mapping:
           virtual_machine: '#/components/schemas/VirtualMachineReleaseResource'
           disk: '#/components/schemas/DiskReleaseResource'
           elastic_ip: '#/components/schemas/ElasticIPReleaseResource'
+          snapshot: '#/components/schemas/SnapshotReleaseResource'
+          disk_backup: '#/components/schemas/DiskBackupReleaseResource'
+          private_image: '#/components/schemas/PrivateImageReleaseResource'
     VirtualMachineReleaseResource:
       description: A resource a release set releases.
       type: object
@@ -73,6 +79,63 @@ components:
           - elastic_ip
         id:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
+          description: The identifier of the resource selected by type.
+        name:
+          description: The current display name of the selected resource.
+          type: string
+      required:
+      - type
+      - id
+      - name
+      additionalProperties: false
+    SnapshotReleaseResource:
+      description: A resource a release set releases.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - snapshot
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          description: The identifier of the resource selected by type.
+        name:
+          description: The current display name of the selected resource.
+          type: string
+      required:
+      - type
+      - id
+      - name
+      additionalProperties: false
+    DiskBackupReleaseResource:
+      description: A resource a release set releases.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - disk_backup
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
+          description: The identifier of the resource selected by type.
+        name:
+          description: The current display name of the selected resource.
+          type: string
+      required:
+      - type
+      - id
+      - name
+      additionalProperties: false
+    PrivateImageReleaseResource:
+      description: A resource a release set releases.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - private_image
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/ImageID
           description: The identifier of the resource selected by type.
         name:
           description: The current display name of the selected resource.
