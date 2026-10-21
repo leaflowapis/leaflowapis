@@ -1314,7 +1314,7 @@ components:
       properties:
         type:
           description: '`create` runs from acceptance of the order until the virtual machine is `active` or `failed`.
-            `suspend` and `resume` impose and lift a suspension by the platform or for non-payment. `delete` includes
+            `suspend` and `resume` impose and lift a suspension by the platform or for non-payment. `capture_image` holds the machine while a private image is captured from the disk it boots from; the machine cannot be resized, rebuilt or released meanwhile. `delete` includes
             release through a Billing cancellation.'
           type: string
           enum:
@@ -1333,6 +1333,7 @@ components:
           - detach_network_interface
           - bind_elastic_ip
           - unbind_elastic_ip
+          - capture_image
           - suspend
           - resume
           - delete
