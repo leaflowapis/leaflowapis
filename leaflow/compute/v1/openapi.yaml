@@ -166,6 +166,8 @@ paths:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1commands
   /api/v1/virtual-machines/{virtualMachineId}/console:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1console
+  /api/v1/virtual-machines/{virtualMachineId}/console-output:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1console-output
   /api/v1/virtual-machines/{virtualMachineId}/password:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1password
   /api/v1/virtual-machines/{virtualMachineId}/reboots:
@@ -195,6 +197,8 @@ components:
     scopedTokenAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
   schemas:
+    ConsoleOutputResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/ConsoleOutputResponseBody
     AvailabilityZoneResource:
       $ref: ./availability-zones.yaml#/components/schemas/AvailabilityZoneResource
     AvailabilityZoneListResponseBody:
