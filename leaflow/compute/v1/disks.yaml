@@ -41,6 +41,10 @@ paths:
         The disk is created in the availability zone of the selected disk type, and a virtual machine must reside in the same zone to attach it. Choosing the disk type therefore determines the zone.
 
         A disk type that is off sale is rejected with `DISK_TYPE_OFF_SALE`, even though its identifier still resolves. Types that are off sale do not appear in the disk type listing; disks already bought on one keep working and can still be resized.
+
+        A disk bought on its own is licensed: `billing.usage_type` `metered` is refused with `DISK_USAGE_TYPE_UNAVAILABLE`. A disk created with a virtual machine follows the machine's terms instead and may be metered.
+
+        The disk shows the `create` operation from the moment its Checkout Session is created until it is delivered or its checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its deletion with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment.
       operationId: create-disk
       tags:
       - disks
@@ -52,7 +56,7 @@ paths:
               $ref: '#/components/schemas/CreateDiskRequestBody'
       responses:
         '202':
-          description: The disk and its order were created; the disk does not exist in the cloud yet.
+          description: The disk and its Checkout Session were created; the disk does not exist in the cloud yet.
           content:
             application/json:
               schema:
@@ -128,6 +132,8 @@ paths:
         Deletion is rejected while the disk is attached, or while snapshots created from it still exist.
 
         Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the disk, including a pay-as-you-go subscription. `meta.resource_id` names the disk. It is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`.
+
+        Refused with `COMPUTE_PURCHASE_PENDING` while the purchase that created it still awaits checkout or payment; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead.
       operationId: delete-disk
       tags:
       - disks
@@ -156,7 +162,7 @@ paths:
     post:
       summary: Resize a disk
       description: |-
-        Capacity can only be increased; shrinking is not supported. Returns the disk with the order for the resize, which keeps the disk's billing mode and period. The disk shows the `resize` operation until the resize is applied or its order is canceled, including while the order awaits checkout, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The disk keeps its current size until the resize is applied; once `size_gb` shows the new size, extend the file system inside the virtual machine. If the order is not accepted or the resize fails, the disk keeps its size and the order shows the outcome.
+        Capacity can only be increased; shrinking is not supported. Returns the disk with the Checkout Session for the resize, which keeps the disk's usage type and period. The disk shows the `resize` operation until the resize is applied, its Checkout Session expires or its order is canceled, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The disk keeps its current size until the resize is applied; once `size_gb` shows the new size, extend the file system inside the virtual machine. If checkout is not completed, the order is not accepted or the resize fails, the disk keeps its size and Billing shows the outcome.
 
         An attached disk, including a system disk, can be resized. The capacity is usable at once, and the disk's `performance` shows what its type gives the new size. **That performance applies from the disk's next attachment, or the next start of its stopped virtual machine**: the storage reads a disk's limits only while connecting it. Until then the attachment's `performance` shows what is in effect.
       operationId: resize-disk
@@ -176,7 +182,7 @@ paths:
               $ref: '#/components/schemas/ResizeDiskRequestBody'
       responses:
         '202':
-          description: The disk and the order for the resize; the new size is not yet in effect.
+          description: The disk and the Checkout Session for the resize; the new size is not yet in effect.
           content:
             application/json:
               schema:
@@ -267,6 +273,14 @@ components:
           - failed
           - error
           - missing
+        checkout_session_id:
+          description: The Billing Checkout Session that bought this resource; `order_id` and `order_item_id` stay null
+            until its checkout completes. Null when the resource was not bought through one.
+          type:
+          - string
+          - 'null'
+          format: uuid
+          readOnly: true
         order_id:
           type:
           - string
@@ -312,8 +326,9 @@ components:
           - reclaimed
           - null
         failure_reason:
-          description: Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation
-            failed after the order was accepted, and the charge for this disk is refunded.
+          description: Why creation failed; null unless `status` is `failed`. `checkout_expired` means checkout was
+            not completed before its Checkout Session expired. `provisioning_failed` means creation failed after the
+            order was accepted, and the charge for this disk is refunded.
           type:
           - string
           - 'null'
@@ -321,6 +336,7 @@ components:
           - order_declined
           - order_canceled
           - order_expired
+          - checkout_expired
           - provisioning_failed
           - null
         operation:
@@ -352,6 +368,7 @@ components:
       - performance
       - status
       - created_at
+      - checkout_session_id
       - order_id
       - order_item_id
       - subscription_id
@@ -398,6 +415,8 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/SnapshotID
         billing:
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+        checkout:
+          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       required:
       - disk_type_id
       - name
@@ -423,11 +442,14 @@ components:
           format: int64
           minimum: 1
         proration_date:
-          description: The instant used to price the change order. Defaults to the time of the request; it must
-            be a whole second, not in the future and at most 10 minutes old, otherwise the request is refused with
-            `BILLING_CHANGE_INVALID`. Preview the recorded order through Billing using its `order_id`.
+          description: The `proration_date` of the Billing quote for this change, so that the order is priced from
+            the same instant. Only for automatic checkout; deferred checkout is priced when the customer completes it.
+            Defaults to the time of the request; it must be a whole second, not in the future and at most 10 minutes
+            old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
           format: date-time
+        checkout:
+          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       required:
       - size_gb
       additionalProperties: false
@@ -450,29 +472,49 @@ components:
       additionalProperties: false
     CreateDiskResponseBody:
       description: |-
-        The new disk, `pending` until its order is accepted, and the order. Also returned for a disk restored
+        The new disk, `pending` until its order is accepted, and its Checkout Session. Also returned for a disk restored
         from a backup.
       type: object
       properties:
         disk:
           $ref: '#/components/schemas/DiskResource'
-        order:
-          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+        checkout_session_id:
+          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
+            in Billing.
+          type: string
+          format: uuid
+        order_id:
+          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - disk
-      - order
+      - checkout_session_id
+      - order_id
       additionalProperties: false
     ResizeDiskResponseBody:
-      description: The disk, still at its current size, and the order for the resize.
+      description: The disk, still at its current size, and the Checkout Session for the resize.
       type: object
       properties:
         disk:
           $ref: '#/components/schemas/DiskResource'
-        order:
-          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+        checkout_session_id:
+          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
+            in Billing.
+          type: string
+          format: uuid
+        order_id:
+          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - disk
-      - order
+      - checkout_session_id
+      - order_id
       additionalProperties: false
     DiskAttachment:
       type: object

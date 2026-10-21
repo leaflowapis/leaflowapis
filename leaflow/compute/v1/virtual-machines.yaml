@@ -34,15 +34,17 @@ paths:
     post:
       summary: Create virtual machines
       description: |-
-        Records the requested configuration, creates a deferred Billing order, including for metered terms, and returns one `pending` virtual machine per requested virtual machine with the order. Each new component carries its own commercial terms; their billing mode and period must match. A pending virtual machine has no virtual machine, system disk or address, and is not metered.
+        Creates a Billing Checkout Session, including for metered terms, and returns one `pending` virtual machine per requested virtual machine with it. Each new component carries its own commercial terms; their usage type and period must match. A pending virtual machine has no server, system disk or address, and is not metered.
 
-        Creation starts only after Compute receives `orderAccepted` and verifies the accepted order with Billing: the virtual machine becomes `provisioning`, then `active`. Preview and confirm checkout through Billing using the returned order reference. A zero-total order still requires verified acceptance; a canceled or expired order leaves the virtual machines `failed` with `order_canceled` or `order_expired`. Do not submit another creation request after paying. After an uncertain response, look the order up before submitting again.
+        Creation starts once Billing accepts the order: the virtual machine becomes `provisioning`, then `active`. With automatic checkout, insufficient funds refuse the request and nothing is created. With deferred checkout, the virtual machines stay `pending` until the customer completes checkout in Billing and the order is paid; an expired Checkout Session, or a canceled or expired order, leaves them `failed` with `checkout_expired`, `order_canceled` or `order_expired`. Do not submit another creation request after paying. After an uncertain response, look the Checkout Session up in Billing before submitting again.
 
         Choose an image or existing disk through boot_disk, and exactly one of network_interface_id or subnet_id. Existing network interfaces, boot disks or elastic IPs require count=1. They are not held while the virtual machine is pending; if one is no longer usable when the order is accepted, the virtual machine ends `failed` with `provisioning_failed`. Image boots require boot_disk; existing disks retain their own subscription. Virtual machines, disks and public IPs keep their own subscription items on the same order.
 
-        Virtual machines of one request succeed or fail individually. Each virtual machine, with its system disk, network interface and elastic IP, is created or fails as a whole. Virtual machines that were created are kept; each failed virtual machine ends `failed` with `provisioning_failed`, its part of the order is refunded, and the order then ends `partially_completed`. Each virtual machine is named after this request with a number appended.
+        Virtual machines of one request succeed or fail individually. Each virtual machine, with its system disk, network interface and elastic IP, is created or fails as a whole. Virtual machines that were created are kept; each failed virtual machine ends `failed` with `provisioning_failed`, its part of the order is refunded, and the order then ends `partially_completed`. A virtual machine is delivered whole or not at all: when the customer cancels any of its order items before the order is accepted, it is not created, its remaining items are canceled and refunded, and it ends `failed` with `order_canceled`. Each virtual machine is named after this request with a number appended.
 
-        The network is checked before the order is created, and a request it refuses orders and charges nothing. It is refused with `PRIVATE_NETWORK_UNAVAILABLE` when the virtual private cloud's `status` is not `available`, `SUBNET_UNAVAILABLE` or `SECURITY_GROUP_UNAVAILABLE` when the subnet or a security group is not ready, `SECURITY_GROUP_OTHER_PRIVATE_NETWORK` when a security group belongs to another virtual private cloud, and `PORT_UNAVAILABLE` when the port's `status` is not `available`. `meta` names the resource.
+        The network is checked before the Checkout Session is created, and a request it refuses orders and charges nothing. It is refused with `PRIVATE_NETWORK_UNAVAILABLE` when the virtual private cloud's `status` is not `available`, `SUBNET_UNAVAILABLE` or `SECURITY_GROUP_UNAVAILABLE` when the subnet or a security group is not ready, `SECURITY_GROUP_OTHER_PRIVATE_NETWORK` when a security group belongs to another virtual private cloud, and `PORT_UNAVAILABLE` when the port's `status` is not `available`. `meta` names the resource.
+
+        Each virtual machine shows the `create` operation from the moment the Checkout Session is created until it is delivered or the checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its release with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment.
       operationId: create-virtual-machine
       tags:
       - virtual-machines
@@ -135,6 +137,8 @@ paths:
         A virtual machine being captured as a private image cannot be released. Wait for the capture to finish, or delete that image first.
 
         Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the virtual machine, or for a disk that is deleted with it, including a pay-as-you-go subscription. `meta.resource_id` names that resource. The virtual machine is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`.
+
+        Refused with `COMPUTE_PURCHASE_PENDING` while the purchase that created it still awaits checkout or payment; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead.
       operationId: delete-virtual-machine
       tags:
       - virtual-machines
@@ -437,9 +441,9 @@ paths:
     post:
       summary: Resize a virtual machine
       description: |-
-        Records the requested configuration, creates a deferred Billing change order, including for metered terms, and returns the virtual machine with the order. The virtual machine keeps its billing mode and period; Billing resolves the applicable commercial terms and refuses an unavailable option with 409 `BILLING_OPTION_UNAVAILABLE`. The resize starts only after Compute receives `orderAccepted` and verifies the accepted order with Billing. Do not submit the change again after paying. After an uncertain response, look the order up before submitting again.
+        Creates a Billing Checkout Session for the change, including for metered terms, and returns the virtual machine with it. The virtual machine keeps its usage type and period, priced with the target type's matching option; a target type without that option is refused with 409 `BILLING_OPTION_UNAVAILABLE`. The resize starts once Billing accepts the order. Do not submit the change again after paying. After an uncertain response, look the Checkout Session up in Billing before submitting again.
 
-        The virtual machine shows the `resize` operation until the resize is applied or its order is canceled, including while the order awaits checkout, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. It keeps its current type until the resize is applied; the new type takes effect, and is billed from then on, when `machine_type_id` shows it. If the order is not accepted or the resize fails, the virtual machine keeps its current type and the order shows the outcome. A completed resize is final and cannot be reverted; to return to the previous type, submit another resize.
+        The virtual machine shows the `resize` operation until the resize is applied, its Checkout Session expires or its order is canceled, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. It keeps its current type until the resize is applied; the new type takes effect, and is billed from then on, when `machine_type_id` shows it. If checkout is not completed, the order is not accepted or the resize fails, the virtual machine keeps its current type and Billing shows the outcome. A completed resize is final and cannot be reverted; to return to the previous type, submit another resize.
       operationId: resize-virtual-machine
       tags:
       - virtual-machines
@@ -457,7 +461,7 @@ paths:
               $ref: '#/components/schemas/ResizeVirtualMachineRequestBody'
       responses:
         '202':
-          description: The virtual machine and the order for the resize; the new type is not yet in effect.
+          description: The virtual machine and the Checkout Session for the resize; the new type is not yet in effect.
           content:
             application/json:
               schema:
@@ -980,8 +984,9 @@ components:
           items:
             $ref: '#/components/schemas/VirtualMachineRestriction'
         failure_reason:
-          description: Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation
-            failed after the order was accepted, and the charge for this virtual machine is refunded.
+          description: Why creation failed; null unless `status` is `failed`. `checkout_expired` means checkout was
+            not completed before its Checkout Session expired. `provisioning_failed` means creation failed after the
+            order was accepted, and the charge for this virtual machine is refunded.
           type:
           - string
           - 'null'
@@ -989,6 +994,7 @@ components:
           - order_declined
           - order_canceled
           - order_expired
+          - checkout_expired
           - provisioning_failed
           - null
         operation:
@@ -996,6 +1002,14 @@ components:
           anyOf:
           - $ref: '#/components/schemas/VirtualMachineOperation'
           - type: 'null'
+          readOnly: true
+        checkout_session_id:
+          description: The Billing Checkout Session that bought this resource; `order_id` and `order_item_id` stay null
+            until its checkout completes. Null when the resource was not bought through one.
+          type:
+          - string
+          - 'null'
+          format: uuid
           readOnly: true
         order_id:
           type:
@@ -1064,6 +1078,7 @@ components:
       - status
       - created_at
       - updated_at
+      - checkout_session_id
       - order_id
       - generation
       - restrictions
@@ -1149,6 +1164,8 @@ components:
           $ref: '#/components/schemas/BootDisk'
         elastic_ip:
           $ref: '#/components/schemas/NewElasticIP'
+        checkout:
+          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       required:
       - name
       - compute
@@ -1307,11 +1324,14 @@ components:
           description: Must be in the same region and availability zone as the current machine type
           $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
         proration_date:
-          description: The instant used to price the change order. Defaults to the time of the request; it must
-            be a whole second, not in the future and at most 10 minutes old, otherwise the request is refused with
-            `BILLING_CHANGE_INVALID`. Preview the recorded order through Billing using its `order_id`.
+          description: The `proration_date` of the Billing quote for this change, so that the order is priced from
+            the same instant. Only for automatic checkout; deferred checkout is priced when the customer completes it.
+            Defaults to the time of the request; it must be a whole second, not in the future and at most 10 minutes
+            old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
           format: date-time
+        checkout:
+          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       required:
       - machine_type_id
       additionalProperties: false
@@ -1362,17 +1382,27 @@ components:
       additionalProperties: false
     ResizeVirtualMachineResponseBody:
       description: |-
-        The virtual machine, still on its current type, and the order for the resize. The virtual machine keeps its ID, and
+        The virtual machine, still on its current type, and the Checkout Session for the resize. The virtual machine keeps its ID, and
         its current subscription remains in force until the resize is applied.
       type: object
       properties:
         virtual_machine:
           $ref: '#/components/schemas/VirtualMachine'
-        order:
-          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+        checkout_session_id:
+          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
+            in Billing.
+          type: string
+          format: uuid
+        order_id:
+          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - virtual_machine
-      - order
+      - checkout_session_id
+      - order_id
       additionalProperties: false
     NewBootDisk:
       description: A system disk created from an image and recorded in the virtual machine order. Its commercial
@@ -1468,7 +1498,7 @@ components:
           minimum: 1
       additionalProperties: false
     CreateVirtualMachineResponseBody:
-      description: The new virtual machines, `pending` until their order is accepted, and the order they share.
+      description: The new virtual machines, `pending` until their order is accepted, and the Checkout Session they share.
       type: object
       properties:
         virtual_machines:
@@ -1480,15 +1510,25 @@ components:
           maxItems: 20
           items:
             $ref: '#/components/schemas/VirtualMachine'
-        order:
-          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+        checkout_session_id:
+          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
+            in Billing.
+          type: string
+          format: uuid
+        order_id:
+          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          type:
+          - string
+          - 'null'
+          format: uuid
         password:
           description: Generated login password, returned only by this response. Null when no password was generated.
           type:
           - string
           - 'null'
       required:
-      - order
+      - checkout_session_id
+      - order_id
       - virtual_machines
       - password
       additionalProperties: false

@@ -18,44 +18,30 @@ components:
       - count
       additionalProperties: false
     BillingChoice:
-      description: The commercial terms for one newly created component. Prepaid requires period and termination_policy;
-        postpaid refuses both. Components in one virtual machine order must use the same mode and period, while
-        their termination policies may differ.
+      description: The commercial terms for one newly purchased component. Licensed requires period and
+        termination_policy; metered refuses both. Components in one virtual machine purchase must use the same usage
+        type and period, while their termination policies may differ.
       type: object
       properties:
-        mode:
+        usage_type:
+          description: '`licensed` pays for a period in advance; `metered` bills usage until canceled.'
           type: string
           enum:
-          - prepaid
-          - postpaid
+          - licensed
+          - metered
         period:
           $ref: '#/components/schemas/BillingPeriod'
         termination_policy:
           $ref: '#/components/schemas/TerminationPolicy'
       required:
-      - mode
+      - usage_type
       additionalProperties: false
     TerminationPolicy:
-      description: Immediate ends service when cancellation takes effect, with refunds governed by the selected
-        commercial terms. Period-end keeps service until the paid period ends.
+      description: Immediate ends service when cancellation takes effect, with refunds governed by the purchased
+        terms. Period-end keeps service until the paid period ends.
       type: string
       enum:
       - immediate
       - period_end
-    PlacedOrder:
-      description: The Billing order created for this request. Continue checkout in Billing; payment and resource delivery are separate steps.
-      type: object
-      properties:
-        order_id:
-          type: string
-          format: uuid
-        invoice_id:
-          description: Null until Billing creates an invoice for this order.
-          type:
-          - string
-          - 'null'
-          format: uuid
-      required:
-      - order_id
-      - invoice_id
-      additionalProperties: false
+    CheckoutOptions:
+      $ref: ../../billing/type/v1/checkout.yaml#/components/schemas/CheckoutOptions

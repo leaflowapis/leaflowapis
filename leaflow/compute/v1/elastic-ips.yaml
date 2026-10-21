@@ -24,13 +24,15 @@ paths:
     post:
       summary: Allocate an elastic IP
       description: |-
-        Select a public elastic IP type. Compute records the pending resource and its deferred order before allocating an address; checkout is performed in Billing.
+        Select a public elastic IP type. The elastic IP is bought through a Billing Checkout Session, and no address is allocated before its order is accepted.
 
-        Returns the elastic IP as `pending` with its order; `address` is null until the address is allocated after the order is accepted. A requested `address` is not held while pending; if it is no longer available then, the elastic IP ends `failed` with `provisioning_failed` and its charge is refunded.
+        Returns the elastic IP as `pending` with its Checkout Session; `address` is null until the address is allocated after the order is accepted. A requested `address` is not held while pending; if it is no longer available then, the elastic IP ends `failed` with `provisioning_failed` and its charge is refunded.
 
         IPv6 is not requested through this endpoint. IPv6 addresses are assigned to virtual machines by the virtual private cloud; enable IPv6 on that network instead.
 
         Allocation does not select or create a virtual private cloud. A later association selects an assigned network-interface address; Compute then establishes the required network connectivity.
+
+        The elastic IP shows the `create` operation from the moment its Checkout Session is created until it is delivered or its checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its deletion with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment.
       operationId: create-elastic-ip
       tags:
       - elastic-ips
@@ -42,7 +44,7 @@ paths:
               $ref: '#/components/schemas/CreateElasticIPRequestBody'
       responses:
         '202':
-          description: The elastic IP and its order were created; no address is allocated yet.
+          description: The elastic IP and its Checkout Session were created; no address is allocated yet.
           content:
             application/json:
               schema:
@@ -86,6 +88,8 @@ paths:
         Releases the elastic IP after unbinding it. The elastic IP shows the `delete` operation until cleanup is confirmed; the address then immediately returns to available inventory, with no cooldown period. Unbinding or moving a binding alone does not release the address.
 
         Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the address, including a pay-as-you-go subscription. `meta.resource_id` names the elastic IP. It is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`.
+
+        Refused with `COMPUTE_PURCHASE_PENDING` while the purchase that created it still awaits checkout or payment; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead.
       operationId: release-elastic-ip
       tags:
       - elastic-ips
@@ -114,7 +118,7 @@ paths:
     put:
       summary: Set the bandwidth limit
       description: |-
-        Changes the bandwidth of this elastic IP through an order that keeps its billing mode and period; no separate bandwidth resource is created. The limit applies to inbound and outbound traffic alike. The elastic IP shows the `set_bandwidth` operation until the change is applied or its order is canceled, including while the order awaits checkout, so other operations and a second change are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The current limit stays in effect until the change is applied. If the order is not accepted or the change fails, `bandwidth_mbps` keeps its value and the order shows the outcome.
+        Changes the bandwidth of this elastic IP through a Checkout Session that keeps its usage type and period; no separate bandwidth resource is created. The limit applies to inbound and outbound traffic alike. The elastic IP shows the `set_bandwidth` operation until the change is applied, its Checkout Session expires or its order is canceled, so other operations and a second change are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The current limit stays in effect until the change is applied. If checkout is not completed, the order is not accepted or the change fails, `bandwidth_mbps` keeps its value and Billing shows the outcome.
 
         While the address is bound to a virtual machine, the limit must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `INSTANCE_BANDWIDTH_CEILING`. The limit of an address that is not bound is checked when the address is bound to a virtual machine.
       operationId: set-elastic-ip-bandwidth
@@ -134,7 +138,7 @@ paths:
               $ref: '#/components/schemas/SetElasticIPBandwidthRequestBody'
       responses:
         '202':
-          description: The elastic IP and the order for the change; the new limit is not yet in effect.
+          description: The elastic IP and the Checkout Session for the change; the new limit is not yet in effect.
           content:
             application/json:
               schema:
@@ -276,6 +280,14 @@ components:
           - error
           - unknown
           - missing
+        checkout_session_id:
+          description: The Billing Checkout Session that bought this resource; `order_id` and `order_item_id` stay null
+            until its checkout completes. Null when the resource was not bought through one.
+          type:
+          - string
+          - 'null'
+          format: uuid
+          readOnly: true
         order_id:
           type:
           - string
@@ -320,8 +332,9 @@ components:
           - reclaimed
           - null
         failure_reason:
-          description: Why creation failed; null unless `status` is `failed`. `provisioning_failed` means creation
-            failed after the order was accepted, and the charge for this elastic IP is refunded.
+          description: Why creation failed; null unless `status` is `failed`. `checkout_expired` means checkout was
+            not completed before its Checkout Session expired. `provisioning_failed` means creation failed after the
+            order was accepted, and the charge for this elastic IP is refunded.
           type:
           - string
           - 'null'
@@ -329,6 +342,7 @@ components:
           - order_declined
           - order_canceled
           - order_expired
+          - checkout_expired
           - provisioning_failed
           - null
         operation:
@@ -352,6 +366,7 @@ components:
       - status
       - bandwidth_mbps
       - created_at
+      - checkout_session_id
       - order_id
       - order_item_id
       - subscription_id
@@ -405,6 +420,8 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
         billing:
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+        checkout:
+          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       required:
       - bandwidth_mbps
       - type_id
@@ -422,11 +439,14 @@ components:
           format: int64
           minimum: 1
         proration_date:
-          description: The instant used to price the change order. Defaults to the time of the request; it must
-            be a whole second, not in the future and at most 10 minutes old, otherwise the request is refused with
-            `BILLING_CHANGE_INVALID`. Preview the recorded order through Billing using its `order_id`.
+          description: The `proration_date` of the Billing quote for this change, so that the order is priced from
+            the same instant. Only for automatic checkout; deferred checkout is priced when the customer completes it.
+            Defaults to the time of the request; it must be a whole second, not in the future and at most 10 minutes
+            old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
           format: date-time
+        checkout:
+          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       required:
       - bandwidth_mbps
       additionalProperties: false
@@ -450,29 +470,49 @@ components:
       additionalProperties: false
     CreateElasticIPResponseBody:
       description: |-
-        The new elastic IP, `pending` until its order is accepted, and the order. `address` is null until
+        The new elastic IP, `pending` until its order is accepted, and its Checkout Session. `address` is null until
         the address is allocated.
       type: object
       properties:
         elastic_ip:
           $ref: '#/components/schemas/ElasticIP'
-        order:
-          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+        checkout_session_id:
+          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
+            in Billing.
+          type: string
+          format: uuid
+        order_id:
+          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - elastic_ip
-      - order
+      - checkout_session_id
+      - order_id
       additionalProperties: false
     SetElasticIPBandwidthResponseBody:
-      description: The elastic IP, still at its current bandwidth, and the order for the change.
+      description: The elastic IP, still at its current bandwidth, and the Checkout Session for the change.
       type: object
       properties:
         elastic_ip:
           $ref: '#/components/schemas/ElasticIP'
-        order:
-          $ref: ./billing-terms.yaml#/components/schemas/PlacedOrder
+        checkout_session_id:
+          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
+            in Billing.
+          type: string
+          format: uuid
+        order_id:
+          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          type:
+          - string
+          - 'null'
+          format: uuid
       required:
       - elastic_ip
-      - order
+      - checkout_session_id
+      - order_id
       additionalProperties: false
     IPv4Binding:
       type: object
