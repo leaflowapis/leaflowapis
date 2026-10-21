@@ -8,17 +8,14 @@ paths:
       parameters:
       - name: region_id
         in: query
-        required: false
-        explode: false
+        description: Only security groups in this region.
         schema:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
       - name: virtual_private_cloud_id
         in: query
-        description: Return only the security groups of this virtual private cloud
-        explode: false
+        description: Only security groups of this virtual private cloud.
         schema:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
-          description: Return only the security groups of this virtual private cloud
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -36,9 +33,10 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     post:
       summary: Create a security group
-      description: A new security group carries one rule, permitting ICMP fragmentation-needed messages (type 3,
-        code 4). Without it path MTU discovery fails, which presents as connections that establish and then stall
-        on large packets.
+      description: A new security group admits all outbound traffic and denies inbound traffic, except ICMP
+        fragmentation-needed (IPv4) and Packet Too Big (IPv6). Without those two, path MTU discovery fails, which
+        shows as connections that establish and then stall on large packets. All of these are ordinary rules and can
+        be deleted.
       operationId: create-security-group
       tags:
       - security-groups
@@ -54,7 +52,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SecurityGroupResource'
+                $ref: '#/components/schemas/SecurityGroup'
         default:
           description: Error
           content:
@@ -62,24 +60,24 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
   /api/v1/security-groups/{securityGroupId}:
+    parameters:
+    - name: securityGroupId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
     get:
-      summary: Retrieve a security group
+      summary: Get a security group
       operationId: get-security-group
       tags:
       - security-groups
-      parameters:
-      - name: securityGroupId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SecurityGroupResource'
+                $ref: '#/components/schemas/SecurityGroup'
         default:
           description: Error
           content:
@@ -87,30 +85,25 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
-      summary: Rename a security group
-      description: Changes the name only. Use the rule endpoints to change rules.
-      operationId: rename-security-group
+      summary: Update a security group
+      description: Changes the name or description. Rules are resources of their own, created and deleted under
+        `/security-group-rules`.
+      operationId: update-security-group
       tags:
       - security-groups
-      parameters:
-      - name: securityGroupId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RenameSecurityGroupRequestBody'
+              $ref: '#/components/schemas/UpdateSecurityGroupRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SecurityGroupResource'
+                $ref: '#/components/schemas/SecurityGroup'
         default:
           description: Error
           content:
@@ -119,17 +112,11 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
       summary: Delete a security group
-      description: The default security group cannot be deleted, as it is released with the virtual private cloud.
-        A security group still referenced by a network interface cannot be deleted either.
+      description: Refused while a network interface uses the group. The default security group cannot be deleted;
+        it goes with its virtual private cloud.
       operationId: delete-security-group
       tags:
       - security-groups
-      parameters:
-      - name: securityGroupId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
       responses:
         '204':
           description: No Content
@@ -141,24 +128,27 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    SecurityGroupResource:
+    SecurityGroup:
       type: object
       properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+        virtual_private_cloud_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+        name:
+          type: string
+        description:
+          type: string
+        is_default:
+          description: The default security group goes with its virtual private cloud and cannot be deleted on its
+            own.
+          type: boolean
         created_at:
           type: string
           format: date-time
-        description:
+        updated_at:
           type: string
-        id:
-          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
-        is_default:
-          description: The default security group is released with its virtual private cloud and cannot be deleted
-            individually
-          type: boolean
-        name:
-          type: string
-        virtual_private_cloud_id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+          format: date-time
       required:
       - id
       - virtual_private_cloud_id
@@ -166,16 +156,15 @@ components:
       - description
       - is_default
       - created_at
+      - updated_at
       additionalProperties: false
     SecurityGroupListResponseBody:
       type: object
       properties:
         items:
-          type:
-          - array
-          - 'null'
+          type: array
           items:
-            $ref: '#/components/schemas/SecurityGroupResource'
+            $ref: '#/components/schemas/SecurityGroup'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
@@ -185,26 +174,28 @@ components:
     CreateSecurityGroupRequestBody:
       type: object
       properties:
-        description:
-          type: string
-          maxLength: 500
+        virtual_private_cloud_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         name:
           type: string
           minLength: 1
           maxLength: 128
-        virtual_private_cloud_id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+        description:
+          type: string
+          maxLength: 500
       required:
       - virtual_private_cloud_id
       - name
       additionalProperties: false
-    RenameSecurityGroupRequestBody:
+    UpdateSecurityGroupRequestBody:
       type: object
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 128
-      required:
-      - name
+        description:
+          type: string
+          maxLength: 500
+      minProperties: 1
       additionalProperties: false

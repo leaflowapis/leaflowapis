@@ -59,10 +59,10 @@ tags:
   description: Compute regions and their availability zones.
 - name: routes
   description: Routes resources and operations.
+- name: security-group-rules
+  description: Security group rules.
 - name: security-groups
   description: Security groups resources and operations.
-- name: security-rules
-  description: Security rules resources and operations.
 - name: snapshots
   description: Snapshots resources and operations.
 - name: subnets
@@ -138,14 +138,14 @@ paths:
     $ref: ./routes.yaml#/paths/~1api~1v1~1routes
   /api/v1/routes/{routeId}:
     $ref: ./routes.yaml#/paths/~1api~1v1~1routes~1{routeId}
+  /api/v1/security-group-rules:
+    $ref: ./security-group-rules.yaml#/paths/~1api~1v1~1security-group-rules
+  /api/v1/security-group-rules/{ruleId}:
+    $ref: ./security-group-rules.yaml#/paths/~1api~1v1~1security-group-rules~1{ruleId}
   /api/v1/security-groups:
     $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups
   /api/v1/security-groups/{securityGroupId}:
     $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}
-  /api/v1/security-groups/{securityGroupId}/rules:
-    $ref: ./security-rules.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}~1rules
-  /api/v1/security-groups/{securityGroupId}/rules/{ruleId}:
-    $ref: ./security-rules.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}~1rules~1{ruleId}
   /api/v1/snapshots:
     $ref: ./snapshots.yaml#/paths/~1api~1v1~1snapshots
   /api/v1/snapshots/{snapshotId}:
@@ -413,20 +413,22 @@ components:
       $ref: ./routes.yaml#/components/schemas/RouteListResponseBody
     CreateRouteRequestBody:
       $ref: ./routes.yaml#/components/schemas/CreateRouteRequestBody
-    SecurityGroupResource:
-      $ref: ./security-groups.yaml#/components/schemas/SecurityGroupResource
+    SecurityGroupRuleDirection:
+      $ref: ./security-group-rules.yaml#/components/schemas/SecurityGroupRuleDirection
+    SecurityGroupRule:
+      $ref: ./security-group-rules.yaml#/components/schemas/SecurityGroupRule
+    SecurityGroupRuleListResponseBody:
+      $ref: ./security-group-rules.yaml#/components/schemas/SecurityGroupRuleListResponseBody
+    CreateSecurityGroupRuleRequestBody:
+      $ref: ./security-group-rules.yaml#/components/schemas/CreateSecurityGroupRuleRequestBody
+    SecurityGroup:
+      $ref: ./security-groups.yaml#/components/schemas/SecurityGroup
     SecurityGroupListResponseBody:
       $ref: ./security-groups.yaml#/components/schemas/SecurityGroupListResponseBody
     CreateSecurityGroupRequestBody:
       $ref: ./security-groups.yaml#/components/schemas/CreateSecurityGroupRequestBody
-    RenameSecurityGroupRequestBody:
-      $ref: ./security-groups.yaml#/components/schemas/RenameSecurityGroupRequestBody
-    SecurityRuleResource:
-      $ref: ./security-rules.yaml#/components/schemas/SecurityRuleResource
-    SecurityRuleListResponseBody:
-      $ref: ./security-rules.yaml#/components/schemas/SecurityRuleListResponseBody
-    CreateSecurityRuleRequestBody:
-      $ref: ./security-rules.yaml#/components/schemas/CreateSecurityRuleRequestBody
+    UpdateSecurityGroupRequestBody:
+      $ref: ./security-groups.yaml#/components/schemas/UpdateSecurityGroupRequestBody
     SnapshotResource:
       $ref: ./snapshots.yaml#/components/schemas/SnapshotResource
     SnapshotListResponseBody:
