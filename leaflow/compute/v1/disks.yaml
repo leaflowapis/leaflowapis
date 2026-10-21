@@ -153,7 +153,7 @@ paths:
       description: |-
         Deletion is rejected while the disk is attached, or while snapshots created from it still exist.
 
-        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the disk, including a pay-as-you-go subscription. `meta.resource_id` names the disk. It is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`.
+        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the disk, including a pay-as-you-go subscription. `meta.resource_id` names the disk. It is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_set`.
 
         Refused with `COMPUTE_PURCHASE_PENDING` while the purchase that created it still awaits checkout or payment; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead.
       operationId: delete-disk
@@ -285,18 +285,12 @@ components:
           - string
           - 'null'
           format: uuid
-        release_subscription_ids:
-          description: 'The subscriptions a cancellation through Billing has to cover to release this disk: its
-            own. Snapshots have no individual subscriptions. A system disk is released only with its virtual machine,
-            so for a system disk the list is that of the virtual machine. Subscriptions that have ended are not
-            listed, and the list is empty when no subscription pays for any of them.'
-          type: array
-          items:
-            type: string
-            format: uuid
         release_set:
-          description: The subscriptions of `release_subscription_ids`, in the same order, each with the resource
-            it pays for, so that each line of a cancellation can name what it releases.
+          description: 'The subscriptions a cancellation through Billing has to cover to release this disk: its
+            own, each with the resource it pays for, so that each line of a cancellation can name what it releases.
+            Snapshots have no individual subscriptions. A system disk is released only with its virtual machine,
+            so for a system disk the set is that of the virtual machine. Subscriptions that have ended are not
+            listed, and the set is empty when no subscription pays for any of them.'
           type: array
           items:
             $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
@@ -334,15 +328,6 @@ components:
           anyOf:
           - $ref: '#/components/schemas/DiskAttachment'
           - type: 'null'
-        generation:
-          type: integer
-          format: int64
-          minimum: 1
-        observed_at:
-          type:
-          - string
-          - 'null'
-          format: date-time
       required:
       - id
       - name
@@ -357,13 +342,11 @@ components:
       - order_id
       - order_item_id
       - subscription_id
-      - release_subscription_ids
       - release_set
       - access_state
       - failure_reason
       - operation
-      - generation
-      - observed_at
+      - attachment
       additionalProperties: false
     DiskListResponseBody:
       type: object

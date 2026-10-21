@@ -30,7 +30,7 @@ paths:
       in: path
       required: true
       schema:
-        $ref: '#/components/schemas/ProjectQuotaResource'
+        $ref: '#/components/schemas/QuotaResourceType'
     get:
       summary: Get a project quota
       description: Reads only the IAM project authorized by the scoped token; callers cannot select another project.
@@ -54,7 +54,7 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    ProjectQuotaResource:
+    QuotaResourceType:
       description: 'The resource or capacity constrained by a project quota. Defaults when no override exists: virtual_machines=5;
         vcpus=16; memory_mib=32768; disks=20; disk_gib=500; virtual_private_clouds=3; subnets=20; network_interfaces=20;
         elastic_ips=3; nat_gateways=1; security_groups=10; security_group_rules=100; snapshots=20; backups=20; private_images=10.
@@ -87,7 +87,7 @@ components:
           format: uuid
           readOnly: true
         resource:
-          $ref: '#/components/schemas/ProjectQuotaResource'
+          $ref: '#/components/schemas/QuotaResourceType'
           readOnly: true
         limit:
           type: integer

@@ -23,7 +23,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ZoneListResponseBody'
+                $ref: '#/components/schemas/AvailabilityZoneListResponseBody'
         default:
           description: Error
           content:
@@ -49,7 +49,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ZoneResource'
+                $ref: '#/components/schemas/AvailabilityZoneResource'
         default:
           description: Error
           content:
@@ -58,7 +58,7 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    ZoneResource:
+    AvailabilityZoneResource:
       type: object
       properties:
         name:
@@ -78,7 +78,7 @@ components:
       - id
       - region_id
       additionalProperties: false
-    ZoneListResponseBody:
+    AvailabilityZoneListResponseBody:
       type: object
       properties:
         items:
@@ -86,7 +86,7 @@ components:
           - array
           - 'null'
           items:
-            $ref: '#/components/schemas/ZoneResource'
+            $ref: '#/components/schemas/AvailabilityZoneResource'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:

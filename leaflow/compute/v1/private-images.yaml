@@ -276,6 +276,13 @@ components:
           format: uuid
           readOnly: true
           description: The subscription for this resource; its presence alone does not imply delivery.
+        release_set:
+          description: The subscription that pays for this private image, with the resource it pays for, so that a
+            cancellation through Billing can name what it releases. Empty when no subscription pays for it, and
+            once it is released.
+          type: array
+          items:
+            $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
       required:
       - id
       - region_id
@@ -298,6 +305,7 @@ components:
       - order_id
       - order_item_id
       - subscription_id
+      - release_set
       additionalProperties: false
     PrivateImageListResponseBody:
       type: object

@@ -148,8 +148,8 @@ components:
           type: string
         virtual_private_cloud_id:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
-        public_ips:
-          description: Floating IPv4 addresses bound to this network interface; an empty array when none are bound
+        elastic_ip_addresses:
+          description: Elastic IPv4 addresses associated with this network interface; an empty array when none are associated
           type:
           - array
           - 'null'
@@ -172,15 +172,6 @@ components:
           - error
           - unknown
           - missing
-        generation:
-          type: integer
-          format: int64
-          minimum: 1
-        observed_at:
-          type:
-          - string
-          - 'null'
-          format: date-time
         operation:
           description: The operation in progress on this network interface, or null when none is.
           anyOf:
@@ -192,10 +183,9 @@ components:
       - virtual_private_cloud_id
       - name
       - mac
-      - public_ips
+      - elastic_ip_addresses
+      - attachment
       - status
-      - generation
-      - observed_at
       - operation
       additionalProperties: false
     NetworkInterfaceListResponseBody:
@@ -265,8 +255,12 @@ components:
           type: string
           minLength: 1
           maxLength: 64
-        is_primary:
-          type: boolean
+        role:
+          description: '`primary` is the interface''s primary private address, which is the virtual machine''s network location; every other address of the interface is `secondary`.'
+          type: string
+          enum:
+          - primary
+          - secondary
         state:
           type: string
           enum:
@@ -288,7 +282,7 @@ components:
       - id
       - subnet_id
       - address
-      - is_primary
+      - role
       - state
       - assigned_at
       - released_at
@@ -306,7 +300,7 @@ components:
           type: string
           enum:
           - primary
-          - additional
+          - secondary
         delete_with_virtual_machine:
           type: boolean
         state:

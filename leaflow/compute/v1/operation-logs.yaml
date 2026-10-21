@@ -3,9 +3,9 @@ paths:
     get:
       summary: List the operation log of the project
       description: |-
-        Records every write operation in the project: who performed it, when, on what, and whether it succeeded. Read operations are not recorded.
+        Records every write operation in the project: who performed it, when, on what, and its outcome. Read operations are not recorded.
 
-        **Operations performed by the platform are included, but the individual operator is not disclosed** and `by_platform` is true. Suspension for non-payment and bans for abuse are examples: the time at which a virtual machine was stopped by the platform is needed, whereas the operator is internal information.
+        **Operations performed by the platform are included, but the individual operator is not disclosed** and `actor_type` is `platform`. Suspension for non-payment and bans for abuse are examples: the time at which a virtual machine was stopped by the platform is needed, whereas the operator is internal information.
 
         Fields such as passwords are replaced with a placeholder as the record is written and never appear in `payload`.
       operationId: list-operation-logs
@@ -70,27 +70,32 @@ components:
         action:
           description: Name of the operation; matches the operation id of the endpoint
           type: string
-        actor:
-          description: The user who initiated the operation. Empty when the platform performed it
+        user_id:
+          description: The user who initiated the operation. Null when `actor_type` is `platform`
           type:
           - string
           - 'null'
-        actor_name:
+          format: uuid
+        user_name:
           description: |-
             The name this user went by at the time of the operation, recorded alongside the operation itself. It is not refreshed afterwards: the record states who acted then, and a name read today is a statement about a different moment.
 
-            Null on entries recorded before this field existed, and on entries performed by the platform. An empty string means the account had no name recorded.
+            Null on entries recorded before this field existed, and when `actor_type` is `platform`. An empty string means the account had no name recorded.
           type:
           - string
           - 'null'
-        by_platform:
-          description: True when the operation was performed by the platform
-          type: boolean
+        actor_type:
+          description: '`user` when a user of the project initiated the operation, `platform` when the platform
+            performed it.'
+          type: string
+          enum:
+          - user
+          - platform
         created_at:
           type: string
           format: date-time
         failure:
-          description: Brief reason for the failure
+          description: Brief reason for the failure; null when `outcome` is `succeeded`
           type:
           - string
           - 'null'
@@ -110,19 +115,26 @@ components:
           type: string
         subject_type:
           type: string
-        succeeded:
-          type: boolean
+        outcome:
+          description: '`succeeded` means the operation took effect. `rejected` means it was refused with a 4xx
+            the caller can act on, such as a validation failure, a conflict or an exhausted quota. `failed` means
+            the platform failed to carry it out (5xx).'
+          type: string
+          enum:
+          - outcome
+          - rejected
+          - failed
       required:
       - id
       - action
-      - by_platform
-      - actor
-      - actor_name
+      - actor_type
+      - user_id
+      - user_name
       - subject_type
       - subject_id
       - region_id
       - payload
-      - succeeded
+      - outcome
       - failure
       - created_at
       additionalProperties: false

@@ -18,13 +18,13 @@ components:
       oneOf:
       - $ref: '#/components/schemas/VirtualMachineReleaseResource'
       - $ref: '#/components/schemas/DiskReleaseResource'
-      - $ref: '#/components/schemas/ElasticIpReleaseResource'
+      - $ref: '#/components/schemas/ElasticIPReleaseResource'
       discriminator:
         propertyName: type
         mapping:
           virtual_machine: '#/components/schemas/VirtualMachineReleaseResource'
           disk: '#/components/schemas/DiskReleaseResource'
-          elastic_ip: '#/components/schemas/ElasticIpReleaseResource'
+          elastic_ip: '#/components/schemas/ElasticIPReleaseResource'
     VirtualMachineReleaseResource:
       description: A resource a release set releases.
       type: object
@@ -63,7 +63,7 @@ components:
       - id
       - name
       additionalProperties: false
-    ElasticIpReleaseResource:
+    ElasticIPReleaseResource:
       description: A resource a release set releases.
       type: object
       properties:

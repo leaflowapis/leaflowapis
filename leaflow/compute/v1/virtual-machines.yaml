@@ -42,7 +42,7 @@ paths:
 
         Virtual machines of one request succeed or fail individually. Each virtual machine, with its system disk, network interface and elastic IP, is created or fails as a whole. Virtual machines that were created are kept; each failed virtual machine ends `failed` with `provisioning_failed`, its part of the order is refunded, and the order then ends `partially_completed`. A virtual machine is delivered whole or not at all: when the customer cancels any of its order items before the order is accepted, it is not created, its remaining items are canceled and refunded, and it ends `failed` with `order_canceled`. Each virtual machine is named after this request with a number appended.
 
-        The network is checked before the Checkout Session is created, and a request it refuses orders and charges nothing. It is refused with `PRIVATE_NETWORK_UNAVAILABLE` when the virtual private cloud's `status` is not `available`, `SUBNET_UNAVAILABLE` or `SECURITY_GROUP_UNAVAILABLE` when the subnet or a security group is not ready, `SECURITY_GROUP_OTHER_PRIVATE_NETWORK` when a security group belongs to another virtual private cloud, and `PORT_UNAVAILABLE` when the port's `status` is not `available`. `meta` names the resource.
+        The network is checked before the Checkout Session is created, and a request it refuses orders and charges nothing. It is refused with `VIRTUAL_PRIVATE_CLOUD_UNAVAILABLE` when the virtual private cloud's `status` is not `available`, `SUBNET_UNAVAILABLE` or `SECURITY_GROUP_UNAVAILABLE` when the subnet or a security group is not ready, `SECURITY_GROUP_OTHER_PRIVATE_NETWORK` when a security group belongs to another virtual private cloud, and `NETWORK_INTERFACE_UNAVAILABLE` when the port's `status` is not `available`. `meta` names the resource.
 
         Each virtual machine shows the `create` operation from the moment the Checkout Session is created until it is delivered or the checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its release with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment.
       operationId: create-virtual-machine
@@ -159,7 +159,7 @@ paths:
 
         A virtual machine being captured as a private image cannot be released. Wait for the capture to finish, or delete that image first.
 
-        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the virtual machine, or for a disk that is deleted with it, including a pay-as-you-go subscription. `meta.resource_id` names that resource. The virtual machine is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`.
+        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the virtual machine, or for a disk that is deleted with it, including a pay-as-you-go subscription. `meta.resource_id` names that resource. The virtual machine is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_set`.
 
         Refused with `COMPUTE_PURCHASE_PENDING` while the purchase that created it still awaits checkout or payment; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead.
       operationId: delete-virtual-machine
@@ -455,7 +455,7 @@ paths:
       description: |-
         Unmount the device inside the virtual machine before calling this endpoint. Forcibly detaching a file system that is being written to corrupts data.
 
-        The disk the virtual machine boots from cannot be detached, whether it is the system disk bought with the virtual machine or a disk supplied as the existing boot_disk at launch. Such a request is refused with `INSTANCE_BOOT_DISK_LOCKED` and changes nothing; releasing the virtual machine is what frees that disk.
+        The disk the virtual machine boots from cannot be detached, whether it is the system disk bought with the virtual machine or a disk supplied as the existing boot_disk at launch. Such a request is refused with `VIRTUAL_MACHINE_BOOT_DISK_LOCKED` and changes nothing; releasing the virtual machine is what frees that disk.
 
         Returns the disk; the virtual machine shows the `detach_disk` operation and the disk the `detach` operation until the disk is detached.
       operationId: detach-virtual-machine-disk
@@ -715,9 +715,9 @@ components:
           anyOf:
           - $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
           - type: 'null'
-        public_ips:
-          description: Floating IPv4 addresses bound to the primary network interface; an empty array when none
-            are bound
+        elastic_ip_addresses:
+          description: Elastic IPv4 addresses associated with the primary network interface; an empty array when none
+            are associated
           type:
           - array
           - 'null'
@@ -753,15 +753,6 @@ components:
           - type: 'null'
         updated_at:
           type: string
-          format: date-time
-        generation:
-          type: integer
-          format: int64
-          minimum: 1
-        observed_at:
-          type:
-          - string
-          - 'null'
           format: date-time
         restrictions:
           type: array
@@ -814,15 +805,10 @@ components:
           - string
           - 'null'
           format: uuid
-        release_subscription_ids:
-          description: "Subscriptions required to release this virtual machine and disks deleted with it. Billing determines cancellation terms. An empty list does not establish refund eligibility."
-          type: array
-          items:
-            type: string
-            format: uuid
         release_set:
-          description: The subscriptions of `release_subscription_ids`, in the same order, each with the resource
-            it pays for, so that each line of a cancellation can name what it releases.
+          description: Subscriptions required to release this virtual machine and disks deleted with it, each
+            with the resource it pays for, so that each line of a cancellation can name what it releases. Billing
+            determines cancellation terms. An empty set does not establish refund eligibility.
           type: array
           items:
             $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
@@ -854,7 +840,7 @@ components:
       - virtual_private_cloud_id
       - subnet_id
       - private_ip
-      - public_ips
+      - elastic_ip_addresses
       - ipv6_address
       - machine_type_id
       - image_id
@@ -865,16 +851,13 @@ components:
       - updated_at
       - checkout_session_id
       - order_id
-      - generation
       - restrictions
       - order_item_id
       - subscription_id
-      - release_subscription_ids
       - release_set
       - access_state
       - failure_reason
       - operation
-      - observed_at
       additionalProperties: false
     VirtualMachineListResponseBody:
       type: object
@@ -901,11 +884,11 @@ components:
             Mutually exclusive with `bandwidth_mbps`: an address you already hold has its own bandwidth
             ceiling, set when it was allocated, and changing it is a separate operation.
 
-            Like `bandwidth_mbps`, this happens **inside the creation**: if binding fails, no virtual machine is
+            Like `bandwidth_mbps`, this happens **inside the creation**: if association fails, no virtual machine is
             created. Associating afterwards is still possible (`put-elastic-ip-association`), but then it is two
             operations and a failure in between leaves a virtual machine you cannot reach.
 
-            Only one virtual machine can be created when it is used — one address binds to one interface.
+            Only one virtual machine can be created when it is used — one address is associated with one interface.
         count:
           description: Number of virtual machines to create; 1 when omitted. Names are numbered automatically for
             several
@@ -930,7 +913,7 @@ components:
           maxLength: 128
         network_interface_id:
           $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
-          description: Use an existing network interface, which may already have an elastic IP bound. Exactly one
+          description: Use an existing network interface, which may already have an elastic IP associated. Exactly one
             of this and `subnet_id`; only one virtual machine can be created when it is used
         security_group_ids:
           description: Required when a primary network interface is created, at least one; the default security
@@ -1331,8 +1314,8 @@ components:
           - detach_disk
           - attach_network_interface
           - detach_network_interface
-          - bind_elastic_ip
-          - unbind_elastic_ip
+          - associate_elastic_ip
+          - disassociate_elastic_ip
           - capture_image
           - suspend
           - resume

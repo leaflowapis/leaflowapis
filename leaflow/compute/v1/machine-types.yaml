@@ -69,7 +69,7 @@ components:
           description: |-
             The machine's network rate, in Mbps. **Each** network interface of the machine is limited to it in both directions — per interface rather than shared, so a machine with two interfaces has this rate on each of them; `max_network_interfaces` says how many it may have. Zero is no limit.
 
-            An elastic IP bound to the machine cannot be bought faster than this rate; asking for more is refused with `INSTANCE_BANDWIDTH_CEILING`.
+            An elastic IP associated with the machine cannot be bought faster than this rate; asking for more is refused with `VIRTUAL_MACHINE_BANDWIDTH_CEILING`.
           type: integer
           format: int64
         max_elastic_ips:

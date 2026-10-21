@@ -157,9 +157,9 @@ components:
         accepter_project_id:
           type: string
           format: uuid
-        requester_network_id:
+        requester_virtual_private_cloud_id:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
-        accepter_network_id:
+        accepter_virtual_private_cloud_id:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         acceptance:
           description: The accepter project's decision. `pending` until it writes one; `accepted` and `rejected` follow
@@ -178,12 +178,15 @@ components:
           - active
           - deleted
           - rejected
-          - error
+          - failed
         created_at:
           type: string
           format: date-time
-        failure_code:
-          type: string
+        failure_reason:
+          description: Why provisioning failed; null unless `status` is `failed`.
+          type:
+          - string
+          - 'null'
         operation:
           description: The operation in progress on this peering, or null when none is.
           anyOf:
@@ -196,11 +199,12 @@ components:
       - region_id
       - requester_project_id
       - accepter_project_id
-      - requester_network_id
-      - accepter_network_id
+      - requester_virtual_private_cloud_id
+      - accepter_virtual_private_cloud_id
       - acceptance
       - status
       - created_at
+      - failure_reason
       - operation
       additionalProperties: false
     PeeringListResponseBody:
@@ -223,18 +227,18 @@ components:
           type: string
           minLength: 1
           maxLength: 128
-        requester_network_id:
+        requester_virtual_private_cloud_id:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         accepter_project_id:
           type: string
           format: uuid
-        accepter_network_id:
+        accepter_virtual_private_cloud_id:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
       required:
       - name
-      - requester_network_id
+      - requester_virtual_private_cloud_id
       - accepter_project_id
-      - accepter_network_id
+      - accepter_virtual_private_cloud_id
       additionalProperties: false
     UpdatePeeringRequestBody:
       description: The decision of the accepter project.

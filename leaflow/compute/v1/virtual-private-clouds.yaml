@@ -260,6 +260,21 @@ components:
           type:
           - string
           - 'null'
+        status:
+          description: '`pending` until the virtual private cloud''s network and router exist. `failed` means creation
+            failed or the backend lost the network; virtual machines cannot be created in it then and are refused
+            with `VIRTUAL_PRIVATE_CLOUD_UNAVAILABLE`.'
+          type: string
+          enum:
+          - pending
+          - available
+          - failed
+        operation:
+          description: The operation in progress on this virtual private cloud, or null when none is.
+          anyOf:
+          - $ref: '#/components/schemas/VirtualPrivateCloudOperation'
+          - type: 'null'
+          readOnly: true
         created_at:
           type: string
           format: date-time
@@ -272,8 +287,29 @@ components:
       - name
       - cidr
       - ipv6_cidr
+      - status
+      - operation
       - created_at
       - updated_at
+      additionalProperties: false
+    VirtualPrivateCloudOperation:
+      description: An operation still running on this virtual private cloud. It is not a separate resource; once it
+        finishes, the virtual private cloud's `operation` is null again and the virtual private cloud shows the result.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - create
+          - enable_ipv6
+          - disable_ipv6
+          - delete
+        started_at:
+          type: string
+          format: date-time
+      required:
+      - type
+      - started_at
       additionalProperties: false
     VirtualPrivateCloudListResponseBody:
       type: object

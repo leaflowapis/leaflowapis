@@ -26,6 +26,10 @@ info:
 
     Compute resource IDs use the fixed TypeID prefix declared in their schema. UUID text is not accepted for these resource IDs. Project, order, subscription and Billing Plan identifiers remain UUIDs. Historical operation-log subject IDs are audit facts and are not rewritten.
 
+    ## Error meta
+
+    Resource identifiers in an error's `meta` (`resource_id`, `disk_id`, `network_interface_id` and the like) are TypeIDs, in the same form as the identifiers in resources. `meta.resource_type` is the resource's name as written in paths, with underscores: `virtual_machine`, `disk`, `elastic_ip`, `network_interface`, `virtual_private_cloud`, `private_image`, `disk_backup`, and so on.
+
 servers:
 - url: https://compute.leaflow.cloud
 security:
@@ -191,10 +195,10 @@ components:
     scopedTokenAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
   schemas:
-    ZoneResource:
-      $ref: ./availability-zones.yaml#/components/schemas/ZoneResource
-    ZoneListResponseBody:
-      $ref: ./availability-zones.yaml#/components/schemas/ZoneListResponseBody
+    AvailabilityZoneResource:
+      $ref: ./availability-zones.yaml#/components/schemas/AvailabilityZoneResource
+    AvailabilityZoneListResponseBody:
+      $ref: ./availability-zones.yaml#/components/schemas/AvailabilityZoneListResponseBody
     DiskBackupResource:
       $ref: ./disk-backups.yaml#/components/schemas/DiskBackupResource
     DiskBackupListResponseBody:
@@ -275,8 +279,8 @@ components:
       $ref: ./elastic-ips.yaml#/components/schemas/UpdateElasticIPResponseBody
     CreateElasticIPResponseBody:
       $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPResponseBody
-    IPv4Binding:
-      $ref: ./elastic-ips.yaml#/components/schemas/IPv4Binding
+    ElasticIPAssociation:
+      $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPAssociation
     ElasticIPOperation:
       $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPOperation
     VirtualMachineID:
@@ -379,8 +383,8 @@ components:
       $ref: ./peerings.yaml#/components/schemas/UpdatePeeringRequestBody
     PeeringOperation:
       $ref: ./peerings.yaml#/components/schemas/PeeringOperation
-    ProjectQuotaResource:
-      $ref: ./quotas.yaml#/components/schemas/ProjectQuotaResource
+    QuotaResourceType:
+      $ref: ./quotas.yaml#/components/schemas/QuotaResourceType
     ProjectQuota:
       $ref: ./quotas.yaml#/components/schemas/ProjectQuota
     ProjectQuotaListResponseBody:
@@ -397,8 +401,8 @@ components:
       $ref: ./release-sets.yaml#/components/schemas/VirtualMachineReleaseResource
     DiskReleaseResource:
       $ref: ./release-sets.yaml#/components/schemas/DiskReleaseResource
-    ElasticIpReleaseResource:
-      $ref: ./release-sets.yaml#/components/schemas/ElasticIpReleaseResource
+    ElasticIPReleaseResource:
+      $ref: ./release-sets.yaml#/components/schemas/ElasticIPReleaseResource
     RouteOrigin:
       $ref: ./routes.yaml#/components/schemas/RouteOrigin
     RouteResource:
@@ -491,6 +495,8 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/PutVirtualMachineRescueResponseBody
     VirtualPrivateCloud:
       $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloud
+    VirtualPrivateCloudOperation:
+      $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloudOperation
     VirtualPrivateCloudListResponseBody:
       $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloudListResponseBody
     CreateVirtualPrivateCloudRequestBody:
@@ -505,7 +511,7 @@ components:
     Conflict:
       description: |-
         The request conflicts with the current state of a resource or offering it involves. `COMPUTE_RESOURCE_BUSY`
-        means a resource has an operation in progress: `meta.resource_type`, such as `virtual machine` or `elastic_ip`, and
+        means a resource has an operation in progress: `meta.resource_type`, such as `virtual_machine` or `elastic_ip`, and
         `meta.resource_id` name it, and `meta.operation` is the type of that operation, as in its `operation` field.
         Retry once it has finished. Other codes, such as `BILLING_OPTION_UNAVAILABLE`, are described where they
         apply.
