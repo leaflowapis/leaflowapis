@@ -82,15 +82,59 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    patch:
+      summary: Update an elastic IP
+      description: |-
+        Changes the bandwidth of this elastic IP. `bandwidth_mbps` is an operational field: it starts a change and cannot be combined with any other field in the same request. Such a request is refused with 422 `UPDATE_FIELDS_COMBINED`, because a change that committed beside another that was then refused would leave the request half applied. An elastic IP has no descriptive field today, so 200 is reserved for the fields that may be added to it and every accepted update answers 202. `checkout` and `proration_date` belong to the purchase of the `bandwidth_mbps` change and are accepted only together with it.
+
+        The change goes through a Checkout Session that keeps the elastic IP's usage type and period; no separate bandwidth resource is created. The limit applies to inbound and outbound traffic alike. The elastic IP shows the `set_bandwidth` operation until the change is applied, its Checkout Session expires or its order is canceled, so other operations and a second change are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The current limit stays in effect until the change is applied. If checkout is not completed, the order is not accepted or the change fails, `bandwidth_mbps` keeps its value and Billing shows the outcome.
+
+        While the address is associated with a virtual machine, the limit must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `INSTANCE_BANDWIDTH_CEILING`. The limit of an address that is not associated is checked when the address is associated with a virtual machine.
+      operationId: update-elastic-ip
+      tags:
+      - elastic-ips
+      parameters:
+      - name: elasticIpId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateElasticIPRequestBody'
+      responses:
+        '200':
+          description: Only descriptive fields changed; no operation started. `checkout_session_id` and `order_id` are null.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateElasticIPResponseBody'
+        '202':
+          description: The elastic IP and the Checkout Session for the change; the new limit is not yet in effect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateElasticIPResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
       summary: Release an elastic IP
       description: |-
-        Releases the elastic IP after unbinding it. The elastic IP shows the `delete` operation until cleanup is confirmed; the address then immediately returns to available inventory, with no cooldown period. Unbinding or moving a binding alone does not release the address.
+        Releases the elastic IP after dissociating it. The elastic IP shows the `delete` operation until cleanup is confirmed; the address then immediately returns to available inventory, with no cooldown period. Deleting the association or replacing it alone does not release the address.
 
         Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the address, including a pay-as-you-go subscription. `meta.resource_id` names the elastic IP. It is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_subscription_ids`.
 
         Refused with `COMPUTE_PURCHASE_PENDING` while the purchase that created it still awaits checkout or payment; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead.
-      operationId: release-elastic-ip
+      operationId: delete-elastic-ip
       tags:
       - elastic-ips
       parameters:
@@ -114,14 +158,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ElasticIP'
-  /api/v1/elastic-ips/{elasticIpId}/bandwidth:
-    put:
-      summary: Set the bandwidth limit
+  /api/v1/elastic-ips/{elasticIpId}/association:
+    get:
+      summary: Retrieve the association of an elastic IP
       description: |-
-        Changes the bandwidth of this elastic IP through a Checkout Session that keeps its usage type and period; no separate bandwidth resource is created. The limit applies to inbound and outbound traffic alike. The elastic IP shows the `set_bandwidth` operation until the change is applied, its Checkout Session expires or its order is canceled, so other operations and a second change are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The current limit stays in effect until the change is applied. If checkout is not completed, the order is not accepted or the change fails, `bandwidth_mbps` keeps its value and Billing shows the outcome.
+        The private address of a network interface this elastic IP currently points at. Returns the stored state; it does not query the cloud.
 
-        While the address is bound to a virtual machine, the limit must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `INSTANCE_BANDWIDTH_CEILING`. The limit of an address that is not bound is checked when the address is bound to a virtual machine.
-      operationId: set-elastic-ip-bandwidth
+        An elastic IP that points at nothing has no association: the request is refused with 404 `ELASTIC_IP_NOT_ASSOCIATED`.
+      operationId: get-elastic-ip-association
       tags:
       - elastic-ips
       parameters:
@@ -130,32 +174,28 @@ paths:
         required: true
         schema:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetElasticIPBandwidthRequestBody'
       responses:
-        '202':
-          description: The elastic IP and the Checkout Session for the change; the new limit is not yet in effect.
+        '200':
+          description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SetElasticIPBandwidthResponseBody'
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
+                $ref: '#/components/schemas/IPv4Binding'
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/elastic-ips/{elasticIpId}/binding:
     put:
-      summary: Bind an elastic IP to a network interface
-      description: The elastic IP shows the `bind` operation until the binding is confirmed.
-      operationId: bind-elastic-ip
+      summary: Associate an elastic IP with a target
+      description: |-
+        Points the elastic IP at a target: a virtual machine, which means the primary private IPv4 address of its primary network interface, or a network interface address (`network_interface_address_id`) given directly. Exactly one of `virtual_machine_id` and `network_interface_address_id`. A network interface address must be an assigned, unreleased IPv4 address on a network interface in this project and region; IPv6 addresses are rejected.
+
+        The target becomes what the elastic IP points at; an existing association is replaced. The elastic IP shows the `bind` operation until the association is confirmed, and with a virtual machine as the target that virtual machine shows the `bind_elastic_ip` operation as well, so the virtual machine must not have another operation in progress.
+
+        The elastic IP must be in the same region as the target. With a virtual machine as the target, the elastic IP's `bandwidth_mbps` must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `INSTANCE_BANDWIDTH_CEILING`.
+      operationId: put-elastic-ip-association
       tags:
       - elastic-ips
       parameters:
@@ -169,10 +209,10 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BindElasticIPRequestBody'
+              $ref: '#/components/schemas/PutElasticIPAssociationRequestBody'
       responses:
         '202':
-          description: The binding was accepted.
+          description: The association was accepted.
           content:
             application/json:
               schema:
@@ -186,10 +226,12 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
-      summary: Unbind an elastic IP
+      summary: Remove the association of an elastic IP
       description: The address remains held by the project and simply no longer points at any network interface.
-        The elastic IP shows the `unbind` operation until the change is confirmed.
-      operationId: unbind-elastic-ip
+        The elastic IP shows the `unbind` operation until the change is confirmed, and a virtual machine whose primary
+        interface it pointed at shows the `unbind_elastic_ip` operation. Removing an association that does not exist is
+        refused with 404 `ELASTIC_IP_NOT_ASSOCIATED`.
+      operationId: delete-elastic-ip-association
       tags:
       - elastic-ips
       parameters:
@@ -200,7 +242,7 @@ paths:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
       responses:
         '202':
-          description: The unbinding was accepted.
+          description: The removal was accepted.
           content:
             application/json:
               schema:
@@ -411,7 +453,7 @@ components:
 
             It is part of this elastic IP resource and uses the same commercial terms,
             selected from Billing's catalog. Changing it later updates the
-            same elastic IP through its bandwidth endpoint, not an independent bandwidth resource.
+            same elastic IP through `update-elastic-ip`, not an independent bandwidth resource.
           type: integer
           format: int64
           minimum: 1
@@ -427,10 +469,12 @@ components:
       - type_id
       - billing
       additionalProperties: false
-    SetElasticIPBandwidthRequestBody:
+    UpdateElasticIPRequestBody:
       description: |-
-        Change bandwidth on the elastic IP identified by the path. This is a configuration change
-        of that resource, not an independent bandwidth resource. Checkout is handled by Billing.
+        The mutable fields of the elastic IP identified by the path, all optional, at least one required. `bandwidth_mbps`
+        is an operational field and cannot be combined with any other field; such a request is refused with 422
+        `UPDATE_FIELDS_COMBINED`. This is a configuration change of that resource, not an independent bandwidth resource.
+        Checkout is handled by Billing.
       type: object
       properties:
         bandwidth_mbps:
@@ -440,17 +484,34 @@ components:
           minimum: 1
         proration_date:
           description: The `proration_date` of the Billing quote for this change, so that the order is priced from
-            the same instant. Only for automatic checkout; deferred checkout is priced when the customer completes it.
-            Defaults to the time of the request; it must be a whole second, not in the future and at most 10 minutes
-            old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
+            the same instant. Only with `bandwidth_mbps`, and only for automatic checkout; deferred checkout is priced
+            when the customer completes it. Defaults to the time of the request; it must be a whole second, not in the
+            future and at most 10 minutes old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
           format: date-time
         checkout:
+          description: How the purchase of the `bandwidth_mbps` change is checked out. Only with `bandwidth_mbps`.
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
-      required:
-      - bandwidth_mbps
+      minProperties: 1
       additionalProperties: false
-    BindElasticIPRequestBody:
+    PutElasticIPAssociationRequestBody:
+      description: The target an elastic IP points at. Exactly one of the two forms.
+      oneOf:
+      - $ref: '#/components/schemas/VirtualMachineAssociationTarget'
+      - $ref: '#/components/schemas/NetworkInterfaceAddressAssociationTarget'
+    VirtualMachineAssociationTarget:
+      description: A virtual machine; the elastic IP points at the primary private IPv4 address of its primary network
+        interface.
+      type: object
+      properties:
+        virtual_machine_id:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+      required:
+      - virtual_machine_id
+      additionalProperties: false
+    NetworkInterfaceAddressAssociationTarget:
+      description: One private address of a network interface. One interface may hold several private addresses, each
+        with its own elastic IP.
       type: object
       properties:
         network_interface_address_id:
@@ -459,14 +520,6 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceAddressID
       required:
       - network_interface_address_id
-      additionalProperties: false
-    AttachElasticIPRequestBody:
-      type: object
-      properties:
-        elastic_ip_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
-      required:
-      - elastic_ip_id
       additionalProperties: false
     CreateElasticIPResponseBody:
       description: |-
@@ -492,19 +545,24 @@ components:
       - checkout_session_id
       - order_id
       additionalProperties: false
-    SetElasticIPBandwidthResponseBody:
-      description: The elastic IP, still at its current bandwidth, and the Checkout Session for the change.
+    UpdateElasticIPResponseBody:
+      description: The elastic IP and, when the update placed a Billing order, the Checkout Session for it. After a
+        bandwidth change the elastic IP is still at its current bandwidth until the change is applied. Returned with
+        200 when only descriptive fields changed and with 202 when an operation started.
       type: object
       properties:
         elastic_ip:
           $ref: '#/components/schemas/ElasticIP'
         checkout_session_id:
-          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
-            in Billing.
-          type: string
+          description: The Billing Checkout Session of the purchase; null when the update placed no order. With deferred
+            checkout, the customer completes it in Billing.
+          type:
+          - string
+          - 'null'
           format: uuid
         order_id:
-          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          description: The order created when checkout completes, at once for automatic checkout; null until then and
+            when the update placed no order.
           type:
           - string
           - 'null'

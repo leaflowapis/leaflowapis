@@ -87,8 +87,9 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
-      summary: Rename a snapshot
-      operationId: rename-snapshot
+      summary: Update a snapshot
+      description: Changes the name only. A snapshot's source disk and capacity cannot be changed.
+      operationId: update-snapshot
       tags:
       - snapshots
       parameters:
@@ -102,7 +103,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RenameSnapshotRequestBody'
+              $ref: '#/components/schemas/UpdateSnapshotRequestBody'
       responses:
         '200':
           description: OK
@@ -293,15 +294,15 @@ components:
       - disk_id
       - name
       additionalProperties: false
-    RenameSnapshotRequestBody:
+    UpdateSnapshotRequestBody:
+      description: The mutable fields of a snapshot. At least one must be given.
       type: object
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 128
-      required:
-      - name
+      minProperties: 1
       additionalProperties: false
     SnapshotOperation:
       description: An operation still running on this snapshot. It is not a separate resource; once it finishes, 
@@ -309,7 +310,7 @@ components:
       type: object
       properties:
         type:
-          description: '`restore`: a disk is being reverted to this snapshot or created from it.'
+          description: '`restore`: a disk is being reverted to this snapshot (`create-disk-revert`) or created from it (`create-disk` with `snapshot_id`).'
           type: string
           enum:
           - create

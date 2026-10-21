@@ -2,7 +2,7 @@ paths:
   /api/v1/disks:
     get:
       summary: List disks
-      description: When both `region_code` and `availability_zone` are supplied, only disks attachable to a virtual
+      description: When both `region_id` and `availability_zone_id` are supplied, only disks attachable to a virtual
         machine at that location are returned.
       operationId: list-disks
       tags:
@@ -16,7 +16,7 @@ paths:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
       - name: availability_zone_id
         in: query
-        description: Supplied together with `region_code` to filter attachable disks
+        description: Supplied together with `region_id` to filter attachable disks
         explode: false
         schema:
           $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
@@ -39,6 +39,11 @@ paths:
       summary: Create a disk
       description: |-
         The disk is created in the availability zone of the selected disk type, and a virtual machine must reside in the same zone to attach it. Choosing the disk type therefore determines the zone.
+
+        The disk is empty, or is restored from exactly one source: `snapshot_id` or `disk_backup_id`. Giving both is refused with 422 `DISK_SOURCE_CONFLICT`. A restore is a purchase of a **new** disk; the source disk is unaffected and need not still exist.
+
+        - **From a snapshot**, the disk type must be in the availability zone of the snapshot (`availability_zone_id` of the snapshot), because a snapshot lives in the same storage pool as its source and restores only into its own zone. `size_gb` is required and must be no smaller than the snapshot.
+        - **From a disk backup**, the disk type may belong to another availability zone of the same region, because a backup is an independent copy in different storage. `size_gb` matches the size of the backup when omitted, and when given it must not be smaller than the backup. The disk cannot be attached until it is `available`.
 
         A disk type that is off sale is rejected with `DISK_TYPE_OFF_SALE`, even though its identifier still resolves. Types that are off sale do not appear in the disk type listing; disks already bought on one keep working and can still be resized.
 
@@ -96,9 +101,18 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
-      summary: Rename a disk
-      description: Changes the name only. Use the resize endpoint for capacity; type and availability zone are immutable.
-      operationId: rename-disk
+      summary: Update a disk
+      description: |-
+        Changes the name, or the capacity. Type and availability zone are immutable.
+
+        `size_gb` is an operational field: it starts a resize and cannot be combined with any other field in the same request. Such a request is refused with 422 `UPDATE_FIELDS_COMBINED`, because a rename that committed beside a change that was then refused would leave the request half applied. `checkout` and `proration_date` belong to the purchase of the `size_gb` change and are accepted only together with it.
+
+        **Renaming** is not an operation and is accepted at any time. It returns 200 with `checkout_session_id` and `order_id` null.
+
+        **Resizing** accepts only an increase; shrinking is not supported. It returns 202 with the disk and the Checkout Session for the resize, which keeps the disk's usage type and period. The disk shows the `resize` operation until the resize is applied, its Checkout Session expires or its order is canceled, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The disk keeps its current size until the resize is applied; once `size_gb` shows the new size, extend the file system inside the virtual machine. If checkout is not completed, the order is not accepted or the resize fails, the disk keeps its size and Billing shows the outcome.
+
+        An attached disk, including a system disk, can be resized. The capacity is usable at once, and the disk's `performance` shows what its type gives the new size. **That performance applies from the disk's next attachment, or the next start of its stopped virtual machine**: the storage reads a disk's limits only while connecting it. Until then the attachment's `performance` shows what is in effect.
+      operationId: update-disk
       tags:
       - disks
       parameters:
@@ -112,14 +126,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RenameDiskRequestBody'
+              $ref: '#/components/schemas/UpdateDiskRequestBody'
       responses:
         '200':
-          description: OK
+          description: Only descriptive fields changed; no operation started. `checkout_session_id` and `order_id` are null.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DiskResource'
+                $ref: '#/components/schemas/UpdateDiskResponseBody'
+        '202':
+          description: The disk and the Checkout Session for the resize; the new size is not yet in effect.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateDiskResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
         default:
           description: Error
           content:
@@ -158,53 +180,16 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/disks/{diskId}/resize:
+  /api/v1/disks/{diskId}/reverts:
     post:
-      summary: Resize a disk
-      description: |-
-        Capacity can only be increased; shrinking is not supported. Returns the disk with the Checkout Session for the resize, which keeps the disk's usage type and period. The disk shows the `resize` operation until the resize is applied, its Checkout Session expires or its order is canceled, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The disk keeps its current size until the resize is applied; once `size_gb` shows the new size, extend the file system inside the virtual machine. If checkout is not completed, the order is not accepted or the resize fails, the disk keeps its size and Billing shows the outcome.
-
-        An attached disk, including a system disk, can be resized. The capacity is usable at once, and the disk's `performance` shows what its type gives the new size. **That performance applies from the disk's next attachment, or the next start of its stopped virtual machine**: the storage reads a disk's limits only while connecting it. Until then the attachment's `performance` shows what is in effect.
-      operationId: resize-disk
-      tags:
-      - disks
-      parameters:
-      - name: diskId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/DiskID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ResizeDiskRequestBody'
-      responses:
-        '202':
-          description: The disk and the Checkout Session for the resize; the new size is not yet in effect.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResizeDiskResponseBody'
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/disks/{diskId}/revert:
-    post:
-      summary: Revert to a snapshot
+      summary: Revert a disk to a snapshot
       description: |-
         Restores the contents of the disk to the moment the snapshot was taken. **All data written after that moment is lost and cannot be recovered.**
 
         Three restrictions apply: only the most recent snapshot of the disk can be reverted to; the disk must be detached from its virtual machine first; and a disk resized since the snapshot was taken cannot be reverted. To return to an earlier point in time, or to keep the existing disk, create a new disk from the snapshot instead.
 
-        The disk shows the `revert` operation until the revert is complete.
-      operationId: revert-disk
+        The revert is a request of its own rather than a state of the disk: the response is the disk, which shows the `revert` operation until the revert is complete.
+      operationId: create-disk-revert
       tags:
       - disks
       parameters:
@@ -218,7 +203,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RevertDiskRequestBody'
+              $ref: '#/components/schemas/CreateDiskRevertRequestBody'
       responses:
         '202':
           description: The revert was accepted.
@@ -399,20 +384,28 @@ components:
       type: object
       properties:
         disk_type_id:
-          description: A data disk type currently on sale, one whose `purpose` is `data`. A withdrawn one is rejected
-            even though its identifier still resolves
+          description: A data disk type currently on sale, one whose `purpose` is `data`; a system disk type is rejected
+            here too. A withdrawn one is rejected even though its identifier still resolves
           $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
         name:
           type: string
           minLength: 1
           maxLength: 128
         size_gb:
+          description: Required unless `disk_backup_id` is given. With `snapshot_id` it need only be no smaller than the
+            snapshot; with `disk_backup_id` it defaults to the size of the backup and must not be smaller than it
           type: integer
           format: int64
           minimum: 1
         snapshot_id:
-          description: Restore from this snapshot. When given, the capacity need only be no smaller than the snapshot
+          description: Restore from this snapshot. The disk type must be in the snapshot's availability zone. Mutually
+            exclusive with `disk_backup_id`, otherwise refused with 422 `DISK_SOURCE_CONFLICT`
           $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+        disk_backup_id:
+          description: Restore from this disk backup, which need not still have its source disk. The disk type may be in
+            another availability zone of the backup's region. Mutually exclusive with `snapshot_id`, otherwise refused
+            with 422 `DISK_SOURCE_CONFLICT`
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
         billing:
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
         checkout:
@@ -420,40 +413,35 @@ components:
       required:
       - disk_type_id
       - name
-      - size_gb
       - billing
       additionalProperties: false
-    RenameDiskRequestBody:
+    UpdateDiskRequestBody:
+      description: The mutable fields of a disk, all optional, at least one required. `size_gb` is an operational field
+        and cannot be combined with `name`; such a request is refused with 422 `UPDATE_FIELDS_COMBINED`.
       type: object
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 128
-      required:
-      - name
-      additionalProperties: false
-    ResizeDiskRequestBody:
-      type: object
-      properties:
         size_gb:
-          description: Must be larger than the current capacity
+          description: The new capacity. Must be larger than the current capacity
           type: integer
           format: int64
           minimum: 1
         proration_date:
           description: The `proration_date` of the Billing quote for this change, so that the order is priced from
-            the same instant. Only for automatic checkout; deferred checkout is priced when the customer completes it.
-            Defaults to the time of the request; it must be a whole second, not in the future and at most 10 minutes
-            old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
+            the same instant. Only with `size_gb`, and only for automatic checkout; deferred checkout is priced when
+            the customer completes it. Defaults to the time of the request; it must be a whole second, not in the
+            future and at most 10 minutes old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
           format: date-time
         checkout:
+          description: How the purchase of the `size_gb` change is checked out. Only with `size_gb`.
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
-      required:
-      - size_gb
+      minProperties: 1
       additionalProperties: false
-    RevertDiskRequestBody:
+    CreateDiskRevertRequestBody:
       type: object
       properties:
         snapshot_id:
@@ -473,7 +461,7 @@ components:
     CreateDiskResponseBody:
       description: |-
         The new disk, `pending` until its order is accepted, and its Checkout Session. Also returned for a disk restored
-        from a backup.
+        from a snapshot or a disk backup.
       type: object
       properties:
         disk:
@@ -494,19 +482,24 @@ components:
       - checkout_session_id
       - order_id
       additionalProperties: false
-    ResizeDiskResponseBody:
-      description: The disk, still at its current size, and the Checkout Session for the resize.
+    UpdateDiskResponseBody:
+      description: The disk and, when the update placed a Billing order, the Checkout Session for it. After a resize the
+        disk is still at its current size until the change is applied. Returned with 200 when only descriptive fields
+        changed and with 202 when an operation started.
       type: object
       properties:
         disk:
           $ref: '#/components/schemas/DiskResource'
         checkout_session_id:
-          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
-            in Billing.
-          type: string
+          description: The Billing Checkout Session of the purchase; null when the update placed no order. With deferred
+            checkout, the customer completes it in Billing.
+          type:
+          - string
+          - 'null'
           format: uuid
         order_id:
-          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          description: The order created when checkout completes, at once for automatic checkout; null until then and
+            when the update placed no order.
           type:
           - string
           - 'null'
@@ -610,7 +603,7 @@ components:
       type: object
       properties:
         type:
-          description: '`attach` and `detach` accompany the virtual machine''s `attach_disk` and `detach_disk`.
+          description: '`attach` and `detach` accompany the virtual machine''s `attach_disk` and `detach_disk` operations.
             `delete` includes release through a Billing cancellation and deletion with a virtual machine.'
           type: string
           enum:

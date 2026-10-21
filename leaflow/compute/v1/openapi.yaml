@@ -3,7 +3,7 @@ info:
   title: Leaflow Compute API
   version: 1.0.0
   description: |-
-    Leaflow Compute user API for managing virtual machines, disks, snapshots, backups, public and private images, virtual private clouds, subnets, routes, security groups, network interfaces and elastic IPs.
+    Leaflow Compute user API for managing virtual machines, disks, snapshots, disk backups, public and private images, virtual private clouds, subnets, routes, security groups, network interfaces and elastic IPs.
 
     ## Authentication
 
@@ -11,15 +11,15 @@ info:
 
     ## Conventions
 
-    - **Purchases.** A purchase that creates resources returns them together with the `checkout_session_id` of its Billing Checkout Session and, once checkout completes, its `order_id`. They are readable at once and start as `pending`: checkout may not be complete, the order has not been accepted, nothing exists in the cloud, no inventory such as an address is held, and fields known only after allocation, such as addresses, are null. Once Billing accepts the order, a resource becomes `provisioning` and then reaches its usual status, such as `active` or `available`. When the Checkout Session expires, the order is declined, canceled or expires, or creation fails, the resource ends `failed` and `failure_reason` states why; the charge for a resource that failed after acceptance is refunded. A purchased change, such as a resize, returns the resource unchanged with the Checkout Session for the change, and applies once its order is accepted.
+    - **Purchases.** A purchase that creates resources returns them together with the `checkout_session_id` of its Billing Checkout Session and, once checkout completes, its `order_id`. They are readable at once and start as `pending`: checkout may not be complete, the order has not been accepted, nothing exists in the cloud, no inventory such as an address is held, and fields known only after allocation, such as addresses, are null. Once Billing accepts the order, a resource becomes `provisioning` and then reaches its usual status, such as `active` or `available`. When the Checkout Session expires, the order is declined, canceled or expires, or creation fails, the resource ends `failed` and `failure_reason` states why; the charge for a resource that failed after acceptance is refunded. A purchased change, such as a resize requested with `machine_type_id`, `size_gb` or `bandwidth_mbps` on the resource, returns the resource unchanged with the Checkout Session for the change, and applies once its order is accepted.
     - **Commercial terms.** Compute catalogs describe technical specifications and reference the Billing Plan each item is sold under; prices and currency belong to Billing. A purchase chooses its terms with `billing`, and Billing selects the matching price. Price a proposed purchase with Billing's quote; Compute has no quote or price proxy endpoint.
     - **Checkout.** `checkout` is passed to Billing unchanged. Omit it for automatic checkout, which completes checkout within the request and pays from eligible credit grants and balance; insufficient funds refuse the request with HTTP 422 `BILLING_INSUFFICIENT_FUNDS`, and nothing is created. With `checkout.mode` set to `deferred`, the resources are returned `pending` with an open Checkout Session and no order, even for a zero total; nothing is created until the customer completes checkout in Billing, where a promotion code can be applied, and the order is paid. Do not submit the purchase again after paying; after an uncertain response, look the Checkout Session up in Billing first.
     - **Projects.** Resource ownership and project identifiers refer to IAM platform projects, not OpenStack tenants. Virtual machines, images and networks share one infrastructure OpenStack project; the platform project remains the authorization and ownership boundary.
-    - **Operations.** Requests such as starting, stopping, attaching or deleting return HTTP 202 with the resource as it is when the request is accepted. While an operation runs, the resource's `operation` field names it; the field is null once the operation has finished, and the resource then shows the result. A resource with an operation in progress refuses another operation with HTTP 409 `COMPUTE_RESOURCE_BUSY`; an operation involving two resources, such as attaching a disk, is refused when either has one. A purchased change, such as a resize, is an operation from the moment its Checkout Session is created until the change is applied, the session expires or its order is canceled. Renaming and replacing labels or notes are not operations and are accepted at any time.
+    - **Operations.** Requests such as changing `power_state`, attaching or deleting return HTTP 202 with the resource as it is when the request is accepted. While an operation runs, the resource's `operation` field names it; the field is null once the operation has finished, and the resource then shows the result. A resource with an operation in progress refuses another operation with HTTP 409 `COMPUTE_RESOURCE_BUSY`; an operation involving two resources, such as attaching a disk, is refused when either has one. A purchased change, such as a resize, is an operation from the moment its Checkout Session is created until the change is applied, the session expires or its order is canceled. Renaming and replacing labels or notes are not operations and are accepted at any time. **Updating.** A `PATCH` carries only mutable fields, all optional and at least one given, and answers 200 when only descriptive fields changed and 202 when an operation started. An operational field (`power_state`, `machine_type_id`, `size_gb`, `bandwidth_mbps`) cannot be combined with any other field in the same request: it is refused with 422 `UPDATE_FIELDS_COMBINED`, because a rename that committed beside a change that was then refused would leave the request half applied.
     - **Billing relationships.** A purchased resource records its `checkout_session_id` and, once checkout completes, its `order_id`, `order_item_id` and `subscription_id`. Its `access_state` is `pending` until the order is accepted and delivery settles it, then `enabled`; a subscription that lapses suspends or reclaims the resource it pays for.
     - **Availability zones.** A disk and a virtual machine must reside in the same availability zone to be attached. Virtual machine types and disk types are each bound to one availability zone, so choosing a type determines the zone.
     - **IPv6 is routed, not translated.** VPC IPv6 prefix delegation and security groups require no EIP or NAT gateway. EIP and NATGateway are IPv4 products; IPv6 EIP, NAT66 and IPv6 port forwarding are not supported.
-    - **Elastic IP release.** A released address returns to available inventory as soon as its cleanup is confirmed, with no cooldown period. Unbinding or moving a binding keeps the address held by the project and does not release it.
+    - **Elastic IP release.** A released address returns to available inventory as soon as its cleanup is confirmed, with no cooldown period. Removing or replacing an elastic IP's association keeps the address held by the project and does not release it.
     - **Passwords are returned once.** A password generated by the platform during creation or rebuild appears only in that response. Store it immediately.
 
     ## Resource identifiers
@@ -32,9 +32,9 @@ security:
 - scopedTokenAuth: []
 tags:
 - name: availability-zones
-  description: Availability zones resources and operations.
-- name: backups
-  description: Backups resources and operations.
+  description: Availability zones, the placement unit of disks and virtual machines.
+- name: disk-backups
+  description: Independent copies of disks that outlive their source disk and restore into another availability zone.
 - name: disk-types
   description: Disk types resources and operations.
 - name: disks
@@ -42,7 +42,7 @@ tags:
 - name: elastic-ip-types
   description: Public network products; prices and checkout belong to Billing.
 - name: elastic-ips
-  description: Elastic IP resources, bandwidth and bindings.
+  description: Elastic IP resources, bandwidth and associations.
 - name: machine-types
   description: Virtual machine specifications and their Billing Plan references.
 - name: private-images
@@ -58,7 +58,7 @@ tags:
 - name: quotas
   description: Effective per-project resource and capacity limits.
 - name: regions
-  description: Compute regions and their availability zones.
+  description: Compute regions.
 - name: routes
   description: Routes resources and operations.
 - name: security-group-rules
@@ -70,18 +70,18 @@ tags:
 - name: subnets
   description: Subnets resources and operations.
 - name: virtual-machines
-  description: Virtual machines and their lifecycle operations.
+  description: Virtual machines, their power state, size and attachments.
 - name: virtual-private-clouds
   description: Virtual private clouds and regional connectivity.
 paths:
-  /api/v1/regions/{regionId}/availability-zones:
-    $ref: ./availability-zones.yaml#/paths/~1api~1v1~1regions~1{regionId}~1availability-zones
-  /api/v1/backups:
-    $ref: ./backups.yaml#/paths/~1api~1v1~1backups
-  /api/v1/backups/{backupId}:
-    $ref: ./backups.yaml#/paths/~1api~1v1~1backups~1{backupId}
-  /api/v1/backups/{backupId}/restore:
-    $ref: ./backups.yaml#/paths/~1api~1v1~1backups~1{backupId}~1restore
+  /api/v1/availability-zones:
+    $ref: ./availability-zones.yaml#/paths/~1api~1v1~1availability-zones
+  /api/v1/availability-zones/{availabilityZoneId}:
+    $ref: ./availability-zones.yaml#/paths/~1api~1v1~1availability-zones~1{availabilityZoneId}
+  /api/v1/disk-backups:
+    $ref: ./disk-backups.yaml#/paths/~1api~1v1~1disk-backups
+  /api/v1/disk-backups/{diskBackupId}:
+    $ref: ./disk-backups.yaml#/paths/~1api~1v1~1disk-backups~1{diskBackupId}
   /api/v1/disk-types:
     $ref: ./disk-types.yaml#/paths/~1api~1v1~1disk-types
   /api/v1/disk-types/{diskTypeId}:
@@ -90,24 +90,18 @@ paths:
     $ref: ./disks.yaml#/paths/~1api~1v1~1disks
   /api/v1/disks/{diskId}:
     $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}
-  /api/v1/disks/{diskId}/resize:
-    $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}~1resize
-  /api/v1/disks/{diskId}/revert:
-    $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}~1revert
+  /api/v1/disks/{diskId}/reverts:
+    $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}~1reverts
   /api/v1/elastic-ip-types:
     $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types
-  /api/v1/elastic-ip-types/search:
-    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types~1search
   /api/v1/elastic-ip-types/{elasticIpTypeId}:
     $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types~1{elasticIpTypeId}
   /api/v1/elastic-ips:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips
   /api/v1/elastic-ips/{elasticIpId}:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}
-  /api/v1/elastic-ips/{elasticIpId}/bandwidth:
-    $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1bandwidth
-  /api/v1/elastic-ips/{elasticIpId}/binding:
-    $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1binding
+  /api/v1/elastic-ips/{elasticIpId}/association:
+    $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1association
   /api/v1/public-images:
     $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images
   /api/v1/public-images/{publicImageId}:
@@ -126,28 +120,28 @@ paths:
     $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}
   /api/v1/operation-logs:
     $ref: ./operation-logs.yaml#/paths/~1api~1v1~1operation-logs
+  /api/v1/operation-logs/{operationLogId}:
+    $ref: ./operation-logs.yaml#/paths/~1api~1v1~1operation-logs~1{operationLogId}
   /api/v1/peerings:
     $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings
   /api/v1/peerings/{peeringId}:
     $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}
-  /api/v1/peerings/{peeringId}/accept:
-    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}~1accept
-  /api/v1/peerings/{peeringId}/reject:
-    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}~1reject
   /api/v1/quotas:
     $ref: ./quotas.yaml#/paths/~1api~1v1~1quotas
   /api/v1/quotas/{resource}:
     $ref: ./quotas.yaml#/paths/~1api~1v1~1quotas~1{resource}
   /api/v1/regions:
     $ref: ./regions.yaml#/paths/~1api~1v1~1regions
+  /api/v1/regions/{regionId}:
+    $ref: ./regions.yaml#/paths/~1api~1v1~1regions~1{regionId}
   /api/v1/routes:
     $ref: ./routes.yaml#/paths/~1api~1v1~1routes
   /api/v1/routes/{routeId}:
     $ref: ./routes.yaml#/paths/~1api~1v1~1routes~1{routeId}
   /api/v1/security-group-rules:
     $ref: ./security-group-rules.yaml#/paths/~1api~1v1~1security-group-rules
-  /api/v1/security-group-rules/{ruleId}:
-    $ref: ./security-group-rules.yaml#/paths/~1api~1v1~1security-group-rules~1{ruleId}
+  /api/v1/security-group-rules/{securityGroupRuleId}:
+    $ref: ./security-group-rules.yaml#/paths/~1api~1v1~1security-group-rules~1{securityGroupRuleId}
   /api/v1/security-groups:
     $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups
   /api/v1/security-groups/{securityGroupId}:
@@ -168,38 +162,22 @@ paths:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1commands
   /api/v1/virtual-machines/{virtualMachineId}/console:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1console
-  /api/v1/virtual-machines/{virtualMachineId}/labels:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1labels
-  /api/v1/virtual-machines/{virtualMachineId}/notes:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1notes
   /api/v1/virtual-machines/{virtualMachineId}/password:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1password
-  /api/v1/virtual-machines/{virtualMachineId}/reboot:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1reboot
-  /api/v1/virtual-machines/{virtualMachineId}/rebuild:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rebuild
-  /api/v1/virtual-machines/{virtualMachineId}/resize:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1resize
-  /api/v1/virtual-machines/{virtualMachineId}/start:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1start
-  /api/v1/virtual-machines/{virtualMachineId}/stop:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1stop
+  /api/v1/virtual-machines/{virtualMachineId}/reboots:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1reboots
+  /api/v1/virtual-machines/{virtualMachineId}/rebuilds:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rebuilds
   /api/v1/virtual-machines/{virtualMachineId}/disks:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1disks
   /api/v1/virtual-machines/{virtualMachineId}/disks/{diskId}:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1disks~1{diskId}
-  /api/v1/virtual-machines/{virtualMachineId}/elastic-ips:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1elastic-ips
-  /api/v1/virtual-machines/{virtualMachineId}/elastic-ips/{elasticIpId}:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1elastic-ips~1{elasticIpId}
   /api/v1/virtual-machines/{virtualMachineId}/network-interfaces:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces
   /api/v1/virtual-machines/{virtualMachineId}/network-interfaces/{networkInterfaceId}:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces~1{networkInterfaceId}
   /api/v1/virtual-machines/{virtualMachineId}/rescue:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rescue
-  /api/v1/virtual-machines/{virtualMachineId}/unrescue:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1unrescue
   /api/v1/virtual-private-clouds:
     $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds
   /api/v1/virtual-private-clouds/{virtualPrivateCloudId}:
@@ -217,20 +195,18 @@ components:
       $ref: ./availability-zones.yaml#/components/schemas/ZoneResource
     ZoneListResponseBody:
       $ref: ./availability-zones.yaml#/components/schemas/ZoneListResponseBody
-    BackupResource:
-      $ref: ./backups.yaml#/components/schemas/BackupResource
-    BackupListResponseBody:
-      $ref: ./backups.yaml#/components/schemas/BackupListResponseBody
-    CreateBackupRequestBody:
-      $ref: ./backups.yaml#/components/schemas/CreateBackupRequestBody
-    RenameBackupRequestBody:
-      $ref: ./backups.yaml#/components/schemas/RenameBackupRequestBody
-    RestoreBackupRequestBody:
-      $ref: ./backups.yaml#/components/schemas/RestoreBackupRequestBody
-    BackupOperation:
-      $ref: ./backups.yaml#/components/schemas/BackupOperation
-    CreateBackupResponseBody:
-      $ref: ./backups.yaml#/components/schemas/CreateBackupResponseBody
+    DiskBackupResource:
+      $ref: ./disk-backups.yaml#/components/schemas/DiskBackupResource
+    DiskBackupListResponseBody:
+      $ref: ./disk-backups.yaml#/components/schemas/DiskBackupListResponseBody
+    CreateDiskBackupRequestBody:
+      $ref: ./disk-backups.yaml#/components/schemas/CreateDiskBackupRequestBody
+    UpdateDiskBackupRequestBody:
+      $ref: ./disk-backups.yaml#/components/schemas/UpdateDiskBackupRequestBody
+    DiskBackupOperation:
+      $ref: ./disk-backups.yaml#/components/schemas/DiskBackupOperation
+    CreateDiskBackupResponseBody:
+      $ref: ./disk-backups.yaml#/components/schemas/CreateDiskBackupResponseBody
     BillingPeriod:
       $ref: ./billing-terms.yaml#/components/schemas/BillingPeriod
     BillingChoice:
@@ -255,18 +231,16 @@ components:
       $ref: ./disks.yaml#/components/schemas/DiskListResponseBody
     CreateDiskRequestBody:
       $ref: ./disks.yaml#/components/schemas/CreateDiskRequestBody
-    RenameDiskRequestBody:
-      $ref: ./disks.yaml#/components/schemas/RenameDiskRequestBody
-    ResizeDiskRequestBody:
-      $ref: ./disks.yaml#/components/schemas/ResizeDiskRequestBody
-    RevertDiskRequestBody:
-      $ref: ./disks.yaml#/components/schemas/RevertDiskRequestBody
+    CreateDiskRevertRequestBody:
+      $ref: ./disks.yaml#/components/schemas/CreateDiskRevertRequestBody
+    UpdateDiskRequestBody:
+      $ref: ./disks.yaml#/components/schemas/UpdateDiskRequestBody
+    UpdateDiskResponseBody:
+      $ref: ./disks.yaml#/components/schemas/UpdateDiskResponseBody
     AttachDiskRequestBody:
       $ref: ./disks.yaml#/components/schemas/AttachDiskRequestBody
     CreateDiskResponseBody:
       $ref: ./disks.yaml#/components/schemas/CreateDiskResponseBody
-    ResizeDiskResponseBody:
-      $ref: ./disks.yaml#/components/schemas/ResizeDiskResponseBody
     DiskAttachment:
       $ref: ./disks.yaml#/components/schemas/DiskAttachment
     DiskPerformance:
@@ -289,16 +263,18 @@ components:
       $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPListResponseBody
     CreateElasticIPRequestBody:
       $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPRequestBody
-    SetElasticIPBandwidthRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/SetElasticIPBandwidthRequestBody
-    BindElasticIPRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/BindElasticIPRequestBody
-    AttachElasticIPRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/AttachElasticIPRequestBody
+    PutElasticIPAssociationRequestBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/PutElasticIPAssociationRequestBody
+    VirtualMachineAssociationTarget:
+      $ref: ./elastic-ips.yaml#/components/schemas/VirtualMachineAssociationTarget
+    NetworkInterfaceAddressAssociationTarget:
+      $ref: ./elastic-ips.yaml#/components/schemas/NetworkInterfaceAddressAssociationTarget
+    UpdateElasticIPRequestBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/UpdateElasticIPRequestBody
+    UpdateElasticIPResponseBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/UpdateElasticIPResponseBody
     CreateElasticIPResponseBody:
       $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPResponseBody
-    SetElasticIPBandwidthResponseBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/SetElasticIPBandwidthResponseBody
     IPv4Binding:
       $ref: ./elastic-ips.yaml#/components/schemas/IPv4Binding
     ElasticIPOperation:
@@ -379,6 +355,8 @@ components:
       $ref: ./network-interfaces.yaml#/components/schemas/AttachNetworkInterfaceRequestBody
     CreateNetworkInterfaceRequestBody:
       $ref: ./network-interfaces.yaml#/components/schemas/CreateNetworkInterfaceRequestBody
+    UpdateNetworkInterfaceRequestBody:
+      $ref: ./network-interfaces.yaml#/components/schemas/UpdateNetworkInterfaceRequestBody
     NetworkInterfaceAddress:
       $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAddress
     NetworkInterfaceAttachment:
@@ -397,6 +375,8 @@ components:
       $ref: ./peerings.yaml#/components/schemas/PeeringListResponseBody
     CreatePeeringRequestBody:
       $ref: ./peerings.yaml#/components/schemas/CreatePeeringRequestBody
+    UpdatePeeringRequestBody:
+      $ref: ./peerings.yaml#/components/schemas/UpdatePeeringRequestBody
     PeeringOperation:
       $ref: ./peerings.yaml#/components/schemas/PeeringOperation
     ProjectQuotaResource:
@@ -449,8 +429,8 @@ components:
       $ref: ./snapshots.yaml#/components/schemas/SnapshotListResponseBody
     CreateSnapshotRequestBody:
       $ref: ./snapshots.yaml#/components/schemas/CreateSnapshotRequestBody
-    RenameSnapshotRequestBody:
-      $ref: ./snapshots.yaml#/components/schemas/RenameSnapshotRequestBody
+    UpdateSnapshotRequestBody:
+      $ref: ./snapshots.yaml#/components/schemas/UpdateSnapshotRequestBody
     SnapshotOperation:
       $ref: ./snapshots.yaml#/components/schemas/SnapshotOperation
     CreateSnapshotResponseBody:
@@ -469,54 +449,46 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachineListResponseBody
     CreateVirtualMachineRequestBody:
       $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineRequestBody
-    SetVirtualMachineLabelsRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/SetVirtualMachineLabelsRequestBody
-    SetVirtualMachineNotesRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/SetVirtualMachineNotesRequestBody
-    RenameVirtualMachineRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/RenameVirtualMachineRequestBody
-    RebootVirtualMachineRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/RebootVirtualMachineRequestBody
-    RunCommandRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/RunCommandRequestBody
-    CommandResultResponseBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/CommandResultResponseBody
+    UpdateVirtualMachineRequestBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/UpdateVirtualMachineRequestBody
+    UpdateVirtualMachineResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/UpdateVirtualMachineResponseBody
+    CreateVirtualMachineRebootRequestBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineRebootRequestBody
+    CreateVirtualMachineCommandRequestBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineCommandRequestBody
+    CreateVirtualMachineCommandResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineCommandResponseBody
     ConsoleResponseBody:
       $ref: ./virtual-machines.yaml#/components/schemas/ConsoleResponseBody
-    ResetPasswordRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/ResetPasswordRequestBody
-    ResetPasswordResponseBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/ResetPasswordResponseBody
-    RebuildVirtualMachineRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/RebuildVirtualMachineRequestBody
-    RebuildVirtualMachineResponseBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/RebuildVirtualMachineResponseBody
-    ResizeVirtualMachineRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/ResizeVirtualMachineRequestBody
+    PutVirtualMachinePasswordRequestBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/PutVirtualMachinePasswordRequestBody
+    PutVirtualMachinePasswordResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/PutVirtualMachinePasswordResponseBody
+    CreateVirtualMachineRebuildRequestBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineRebuildRequestBody
+    CreateVirtualMachineRebuildResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineRebuildResponseBody
     NewCompute:
       $ref: ./virtual-machines.yaml#/components/schemas/NewCompute
     BootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/BootDisk
     ExistingBootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/ExistingBootDisk
-    ResizeVirtualMachineResponseBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/ResizeVirtualMachineResponseBody
     NewBootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/NewBootDisk
     NewElasticIP:
       $ref: ./virtual-machines.yaml#/components/schemas/NewElasticIP
     VirtualMachineRestriction:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachineRestriction
-    PowerRequest:
-      $ref: ./virtual-machines.yaml#/components/schemas/PowerRequest
     CreateVirtualMachineResponseBody:
       $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineResponseBody
     VirtualMachineOperation:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachineOperation
-    RescueVirtualMachineRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/RescueVirtualMachineRequestBody
-    RescueVirtualMachineResponseBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/RescueVirtualMachineResponseBody
+    PutVirtualMachineRescueRequestBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/PutVirtualMachineRescueRequestBody
+    PutVirtualMachineRescueResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/PutVirtualMachineRescueResponseBody
     VirtualPrivateCloud:
       $ref: ./virtual-private-clouds.yaml#/components/schemas/VirtualPrivateCloud
     VirtualPrivateCloudListResponseBody:

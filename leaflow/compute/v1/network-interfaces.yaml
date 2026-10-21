@@ -48,6 +48,63 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
   /api/v1/network-interfaces/{networkInterfaceId}:
+    get:
+      summary: Retrieve a network interface
+      description: Returns the stored state of the network interface; it does not query the cloud.
+      operationId: get-network-interface
+      tags:
+      - network-interfaces
+      parameters:
+      - name: networkInterfaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkInterface'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    patch:
+      summary: Update a network interface
+      description: Changes the name only. Renaming is not an operation and is accepted at any time. The security
+        groups and addresses of a network interface cannot be changed through this endpoint.
+      operationId: update-network-interface
+      tags:
+      - network-interfaces
+      parameters:
+      - name: networkInterfaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateNetworkInterfaceRequestBody'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkInterface'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
       summary: Delete a network interface
       description: The primary network interface cannot be deleted on its own, as it is released with the virtual
@@ -187,6 +244,15 @@ components:
       required:
       - subnet_id
       - security_group_ids
+      additionalProperties: false
+    UpdateNetworkInterfaceRequestBody:
+      description: The mutable fields of a network interface, all optional, at least one required.
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 128
+      minProperties: 1
       additionalProperties: false
     NetworkInterfaceAddress:
       type: object

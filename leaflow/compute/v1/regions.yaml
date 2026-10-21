@@ -21,6 +21,32 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/regions/{regionId}:
+    get:
+      summary: Retrieve a region
+      description: The availability zones of a region are listed by `list-availability-zones` with `region_id`.
+      operationId: get-region
+      tags:
+      - regions
+      parameters:
+      - name: regionId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegionResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
     RegionResource:

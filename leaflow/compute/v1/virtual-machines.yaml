@@ -98,10 +98,24 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
-      summary: Rename a virtual machine
-      description: Changes the display name only. The hostname inside the virtual machine is unchanged; it equals
-        the virtual machine id.
-      operationId: rename-virtual-machine
+      summary: Update a virtual machine
+      description: |-
+        Changes the descriptive fields (`name`, `labels`, `notes`) or one operational field (`power_state` or `machine_type_id`). All fields are optional and at least one is required.
+
+        `power_state` and `machine_type_id` are operational fields: each starts a workflow, and neither can be combined with any other field in the same request, including the other one. Such a request is refused with 422 `UPDATE_FIELDS_COMBINED`, because a rename that committed beside a change that was then refused would leave the request half applied. `checkout` and `proration_date` belong to the purchase of the `machine_type_id` change and are accepted only together with it.
+
+        **Descriptive fields** are not operations and are accepted at any time, whatever the virtual machine is doing. The request returns 200 with `checkout_session_id` and `order_id` null.
+
+        - `name` changes the display name only. The hostname inside the virtual machine is unchanged; it equals the virtual machine id.
+        - `labels` records what this virtual machine is for, as key-value pairs. Nothing on the platform reads them. **The whole set is replaced**: whatever is absent from the request is removed, and an empty object clears them all. Do not put credentials here. Labels are visible to platform operators.
+        - `notes` is a free-text note about this virtual machine: what it runs, and what to be careful about before touching it. **The whole note is replaced**; send an empty string to clear it. Do not put credentials here. The note is visible to platform operators.
+
+        **`power_state`** is the state the virtual machine should be in, and the request returns 202 with the virtual machine as it is when the request is accepted. `running` starts it: outstanding restrictions can prevent starting, and the virtual machine shows the `start` operation until it is running or the start has failed. `stopped` stops it: a stopped virtual machine keeps its disks, network attachments and sellable quota, and shows the `stop` operation until it is stopped or the stop has failed.
+
+        **`machine_type_id`** resizes the virtual machine and returns 202 with the virtual machine and the Checkout Session for the change, including for metered terms. The virtual machine keeps its usage type and period, priced with the target type's matching option; a target type without that option is refused with 409 `BILLING_OPTION_UNAVAILABLE`. The resize starts once Billing accepts the order. Do not submit the change again after paying. After an uncertain response, look the Checkout Session up in Billing before submitting again.
+
+        The virtual machine shows the `resize` operation until the resize is applied, its Checkout Session expires or its order is canceled, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. It keeps its current type until the resize is applied; the new type takes effect, and is billed from then on, when `machine_type_id` shows it. If checkout is not completed, the order is not accepted or the resize fails, the virtual machine keeps its current type and Billing shows the outcome. A completed resize is final and cannot be reverted; to return to the previous type, submit another resize.
+      operationId: update-virtual-machine
       tags:
       - virtual-machines
       parameters:
@@ -115,14 +129,23 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RenameVirtualMachineRequestBody'
+              $ref: '#/components/schemas/UpdateVirtualMachineRequestBody'
       responses:
         '200':
-          description: OK
+          description: Only descriptive fields changed; no operation started. `checkout_session_id` and `order_id` are null.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VirtualMachine'
+                $ref: '#/components/schemas/UpdateVirtualMachineResponseBody'
+        '202':
+          description: An operation started. For a start or stop the virtual machine as it is now; for a resize the virtual
+            machine, still on its current type, and the Checkout Session for the change.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateVirtualMachineResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
         default:
           description: Error
           content:
@@ -171,12 +194,12 @@ paths:
 
         **A command that fails is still a 200.** Its failure is its own result, not this endpoint's: read `exit_code` for what it exited with and `stderr` for what it said, and decide from those. A `grep` that matches nothing exits 1 and is a perfectly successful call.
 
-        The status therefore answers a different question — did the command run at all. A non-2xx means it did not, and nothing about the virtual machine was changed by this request: it was suspended, not running or had no elastic IP; or it refused the platform key; or the connection could not be opened. Retrying is meaningful in those cases and is not for a non-zero `exit_code`.
+        The status therefore answers a different question — did the command run at all. A non-2xx means it did not, and nothing about the virtual machine was changed by this request: it was suspended, not running or had no elastic IP associated; or it refused the platform key; or the connection could not be opened. Retrying is meaningful in those cases and is not for a non-zero `exit_code`.
 
         Three conditions must hold; the virtual machine is unreachable otherwise:
 
         - it is `active`
-        - an elastic IP is bound to it, since this endpoint connects over the public internet
+        - an elastic IP is associated with it, since this endpoint connects over the public internet
         - its security group permits inbound TCP 22
 
         Authentication uses the key the platform attaches to every virtual machine at creation, so nothing has to be set up first. The virtual machine must have applied that key at first boot, which images without a full cloud-init do not do.
@@ -184,7 +207,7 @@ paths:
         **Do not pass secrets in the command.** Read them from a file on the virtual machine instead: neither the command nor its output is a confidential channel.
 
         Each stream is capped at 1 MiB. Beyond that the rest is discarded and `truncated` is true.
-      operationId: run-virtual-machine-command
+      operationId: create-virtual-machine-command
       tags:
       - virtual-machines
       parameters:
@@ -198,14 +221,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RunCommandRequestBody'
+              $ref: '#/components/schemas/CreateVirtualMachineCommandRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CommandResultResponseBody'
+                $ref: '#/components/schemas/CreateVirtualMachineCommandResponseBody'
         default:
           description: Error
           content:
@@ -213,13 +236,13 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
   /api/v1/virtual-machines/{virtualMachineId}/console:
-    post:
-      summary: Open a remote console
+    get:
+      summary: Retrieve a remote console
       description: |-
         Operates the virtual machine directly from a browser and does not require the virtual machine to be reachable over the network, which makes it usable when a network misconfiguration prevents login.
 
-        The returned address is single-use and expires within minutes. Request a new one before each use.
-      operationId: open-virtual-machine-console
+        The returned address is single-use and expires within minutes. Every request issues a new address, so request one before each use and do not cache the response.
+      operationId: get-virtual-machine-console
       tags:
       - virtual-machines
       parameters:
@@ -241,90 +264,16 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/labels:
-    put:
-      summary: Replace a virtual machine's labels
-      description: |-
-        Records what this virtual machine is for, as key-value pairs. Nothing on the platform reads them.
-
-        **The whole set is replaced**: whatever is absent from the request is removed.
-
-        Do not put credentials here. Labels are visible to platform operators.
-      operationId: set-virtual-machine-labels
-      tags:
-      - virtual-machines
-      parameters:
-      - name: virtualMachineId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetVirtualMachineLabelsRequestBody'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VirtualMachine'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/notes:
-    put:
-      summary: Replace a virtual machine's note
-      description: |-
-        A free-text note about this virtual machine — what it runs, and what to be careful about before touching it.
-
-        **The whole note is replaced**; send an empty string to clear it.
-
-        Do not put credentials here. The note is visible to platform operators.
-      operationId: set-virtual-machine-notes
-      tags:
-      - virtual-machines
-      parameters:
-      - name: virtualMachineId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetVirtualMachineNotesRequestBody'
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VirtualMachine'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
   /api/v1/virtual-machines/{virtualMachineId}/password:
-    post:
+    put:
       summary: Reset the login password
       description: |-
-        Changes the root password without a reboot. The virtual machine must be running.
+        Sets the root password without a reboot. The virtual machine must be running.
 
         **Not every image supports this.** Images whose `supports_password_reset` is false cannot, and a new password can then only be set by rebuilding the virtual machine, which erases all data on the system disk.
 
         The request is also rejected when the image is marked as supported but the corresponding component has been removed or stopped inside the virtual machine.
-      operationId: reset-virtual-machine-password
+      operationId: put-virtual-machine-password
       tags:
       - virtual-machines
       parameters:
@@ -338,14 +287,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ResetPasswordRequestBody'
+              $ref: '#/components/schemas/PutVirtualMachinePasswordRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ResetPasswordResponseBody'
+                $ref: '#/components/schemas/PutVirtualMachinePasswordResponseBody'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -354,7 +303,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/reboot:
+  /api/v1/virtual-machines/{virtualMachineId}/reboots:
     post:
       summary: Reboot a virtual machine
       description: |-
@@ -367,7 +316,7 @@ paths:
         A virtual machine suspended by the platform must be unsuspended first.
 
         The virtual machine shows the `reboot` operation until the reboot has finished.
-      operationId: reboot-virtual-machine
+      operationId: create-virtual-machine-reboot
       tags:
       - virtual-machines
       parameters:
@@ -381,7 +330,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RebootVirtualMachineRequestBody'
+              $ref: '#/components/schemas/CreateVirtualMachineRebootRequestBody'
       responses:
         '202':
           description: The reboot was accepted.
@@ -397,7 +346,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/rebuild:
+  /api/v1/virtual-machines/{virtualMachineId}/rebuilds:
     post:
       summary: Rebuild a virtual machine
       description: |-
@@ -406,7 +355,7 @@ paths:
         The image this virtual machine already runs is accepted even after the platform has withdrawn it, since rebuilding is the only way back into a virtual machine broken from the inside. Any *other* withdrawn image is rejected with `IMAGE_RETIRED`, which is a change of image and therefore a new order.
 
         The virtual machine shows the `rebuild` operation until the rebuild has finished.
-      operationId: rebuild-virtual-machine
+      operationId: create-virtual-machine-rebuild
       tags:
       - virtual-machines
       parameters:
@@ -420,7 +369,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RebuildVirtualMachineRequestBody'
+              $ref: '#/components/schemas/CreateVirtualMachineRebuildRequestBody'
       responses:
         '202':
           description: The rebuild was accepted. The virtual machine shows the `rebuild` operation until it has
@@ -428,114 +377,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RebuildVirtualMachineResponseBody'
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/resize:
-    post:
-      summary: Resize a virtual machine
-      description: |-
-        Creates a Billing Checkout Session for the change, including for metered terms, and returns the virtual machine with it. The virtual machine keeps its usage type and period, priced with the target type's matching option; a target type without that option is refused with 409 `BILLING_OPTION_UNAVAILABLE`. The resize starts once Billing accepts the order. Do not submit the change again after paying. After an uncertain response, look the Checkout Session up in Billing before submitting again.
-
-        The virtual machine shows the `resize` operation until the resize is applied, its Checkout Session expires or its order is canceled, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. It keeps its current type until the resize is applied; the new type takes effect, and is billed from then on, when `machine_type_id` shows it. If checkout is not completed, the order is not accepted or the resize fails, the virtual machine keeps its current type and Billing shows the outcome. A completed resize is final and cannot be reverted; to return to the previous type, submit another resize.
-      operationId: resize-virtual-machine
-      tags:
-      - virtual-machines
-      parameters:
-      - name: virtualMachineId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ResizeVirtualMachineRequestBody'
-      responses:
-        '202':
-          description: The virtual machine and the Checkout Session for the resize; the new type is not yet in effect.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResizeVirtualMachineResponseBody'
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/start:
-    post:
-      summary: Start a virtual machine
-      description: Outstanding restrictions can prevent starting. The virtual machine shows the `start` operation
-        until it is running or the start has failed.
-      operationId: start-virtual-machine
-      tags:
-      - virtual-machines
-      parameters:
-      - name: virtualMachineId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PowerRequest'
-      responses:
-        '202':
-          description: The start was accepted.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VirtualMachine'
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/stop:
-    post:
-      summary: Stop a virtual machine
-      description: A stopped virtual machine keeps its disks, network attachments and sellable quota. The virtual
-        machine shows the `stop` operation until it is stopped or the stop has failed.
-      operationId: stop-virtual-machine
-      tags:
-      - virtual-machines
-      parameters:
-      - name: virtualMachineId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/PowerRequest'
-      responses:
-        '202':
-          description: The stop was accepted.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VirtualMachine'
+                $ref: '#/components/schemas/CreateVirtualMachineRebuildResponseBody'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -577,7 +419,7 @@ paths:
         disk; the virtual machine shows the `attach_disk` operation and the disk the `attach` operation until the
         attachment is confirmed. Partition the disk and mount the file system inside the virtual machine once it
         is attached.
-      operationId: attach-disk
+      operationId: attach-virtual-machine-disk
       tags:
       - virtual-machines
       parameters:
@@ -616,7 +458,7 @@ paths:
         The disk the virtual machine boots from cannot be detached, whether it is the system disk bought with the virtual machine or a disk supplied as the existing boot_disk at launch. Such a request is refused with `INSTANCE_BOOT_DISK_LOCKED` and changes nothing; releasing the virtual machine is what frees that disk.
 
         Returns the disk; the virtual machine shows the `detach_disk` operation and the disk the `detach` operation until the disk is detached.
-      operationId: detach-disk
+      operationId: detach-virtual-machine-disk
       tags:
       - virtual-machines
       parameters:
@@ -645,75 +487,6 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/elastic-ips:
-    post:
-      summary: Bind an elastic IP to a virtual machine
-      description: Changes the public IP binding on the virtual machine's primary network interface. The virtual
-        machine shows the `bind_elastic_ip` operation until the binding is confirmed.
-      operationId: attach-virtual-machine-elastic-ip
-      tags:
-      - virtual-machines
-      parameters:
-      - name: virtualMachineId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: ./elastic-ips.yaml#/components/schemas/AttachElasticIPRequestBody
-      responses:
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-        '202':
-          description: The binding was accepted.
-          content:
-            application/json:
-              schema:
-                $ref: ./elastic-ips.yaml#/components/schemas/ElasticIP
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
-  /api/v1/virtual-machines/{virtualMachineId}/elastic-ips/{elasticIpId}:
-    delete:
-      summary: Unbind the elastic IP of a virtual machine
-      description: Changes the public IP binding on the virtual machine's primary network interface. The virtual
-        machine shows the `unbind_elastic_ip` operation until the change is confirmed.
-      operationId: detach-virtual-machine-elastic-ip
-      tags:
-      - virtual-machines
-      parameters:
-      - name: virtualMachineId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-      - name: elasticIpId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
-      responses:
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-        '202':
-          description: The unbinding was accepted.
-          content:
-            application/json:
-              schema:
-                $ref: ./elastic-ips.yaml#/components/schemas/ElasticIP
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
   /api/v1/virtual-machines/{virtualMachineId}/network-interfaces:
     get:
       summary: List the network interfaces of a virtual machine
@@ -745,7 +518,7 @@ paths:
       summary: Attach a network interface
       description: Returns the network interface; the virtual machine shows the `attach_network_interface` operation
         and the interface the `attach` operation until the attachment is confirmed.
-      operationId: attach-network-interface
+      operationId: attach-virtual-machine-network-interface
       tags:
       - virtual-machines
       parameters:
@@ -782,7 +555,7 @@ paths:
         The primary network interface cannot be detached; the virtual machine would lose its network address.
 
         Returns the network interface; the virtual machine shows the `detach_network_interface` operation and the interface the `detach` operation until it is detached.
-      operationId: detach-network-interface
+      operationId: detach-virtual-machine-network-interface
       tags:
       - virtual-machines
       parameters:
@@ -812,13 +585,13 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
   /api/v1/virtual-machines/{virtualMachineId}/rescue:
-    post:
-      summary: Rescue a virtual machine
+    put:
+      summary: Put a virtual machine into rescue mode
       description: |-
-        Boots a temporary rescue environment while retaining the original system disk. Stop, resize, rebuild and password reset are unavailable in rescue mode.
+        Boots a temporary rescue environment while retaining the original system disk. Changing `power_state` or `machine_type_id`, rebuilding and putting a password are unavailable in rescue mode.
 
         The request does not name an image. The rescue image is the region's enabled rescue image for the architecture of the virtual machine's system disk. A region and architecture with no enabled rescue image is refused with `RESCUE_IMAGE_NOT_CONFIGURED` (409).
-      operationId: rescue-virtual-machine
+      operationId: put-virtual-machine-rescue
       tags:
       - virtual-machines
       parameters:
@@ -833,7 +606,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RescueVirtualMachineResponseBody'
+                $ref: '#/components/schemas/PutVirtualMachineRescueResponseBody'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -847,13 +620,12 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RescueVirtualMachineRequestBody'
-  /api/v1/virtual-machines/{virtualMachineId}/unrescue:
-    post:
-      summary: Exit virtual machine rescue mode
-      description: Restores boot from the original system disk. Completion is shown
-        by the virtual machine state.
-      operationId: unrescue-virtual-machine
+              $ref: '#/components/schemas/PutVirtualMachineRescueRequestBody'
+    delete:
+      summary: Take a virtual machine out of rescue mode
+      description: Restores boot from the original system disk. Completion is shown by the virtual machine state, and
+        the virtual machine shows the `unrescue` operation until then.
+      operationId: delete-virtual-machine-rescue
       tags:
       - virtual-machines
       parameters:
@@ -1123,14 +895,14 @@ components:
         elastic_ip_id:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
           description: |-
-            Bind an elastic IP you already hold, instead of allocating a new one. It must be idle and in
+            Associate an elastic IP you already hold, instead of allocating a new one. It must be idle and in
             the same region.
 
             Mutually exclusive with `bandwidth_mbps`: an address you already hold has its own bandwidth
             ceiling, set when it was allocated, and changing it is a separate operation.
 
             Like `bandwidth_mbps`, this happens **inside the creation**: if binding fails, no virtual machine is
-            created. Binding afterwards is still possible from the virtual machine page, but then it is two
+            created. Associating afterwards is still possible (`put-elastic-ip-association`), but then it is two
             operations and a failure in between leaves a virtual machine you cannot reach.
 
             Only one virtual machine can be created when it is used — one address binds to one interface.
@@ -1184,9 +956,17 @@ components:
       - compute
       - boot_disk
       additionalProperties: false
-    SetVirtualMachineLabelsRequestBody:
+    UpdateVirtualMachineRequestBody:
+      description: |-
+        The mutable fields of a virtual machine, all optional, at least one required. `power_state` and `machine_type_id`
+        are operational fields: each starts a workflow and cannot be combined with any other field, including the other;
+        such a request is refused with 422 `UPDATE_FIELDS_COMBINED`.
       type: object
       properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
         labels:
           description: The complete set of labels. Whatever is absent here is removed; send an empty object to clear
             them all. A key may not contain a colon, whitespace or control characters
@@ -1195,30 +975,34 @@ components:
           additionalProperties:
             type: string
             maxLength: 63
-      required:
-      - labels
-      additionalProperties: false
-    SetVirtualMachineNotesRequestBody:
-      type: object
-      properties:
         notes:
           description: The complete note. Send an empty string to clear it
           type: string
           maxLength: 4096
-      required:
-      - notes
-      additionalProperties: false
-    RenameVirtualMachineRequestBody:
-      type: object
-      properties:
-        name:
+        power_state:
+          description: The state the virtual machine should be in. `running` starts it and `stopped` stops it. Operational
+            field.
           type: string
-          minLength: 1
-          maxLength: 128
-      required:
-      - name
+          enum:
+          - running
+          - stopped
+        machine_type_id:
+          description: The machine type to resize to; must be in the same region and availability zone as the current
+            machine type. Operational field; the change is purchased through Billing.
+          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+        proration_date:
+          description: The `proration_date` of the Billing quote for this change, so that the order is priced from
+            the same instant. Only with `machine_type_id`, and only for automatic checkout; deferred checkout is priced
+            when the customer completes it. Defaults to the time of the request; it must be a whole second, not in the
+            future and at most 10 minutes old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
+          type: string
+          format: date-time
+        checkout:
+          description: How the purchase of the `machine_type_id` change is checked out. Only with `machine_type_id`.
+          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
+      minProperties: 1
       additionalProperties: false
-    RebootVirtualMachineRequestBody:
+    CreateVirtualMachineRebootRequestBody:
       type: object
       properties:
         force:
@@ -1227,7 +1011,7 @@ components:
           type: boolean
       required: []
       additionalProperties: false
-    RunCommandRequestBody:
+    CreateVirtualMachineCommandRequestBody:
       type: object
       properties:
         command:
@@ -1244,7 +1028,7 @@ components:
       required:
       - command
       additionalProperties: false
-    CommandResultResponseBody:
+    CreateVirtualMachineCommandResponseBody:
       type: object
       properties:
         exit_code:
@@ -1281,7 +1065,7 @@ components:
       required:
       - console_url
       additionalProperties: false
-    ResetPasswordRequestBody:
+    PutVirtualMachinePasswordRequestBody:
       type: object
       properties:
         generate_password:
@@ -1293,7 +1077,7 @@ components:
           maxLength: 128
       required: []
       additionalProperties: false
-    ResetPasswordResponseBody:
+    PutVirtualMachinePasswordResponseBody:
       type: object
       properties:
         password:
@@ -1303,7 +1087,7 @@ components:
       required:
       - password
       additionalProperties: false
-    RebuildVirtualMachineRequestBody:
+    CreateVirtualMachineRebuildRequestBody:
       type: object
       properties:
         generate_password:
@@ -1318,7 +1102,7 @@ components:
       required:
       - image_id
       additionalProperties: false
-    RebuildVirtualMachineResponseBody:
+    CreateVirtualMachineRebuildResponseBody:
       type: object
       properties:
         virtual_machine:
@@ -1329,24 +1113,6 @@ components:
       required:
       - virtual_machine
       - password
-      additionalProperties: false
-    ResizeVirtualMachineRequestBody:
-      type: object
-      properties:
-        machine_type_id:
-          description: Must be in the same region and availability zone as the current machine type
-          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
-        proration_date:
-          description: The `proration_date` of the Billing quote for this change, so that the order is priced from
-            the same instant. Only for automatic checkout; deferred checkout is priced when the customer completes it.
-            Defaults to the time of the request; it must be a whole second, not in the future and at most 10 minutes
-            old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
-          type: string
-          format: date-time
-        checkout:
-          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
-      required:
-      - machine_type_id
       additionalProperties: false
     NewCompute:
       description: The compute capacity requested for each virtual machine in this order.
@@ -1393,21 +1159,25 @@ components:
       - disk_id
       - login_username
       additionalProperties: false
-    ResizeVirtualMachineResponseBody:
+    UpdateVirtualMachineResponseBody:
       description: |-
-        The virtual machine, still on its current type, and the Checkout Session for the resize. The virtual machine keeps its ID, and
-        its current subscription remains in force until the resize is applied.
+        The virtual machine and, when the update placed a Billing order, the Checkout Session for it. After a resize the
+        virtual machine is still on its current type, keeps its ID, and its current subscription remains in force until
+        the resize is applied. Returned with 200 when only descriptive fields changed and with 202 when an operation started.
       type: object
       properties:
         virtual_machine:
           $ref: '#/components/schemas/VirtualMachine'
         checkout_session_id:
-          description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
-            in Billing.
-          type: string
+          description: The Billing Checkout Session of the purchase; null when the update placed no order. With deferred
+            checkout, the customer completes it in Billing.
+          type:
+          - string
+          - 'null'
           format: uuid
         order_id:
-          description: The order created when checkout completes, at once for automatic checkout; null until then.
+          description: The order created when checkout completes, at once for automatic checkout; null until then and
+            when the update placed no order.
           type:
           - string
           - 'null'
@@ -1502,14 +1272,6 @@ components:
       - reason_code
       - created_at
       additionalProperties: false
-    PowerRequest:
-      type: object
-      properties:
-        expected_generation:
-          type: integer
-          format: int64
-          minimum: 1
-      additionalProperties: false
     CreateVirtualMachineResponseBody:
       description: The new virtual machines, `pending` until their order is accepted, and the Checkout Session they share.
       type: object
@@ -1581,7 +1343,7 @@ components:
       - type
       - started_at
       additionalProperties: false
-    RescueVirtualMachineRequestBody:
+    PutVirtualMachineRescueRequestBody:
       type: object
       properties:
         password:
@@ -1593,7 +1355,7 @@ components:
       required:
       - password
       additionalProperties: false
-    RescueVirtualMachineResponseBody:
+    PutVirtualMachineRescueResponseBody:
       type: object
       properties:
         login_username:

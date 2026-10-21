@@ -35,6 +35,33 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/operation-logs/{operationLogId}:
+    get:
+      summary: Retrieve an operation log entry
+      description: Returns one entry of the project's operation log. Like the listing, it never discloses the
+        individual operator of an operation performed by the platform.
+      operationId: get-operation-log
+      tags:
+      - operation-logs
+      parameters:
+      - name: operationLogId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/OperationLogID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationLogResource'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
     OperationLogResource:

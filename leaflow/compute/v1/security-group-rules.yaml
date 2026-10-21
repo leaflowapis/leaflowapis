@@ -53,9 +53,9 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/security-group-rules/{ruleId}:
+  /api/v1/security-group-rules/{securityGroupRuleId}:
     parameters:
-    - name: ruleId
+    - name: securityGroupRuleId
       in: path
       required: true
       schema:

@@ -1,10 +1,10 @@
 paths:
-  /api/v1/backups:
+  /api/v1/disk-backups:
     get:
-      summary: List backups
-      operationId: list-backups
+      summary: List disk backups
+      operationId: list-disk-backups
       tags:
-      - backups
+      - disk-backups
       parameters:
       - name: disk_id
         in: query
@@ -21,7 +21,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BackupListResponseBody'
+                $ref: '#/components/schemas/DiskBackupListResponseBody'
         default:
           description: Error
           content:
@@ -29,30 +29,30 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     post:
-      summary: Create a backup
+      summary: Create a disk backup
       description: "Creates a backup of the disk. It remains restorable after the source disk is deleted and may be restored
-        to another availability zone in the same region. A running virtual machine may produce a file-system-inconsistent
+        to another availability zone in the same region, by creating a disk with `disk_backup_id` (`create-disk`). A running virtual machine may produce a file-system-inconsistent
         backup. Pending backups count toward Compute project quotas until cleanup is confirmed.\n\nIt is metered by the hour on a subscription of its own and takes no billing choice. It is bought through a
         Billing Checkout Session: automatic checkout completes at once for metered pricing and the backup is taken as soon
         as the order is accepted; with deferred checkout it stays `pending` until the customer completes checkout in
         Billing. The source and project quotas are checked before the Checkout Session is created, and a refused
         request creates nothing.\n\nThe backup shows the `create` operation from the moment its Checkout Session is created until it is delivered or its checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its deletion with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment."
-      operationId: create-backup
+      operationId: create-disk-backup
       tags:
-      - backups
+      - disk-backups
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateBackupRequestBody'
+              $ref: '#/components/schemas/CreateDiskBackupRequestBody'
       responses:
         '202':
           description: The backup and its Checkout Session were created; the backup is not taken yet.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateBackupResponseBody'
+                $ref: '#/components/schemas/CreateDiskBackupResponseBody'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -61,16 +61,16 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/backups/{backupId}:
+  /api/v1/disk-backups/{diskBackupId}:
     get:
-      summary: Retrieve a backup
+      summary: Retrieve a disk backup
       description: Returns the stored state of the backup; it does not query the cloud. Use it to poll creation 
         progress.
-      operationId: get-backup
+      operationId: get-disk-backup
       tags:
-      - backups
+      - disk-backups
       parameters:
-      - name: backupId
+      - name: diskBackupId
         in: path
         required: true
         schema:
@@ -81,7 +81,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BackupResource'
+                $ref: '#/components/schemas/DiskBackupResource'
         default:
           description: Error
           content:
@@ -89,12 +89,13 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
-      summary: Rename a backup
-      operationId: rename-backup
+      summary: Update a disk backup
+      description: Changes the name only. A backup's source disk and capacity cannot be changed.
+      operationId: update-disk-backup
       tags:
-      - backups
+      - disk-backups
       parameters:
-      - name: backupId
+      - name: diskBackupId
         in: path
         required: true
         schema:
@@ -104,14 +105,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RenameBackupRequestBody'
+              $ref: '#/components/schemas/UpdateDiskBackupRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BackupResource'
+                $ref: '#/components/schemas/DiskBackupResource'
         default:
           description: Error
           content:
@@ -119,17 +120,17 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
-      summary: Delete a backup
+      summary: Delete a disk backup
       description: "Independent of the source disk: deletion succeeds whether or not that disk still exists. Metering
         of the backup ends once it is deleted.\n\nQuota capacity and storage metering are released only after cleanup
         is confirmed. Billing determines whether its commercial subscription must be canceled first.\n\nA resource whose purchase still awaits checkout or payment is refused with `COMPUTE_PURCHASE_PENDING`; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead. A subscribed resource is released through
         its subscription cancellation. Cleanup must be confirmed before metering is stopped; unknown cleanup is not proof
         of release."
-      operationId: delete-backup
+      operationId: delete-disk-backup
       tags:
-      - backups
+      - disk-backups
       parameters:
-      - name: backupId
+      - name: diskBackupId
         in: path
         required: true
         schema:
@@ -142,44 +143,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BackupResource'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/backups/{backupId}/restore:
-    post:
-      summary: Restore from a backup
-      description: |-
-        Restores onto a **newly created** disk. The source disk is unaffected and need not still exist.
-
-        The target disk type may belong to another availability zone of the same region, and its capacity must not be smaller than the backup. Returns the new disk as `pending` with its Checkout Session; it cannot be attached until it is `available`. The new disk is bought on its own, so it is licensed: `billing.usage_type` `metered` is refused with `DISK_USAGE_TYPE_UNAVAILABLE`.
-      operationId: restore-backup
-      tags:
-      - backups
-      parameters:
-      - name: backupId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RestoreBackupRequestBody'
-      responses:
-        '202':
-          description: The new disk and its order were created; restoration has not started.
-          content:
-            application/json:
-              schema:
-                $ref: ./disks.yaml#/components/schemas/CreateDiskResponseBody
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
+                $ref: '#/components/schemas/DiskBackupResource'
         default:
           description: Error
           content:
@@ -188,7 +152,7 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    BackupResource:
+    DiskBackupResource:
       description: "A retained copy of a disk, restorable after its source disk is deleted. Compute project quotas constrain
         its count; retained storage is metered independently."
       type: object
@@ -230,7 +194,7 @@ components:
         operation:
           description: The operation in progress on this backup, or null when none is.
           anyOf:
-          - $ref: '#/components/schemas/BackupOperation'
+          - $ref: '#/components/schemas/DiskBackupOperation'
           - type: 'null'
           readOnly: true
         generation:
@@ -307,7 +271,7 @@ components:
       - order_item_id
       - subscription_id
       additionalProperties: false
-    BackupListResponseBody:
+    DiskBackupListResponseBody:
       type: object
       properties:
         items:
@@ -315,14 +279,14 @@ components:
           - array
           - 'null'
           items:
-            $ref: '#/components/schemas/BackupResource'
+            $ref: '#/components/schemas/DiskBackupResource'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
       - items
       - pagination
       additionalProperties: false
-    CreateBackupRequestBody:
+    CreateDiskBackupRequestBody:
       type: object
       properties:
         disk_id:
@@ -337,50 +301,23 @@ components:
       - disk_id
       - name
       additionalProperties: false
-    RenameBackupRequestBody:
+    UpdateDiskBackupRequestBody:
+      description: The mutable fields of a disk backup. At least one must be given.
       type: object
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 128
-      required:
-      - name
+      minProperties: 1
       additionalProperties: false
-    RestoreBackupRequestBody:
-      type: object
-      properties:
-        disk_type_id:
-          description: May differ from the availability zone of the source disk, but must be in the same region. It
-            has to be a data disk type on sale — restoring creates a new data disk, so a withdrawn type or a system
-            disk type is rejected here as well
-          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
-        name:
-          type: string
-          minLength: 1
-          maxLength: 128
-        size_gb:
-          description: Matches the size of the backup when omitted. When given, it must not be smaller than the 
-            backup
-          type: integer
-          format: int64
-          minimum: 0
-        billing:
-          $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
-        checkout:
-          $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
-      required:
-      - disk_type_id
-      - name
-      - billing
-      additionalProperties: false
-    BackupOperation:
+    DiskBackupOperation:
       description: An operation still running on this backup. It is not a separate resource; once it finishes, the 
         backup's `operation` is null again and the backup shows the result.
       type: object
       properties:
         type:
-          description: '`restore`: a disk is being restored from this backup.'
+          description: '`restore`: a disk is being created from this backup with `disk_backup_id` on `create-disk`.'
           type: string
           enum:
           - create
@@ -393,12 +330,12 @@ components:
       - type
       - started_at
       additionalProperties: false
-    CreateBackupResponseBody:
+    CreateDiskBackupResponseBody:
       type: object
       description: The new backup, `pending` until its order is accepted, and its Checkout Session.
       properties:
-        backup:
-          $ref: '#/components/schemas/BackupResource'
+        disk_backup:
+          $ref: '#/components/schemas/DiskBackupResource'
         checkout_session_id:
           description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
             in Billing.
@@ -411,7 +348,7 @@ components:
           - 'null'
           format: uuid
       required:
-      - backup
+      - disk_backup
       - checkout_session_id
       - order_id
       additionalProperties: false

@@ -2,7 +2,7 @@ paths:
   /api/v1/elastic-ip-types:
     get:
       operationId: list-elastic-ip-types
-      summary: List public elastic IP products
+      summary: List and search public elastic IP products
       tags:
       - elastic-ip-types
       responses:
@@ -19,35 +19,8 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
       description: Lists on-sale products. Region is optional. Prices, commercial terms and checkout are
-        read directly from Billing.
-      parameters:
-      - name: region_id
-        in: query
-        required: false
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/RegionID
-      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-  /api/v1/elastic-ip-types/search:
-    get:
-      operationId: search-elastic-ip-types
-      summary: Search public elastic IP products
-      tags:
-      - elastic-ip-types
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ElasticIPTypeListResponseBody'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-      description: Search on-sale product names and descriptions. Filters use AND; pagination is independent.
+        read directly from Billing. `q` searches the names and descriptions of the on-sale products; filters
+        combine with AND, and pagination is independent of them.
       parameters:
       - name: region_id
         in: query
@@ -56,8 +29,9 @@ paths:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
       - name: q
         in: query
-        required: true
-        description: Search text; combined with the other filters using AND.
+        required: false
+        description: Search text matched against product names and descriptions; combined with the other filters
+          using AND.
         schema:
           type: string
           minLength: 1

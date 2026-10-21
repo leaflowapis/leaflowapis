@@ -1,16 +1,18 @@
 paths:
-  /api/v1/regions/{regionId}/availability-zones:
+  /api/v1/availability-zones:
     get:
-      summary: List the availability zones of a region
+      summary: List availability zones
       description: A disk and a virtual machine must reside in the same availability zone to be attached. Confirm
-        the zone before creating either.
+        the zone before creating either. Without `region_id`, the zones of every region are listed.
       operationId: list-availability-zones
       tags:
       - availability-zones
       parameters:
-      - name: regionId
-        in: path
-        required: true
+      - name: region_id
+        in: query
+        required: false
+        description: Return only the zones of this region
+        explode: false
         schema:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
@@ -22,6 +24,32 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ZoneListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/availability-zones/{availabilityZoneId}:
+    get:
+      summary: Retrieve an availability zone
+      description: A disk and a virtual machine must reside in the same availability zone to be attached.
+      operationId: get-availability-zone
+      tags:
+      - availability-zones
+      parameters:
+      - name: availabilityZoneId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ZoneResource'
         default:
           description: Error
           content:
@@ -41,10 +69,14 @@ components:
           type: string
         id:
           $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        region_id:
+          description: The region this zone belongs to; the value `region_id` filters the listing by.
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
       required:
       - code
       - name
       - id
+      - region_id
       additionalProperties: false
     ZoneListResponseBody:
       type: object

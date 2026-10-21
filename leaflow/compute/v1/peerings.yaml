@@ -72,6 +72,48 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    patch:
+      summary: Accept or reject a peering
+      description: |-
+        The accepter project writes its decision as `acceptance`. Only the accepter project may write it; the requester project is refused, because a peering would otherwise be accepted by the party who asked for it. The decision is written once: a peering that is no longer `pending_acceptance` refuses it.
+
+        `accepted` starts the provisioning of the connectivity and returns 202; the peering shows the `provision` operation until it is `active`. `rejected` returns 200 with the peering `rejected`, and no connectivity is ever created. Does not change security groups or provide transitive routing.
+      operationId: update-peering
+      tags:
+      - peerings
+      parameters:
+      - name: peeringId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/PeeringID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePeeringRequestBody'
+      responses:
+        '200':
+          description: The peering was rejected.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeringResource'
+        '202':
+          description: The peering was accepted and its connectivity is being provisioned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PeeringResource'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
       summary: Delete peering
       operationId: delete-peering
@@ -92,58 +134,6 @@ paths:
                 $ref: '#/components/schemas/PeeringResource'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/peerings/{peeringId}/accept:
-    post:
-      summary: Accept peering
-      operationId: accept-peering
-      tags:
-      - peerings
-      parameters:
-      - name: peeringId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/PeeringID
-      responses:
-        '202':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PeeringResource'
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/peerings/{peeringId}/reject:
-    post:
-      summary: Reject peering
-      operationId: reject-peering
-      tags:
-      - peerings
-      parameters:
-      - name: peeringId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/PeeringID
-      responses:
-        '200':
-          description: Success
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PeeringResource'
         default:
           description: Error
           content:
@@ -171,6 +161,15 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         accepter_network_id:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+        acceptance:
+          description: The accepter project's decision. `pending` until it writes one; `accepted` and `rejected` follow
+            the `acceptance` of `update-peering`, consistent with `status` being `pending_acceptance`, any of the
+            states after acceptance, or `rejected`.
+          type: string
+          enum:
+          - pending
+          - accepted
+          - rejected
         status:
           type: string
           enum:
@@ -199,6 +198,7 @@ components:
       - accepter_project_id
       - requester_network_id
       - accepter_network_id
+      - acceptance
       - status
       - created_at
       - operation
@@ -235,6 +235,20 @@ components:
       - requester_network_id
       - accepter_project_id
       - accepter_network_id
+      additionalProperties: false
+    UpdatePeeringRequestBody:
+      description: The decision of the accepter project.
+      type: object
+      properties:
+        acceptance:
+          description: '`accepted` starts provisioning; `rejected` ends the peering without any connectivity.'
+          type: string
+          enum:
+          - accepted
+          - rejected
+      required:
+      - acceptance
+      minProperties: 1
       additionalProperties: false
     PeeringOperation:
       description: An operation still running on this peering. It is not a separate resource; once it finishes,
