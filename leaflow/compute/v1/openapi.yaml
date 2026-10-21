@@ -237,6 +237,10 @@ components:
       $ref: ./disk-types.yaml#/components/schemas/DiskTypePurpose
     DiskTypeResource:
       $ref: ./disk-types.yaml#/components/schemas/DiskTypeResource
+    PerformanceFormula:
+      $ref: ./disk-types.yaml#/components/schemas/PerformanceFormula
+    DiskTypePerformance:
+      $ref: ./disk-types.yaml#/components/schemas/DiskTypePerformance
     DiskTypeListResponseBody:
       $ref: ./disk-types.yaml#/components/schemas/DiskTypeListResponseBody
     DiskResource:
@@ -259,6 +263,8 @@ components:
       $ref: ./disks.yaml#/components/schemas/ResizeDiskResponseBody
     DiskAttachment:
       $ref: ./disks.yaml#/components/schemas/DiskAttachment
+    DiskPerformance:
+      $ref: ./disks.yaml#/components/schemas/DiskPerformance
     DiskAttachmentList:
       $ref: ./disks.yaml#/components/schemas/DiskAttachmentList
     DiskOperation:

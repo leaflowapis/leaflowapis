@@ -67,29 +67,10 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
         max_bandwidth_mbps:
           description: |-
-            The most public bandwidth a machine of this type may be given, in Mbps. Asking for more
-            when creating a machine, or raising a bound address past it, is refused.
+            The machine's network rate, in Mbps. **Each** network interface of the machine is limited to it in both directions — per interface rather than shared, so a machine with two interfaces has this rate on each of them; `max_network_interfaces` says how many it may have. Zero is no limit.
 
-            A ceiling on what can be bought, not a speed. How fast the machine's own interfaces run is
-            `network_egress_kbps` / `network_ingress_kbps`.
+            An elastic IP bound to the machine cannot be bought faster than this rate; asking for more is refused with `INSTANCE_BANDWIDTH_CEILING`.
           type: integer
-          format: int64
-        network_egress_kbps:
-          description: |-
-            Outbound ceiling of **each** network interface, in kbps. Null when this type is not
-            rate-limited.
-
-            Per interface rather than per machine: a machine with two interfaces has this ceiling on
-            each of them, not shared between them. `max_network_interfaces` says how many it may have.
-          type:
-          - integer
-          - 'null'
-          format: int64
-        network_ingress_kbps:
-          description: Inbound ceiling of each network interface, in kbps. Null when this type is not rate-limited
-          type:
-          - integer
-          - 'null'
           format: int64
         max_elastic_ips:
           type: integer
@@ -123,8 +104,6 @@ components:
       - max_network_interfaces
       - max_elastic_ips
       - max_bandwidth_mbps
-      - network_egress_kbps
-      - network_ingress_kbps
       - plan_id
       additionalProperties: false
     MachineTypeListResponseBody:

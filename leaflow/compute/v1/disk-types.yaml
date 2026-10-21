@@ -81,23 +81,6 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
         purpose:
           $ref: '#/components/schemas/DiskTypePurpose'
-        iops_at_min_size:
-          description: |-
-            IOPS a disk of `min_size_gb` gets. Null when this type is not rate-limited.
-
-            Performance grows with capacity, so this and `iops_at_max_size` are the two ends of the
-            range. The exact figure for the size actually bought appears on the disk itself once it
-            exists.
-          type:
-          - integer
-          - 'null'
-          format: int64
-        iops_at_max_size:
-          description: IOPS a disk of `max_size_gb` gets. Null when this type is not rate-limited
-          type:
-          - integer
-          - 'null'
-          format: int64
         max_size_gb:
           type: integer
           format: int64
@@ -117,24 +100,8 @@ components:
         step_gb:
           type: integer
           format: int64
-        throughput_at_min_size:
-          description: |-
-            Throughput a disk of `min_size_gb` gets, in **bytes per second**. Null when this type is
-            not rate-limited.
-
-            Bytes rather than MiB so the number needs no rounding on the way out; divide by 1048576
-            for MiB/s at the point of display.
-          type:
-          - integer
-          - 'null'
-          format: int64
-        throughput_at_max_size:
-          description: Throughput a disk of `max_size_gb` gets, in bytes per second. Null when this type is not
-            rate-limited
-          type:
-          - integer
-          - 'null'
-          format: int64
+        performance:
+          $ref: '#/components/schemas/DiskTypePerformance'
         plan_id:
           description: The actual Billing Plan associated with this resource. Read prices and commercial terms directly
             from Billing using this identifier.
@@ -151,11 +118,42 @@ components:
       - min_size_gb
       - max_size_gb
       - step_gb
-      - iops_at_min_size
-      - iops_at_max_size
-      - throughput_at_min_size
-      - throughput_at_max_size
+      - performance
       - plan_id
+      additionalProperties: false
+    PerformanceFormula:
+      description: One performance metric of a disk type for a disk of `size_gb`, `min(max, base + size_gb × per_gib)`.
+        A `per_gib` of zero is a fixed performance.
+      type: object
+      properties:
+        base:
+          type: integer
+          format: int64
+        per_gib:
+          type: integer
+          format: int64
+        max:
+          type: integer
+          format: int64
+      required:
+      - base
+      - per_gib
+      - max
+      additionalProperties: false
+    DiskTypePerformance:
+      description: |-
+        How fast a disk of this type runs for its size. Alibaba Cloud's ESSD levels have this shape; PL1, for example, is IOPS `min(50000, 1800 + 50 × size_gb)`.
+
+        A disk's own performance, computed from these for its size, is on the disk. Growing a disk raises it, and the new performance applies from the disk's next attachment or the next start of its stopped virtual machine.
+      type: object
+      properties:
+        iops:
+          $ref: '#/components/schemas/PerformanceFormula'
+        throughput_bytes_per_second:
+          $ref: '#/components/schemas/PerformanceFormula'
+      required:
+      - iops
+      - throughput_bytes_per_second
       additionalProperties: false
     DiskTypeListResponseBody:
       type: object

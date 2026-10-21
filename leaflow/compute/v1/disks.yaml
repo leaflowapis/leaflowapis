@@ -158,11 +158,7 @@ paths:
       description: |-
         Capacity can only be increased; shrinking is not supported. Returns the disk with the order for the resize, which keeps the disk's billing mode and period. The disk shows the `resize` operation until the resize is applied or its order is canceled, including while the order awaits checkout, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The disk keeps its current size until the resize is applied; once `size_gb` shows the new size, extend the file system inside the virtual machine. If the order is not accepted or the resize fails, the disk keeps its size and the order shows the outcome.
 
-        **An attached data disk whose performance scales with its size must be detached before it is resized.** The performance of an attached disk does not change until the disk is detached and attached again, so such a request is refused with `DISK_RESIZE_NEEDS_DETACH` rather than providing the new capacity at the performance of the previous size. Detach the disk, resize it, and attach it again.
-
-        The request is refused only when the new size has a different performance level. A disk whose type has no QoS level, or whose performance has already reached the maximum of its type, can be resized while attached.
-
-        **A system disk can be resized while attached**, because a system disk cannot be detached. System disk types use a performance level that does not scale with size, so resizing a system disk does not change its performance.
+        An attached disk, including a system disk, can be resized. The capacity is usable at once, and the disk's `performance` shows what its type gives the new size. **That performance applies from the disk's next attachment, or the next start of its stopped virtual machine**: the storage reads a disk's limits only while connecting it. Until then the attachment's `performance` shows what is in effect.
       operationId: resize-disk
       tags:
       - disks
@@ -255,23 +251,8 @@ components:
         size_gb:
           type: integer
           format: int64
-        iops:
-          description: |-
-            IOPS this disk is allowed. Null when its type is not rate-limited.
-
-            Computed from the disk's own capacity, so it grows when the disk is grown — but see the
-            note on the resize endpoint: growing a disk that is attached is refused, precisely because
-            the new figure would not take effect until it was attached again.
-          type:
-          - integer
-          - 'null'
-          format: int64
-        throughput_bytes_per_sec:
-          description: Throughput this disk is allowed, in bytes per second. Null when its type is not rate-limited
-          type:
-          - integer
-          - 'null'
-          format: int64
+        performance:
+          $ref: '#/components/schemas/DiskPerformance'
         status:
           description: '`pending` until the order is accepted, with no storage allocated; `provisioning` while the
             disk is created; then `available`, or `in_use` once attached. `failed` means the disk was not created;
@@ -368,8 +349,7 @@ components:
       - availability_zone_id
       - disk_type_id
       - size_gb
-      - iops
-      - throughput_bytes_per_sec
+      - performance
       - status
       - created_at
       - order_id
@@ -536,6 +516,12 @@ components:
           type:
           - string
           - 'null'
+        performance:
+          description: The disk's performance in effect on this attachment, as it was when the attachment was made.
+            Null until the attachment is made.
+          anyOf:
+          - $ref: '#/components/schemas/DiskPerformance'
+          - type: 'null'
       required:
       - id
       - virtual_machine_id
@@ -547,6 +533,21 @@ components:
       - detached_at
       - released_at
       - device
+      - performance
+      additionalProperties: false
+    DiskPerformance:
+      description: A disk's limits.
+      type: object
+      properties:
+        iops:
+          type: integer
+          format: int64
+        throughput_bytes_per_second:
+          type: integer
+          format: int64
+      required:
+      - iops
+      - throughput_bytes_per_second
       additionalProperties: false
     DiskAttachmentList:
       type: object
