@@ -1,10 +1,18 @@
 paths:
-  /api/v1/quotas:
+  /api/v1/regions/{regionId}/quotas:
+    parameters:
+    - name: regionId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/RegionID
     get:
-      summary: List project quotas
+      summary: List project quotas in a region
       description: Reads only the IAM project authorized by the scoped token; callers cannot select another project.
-        Returns all supported resource limits through shared pagination, including defaults for resources without
-        an override. No cross-domain usage total is returned.
+        Returns every resource's limit for the project in the region through shared pagination, the platform default
+        included where no limit was set. A quota is per region, since each region has its own capacity; what the
+        project holds in one region never counts against another. An unknown region is refused with 404. No usage is
+        returned.
       operationId: list-quotas
       tags:
       - quotas
@@ -13,7 +21,7 @@ paths:
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
         '200':
-          description: The effective project quota limits.
+          description: The project's limits in the region.
           content:
             application/json:
               schema:
@@ -24,24 +32,29 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/quotas/{resource}:
+  /api/v1/regions/{regionId}/quotas/{resource}:
     parameters:
+    - name: regionId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/RegionID
     - name: resource
       in: path
       required: true
       schema:
         $ref: '#/components/schemas/QuotaResourceType'
     get:
-      summary: Get a project quota
+      summary: Get a project quota in a region
       description: Reads only the IAM project authorized by the scoped token; callers cannot select another project.
-        Returns the effective limit, including its default when no override exists. Unknown resource values are
-        rejected.
+        Returns the limit in force, the platform default when no limit was set. Unknown resource values are rejected;
+        an unknown region is refused with 404.
       operationId: get-quota
       tags:
       - quotas
       responses:
         '200':
-          description: The effective project quota limits.
+          description: The project's limit on the resource in the region.
           content:
             application/json:
               schema:
@@ -55,9 +68,9 @@ paths:
 components:
   schemas:
     QuotaResourceType:
-      description: 'The resource or capacity constrained by a project quota. Defaults when no override exists: virtual_machines=5;
+      description: 'The resource or capacity constrained by a project quota in a region. Platform defaults: virtual_machines=5;
         vcpus=16; memory_mib=32768; disks=20; disk_gib=500; virtual_private_clouds=3; subnets=20; network_interfaces=20;
-        elastic_ips=3; nat_gateways=1; security_groups=10; security_group_rules=100; snapshots=20; backups=20; private_images=10.
+        elastic_ips=3; security_groups=10; security_group_rules=100; snapshots=20; backups=20; private_images=10.
         memory_mib is measured in MiB and disk_gib in GiB. A zero limit permits no additional capacity; it is not
         unlimited.'
       type: string
@@ -71,20 +84,29 @@ components:
       - subnets
       - network_interfaces
       - elastic_ips
-      - nat_gateways
       - security_groups
       - security_group_rules
       - snapshots
       - backups
       - private_images
+    QuotaSource:
+      description: Where a limit comes from. `default` is the platform default, which follows a change of the default;
+        `override` is a limit the platform set for this project in this region.
+      type: string
+      enum:
+      - default
+      - override
     ProjectQuota:
-      description: The effective limit for one IAM platform project and resource. Includes the default when no project
-        override exists. This representation contains no aggregated usage counter.
+      description: The limit in force for one IAM platform project on one resource in one region. This representation
+        contains no usage.
       type: object
       properties:
         project_id:
           type: string
           format: uuid
+          readOnly: true
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionID
           readOnly: true
         resource:
           $ref: '#/components/schemas/QuotaResourceType'
@@ -93,10 +115,16 @@ components:
           type: integer
           format: int64
           minimum: 0
+          readOnly: true
+        source:
+          $ref: '#/components/schemas/QuotaSource'
+          readOnly: true
       required:
       - project_id
+      - region_id
       - resource
       - limit
+      - source
       additionalProperties: false
     ProjectQuotaListResponseBody:
       type: object

@@ -130,14 +130,14 @@ paths:
     $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings
   /api/v1/peerings/{peeringId}:
     $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}
-  /api/v1/quotas:
-    $ref: ./quotas.yaml#/paths/~1api~1v1~1quotas
-  /api/v1/quotas/{resource}:
-    $ref: ./quotas.yaml#/paths/~1api~1v1~1quotas~1{resource}
   /api/v1/regions:
     $ref: ./regions.yaml#/paths/~1api~1v1~1regions
   /api/v1/regions/{regionId}:
     $ref: ./regions.yaml#/paths/~1api~1v1~1regions~1{regionId}
+  /api/v1/regions/{regionId}/quotas:
+    $ref: ./quotas.yaml#/paths/~1api~1v1~1regions~1{regionId}~1quotas
+  /api/v1/regions/{regionId}/quotas/{resource}:
+    $ref: ./quotas.yaml#/paths/~1api~1v1~1regions~1{regionId}~1quotas~1{resource}
   /api/v1/routes:
     $ref: ./routes.yaml#/paths/~1api~1v1~1routes
   /api/v1/routes/{routeId}:
@@ -385,6 +385,8 @@ components:
       $ref: ./peerings.yaml#/components/schemas/PeeringOperation
     QuotaResourceType:
       $ref: ./quotas.yaml#/components/schemas/QuotaResourceType
+    QuotaSource:
+      $ref: ./quotas.yaml#/components/schemas/QuotaSource
     ProjectQuota:
       $ref: ./quotas.yaml#/components/schemas/ProjectQuota
     ProjectQuotaListResponseBody:
