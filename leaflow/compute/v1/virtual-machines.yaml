@@ -814,9 +814,10 @@ paths:
   /api/v1/virtual-machines/{virtualMachineId}/rescue:
     post:
       summary: Rescue a virtual machine
-      description: Boots a temporary rescue environment while retaining the original
-        system disk. The selected image must support this virtual machine. Stop, resize,
-        rebuild and password reset are unavailable in rescue mode.
+      description: |-
+        Boots a temporary rescue environment while retaining the original system disk. Stop, resize, rebuild and password reset are unavailable in rescue mode.
+
+        The request does not name an image. The rescue image is the region's enabled rescue image for the architecture of the virtual machine's system disk. A region and architecture with no enabled rescue image is refused with `RESCUE_IMAGE_NOT_CONFIGURED` (409).
       operationId: rescue-virtual-machine
       tags:
       - virtual-machines
@@ -892,10 +893,21 @@ components:
         id:
           $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
         image_id:
-          description: Non-empty when the virtual machine was created from an image, public or private
+          description: Non-empty when the virtual machine was created from an image, public or private. `image_type`
+            says which collection holds it
           anyOf:
           - $ref: ./identifiers.yaml#/components/schemas/ImageID
           - type: 'null'
+        image_type:
+          description: Which collection `image_id` belongs to. `public` means `/public-images`, `private` means
+            `/private-images`. Null when the virtual machine boots from a disk and therefore has no image
+          type:
+          - string
+          - 'null'
+          enum:
+          - public
+          - private
+          - null
         machine_type_id:
           description: The machine type in effect, and the basis for billing
           $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
@@ -1074,6 +1086,7 @@ components:
       - ipv6_address
       - machine_type_id
       - image_id
+      - image_type
       - source_disk_id
       - status
       - created_at
@@ -1296,8 +1309,8 @@ components:
         generate_password:
           type: boolean
         image_id:
-          description: A public image, which must be on sale unless it is the one this virtual machine already runs,
-            or an available private image of this project
+          description: A public image (`/public-images`), which must be on sale unless it is the one this virtual machine
+            already runs, or an available private image of this project (`/private-images`)
           $ref: ./identifiers.yaml#/components/schemas/ImageID
         password:
           type: string
@@ -1414,7 +1427,7 @@ components:
           enum:
           - image
         image_id:
-          description: A public image on sale, or an available private image of this project.
+          description: A public image on sale (`/public-images`), or an available private image of this project (`/private-images`).
           $ref: ./identifiers.yaml#/components/schemas/ImageID
         disk_type_id:
           description: A system disk type on sale in the availability zone of the virtual machine, one whose `purpose`
@@ -1571,9 +1584,6 @@ components:
     RescueVirtualMachineRequestBody:
       type: object
       properties:
-        image_id:
-          description: Platform rescue image. Omit to use the regional default.
-          $ref: ./identifiers.yaml#/components/schemas/ImageID
         password:
           description: Password for the rescue environment. Generate and retain a strong
             password before calling.

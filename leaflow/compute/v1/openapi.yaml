@@ -3,7 +3,7 @@ info:
   title: Leaflow Compute API
   version: 1.0.0
   description: |-
-    Leaflow Compute user API for managing virtual machines, disks, snapshots, backups, images, virtual private clouds, subnets, routes, security groups, network interfaces and elastic IPs.
+    Leaflow Compute user API for managing virtual machines, disks, snapshots, backups, public and private images, virtual private clouds, subnets, routes, security groups, network interfaces and elastic IPs.
 
     ## Authentication
 
@@ -43,10 +43,12 @@ tags:
   description: Public network products; prices and checkout belong to Billing.
 - name: elastic-ips
   description: Elastic IP resources, bandwidth and bindings.
-- name: images
-  description: Images resources and operations.
 - name: machine-types
   description: Virtual machine specifications and their Billing Plan references.
+- name: private-images
+  description: Images this project captured from its own virtual machines, and their billed storage.
+- name: public-images
+  description: Platform images offered to every project.
 - name: network-interfaces
   description: Network interfaces, addresses and attachments.
 - name: operation-logs
@@ -106,10 +108,14 @@ paths:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1bandwidth
   /api/v1/elastic-ips/{elasticIpId}/binding:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1binding
-  /api/v1/images:
-    $ref: ./images.yaml#/paths/~1api~1v1~1images
-  /api/v1/images/{imageId}:
-    $ref: ./images.yaml#/paths/~1api~1v1~1images~1{imageId}
+  /api/v1/public-images:
+    $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images
+  /api/v1/public-images/{publicImageId}:
+    $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images~1{publicImageId}
+  /api/v1/private-images:
+    $ref: ./private-images.yaml#/paths/~1api~1v1~1private-images
+  /api/v1/private-images/{privateImageId}:
+    $ref: ./private-images.yaml#/paths/~1api~1v1~1private-images~1{privateImageId}
   /api/v1/machine-types:
     $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types
   /api/v1/machine-types/{machineTypeId}:
@@ -345,20 +351,22 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/SecurityGroupRuleID
     VirtualMachineRestrictionID:
       $ref: ./identifiers.yaml#/components/schemas/VirtualMachineRestrictionID
-    ImageVisibility:
-      $ref: ./images.yaml#/components/schemas/ImageVisibility
-    ImageResource:
-      $ref: ./images.yaml#/components/schemas/ImageResource
-    ImageListResponseBody:
-      $ref: ./images.yaml#/components/schemas/ImageListResponseBody
-    CreateImageRequestBody:
-      $ref: ./images.yaml#/components/schemas/CreateImageRequestBody
-    RenameImageRequestBody:
-      $ref: ./images.yaml#/components/schemas/RenameImageRequestBody
-    CreateImageResponseBody:
-      $ref: ./images.yaml#/components/schemas/CreateImageResponseBody
-    ImageOperation:
-      $ref: ./images.yaml#/components/schemas/ImageOperation
+    PublicImageResource:
+      $ref: ./public-images.yaml#/components/schemas/PublicImageResource
+    PublicImageListResponseBody:
+      $ref: ./public-images.yaml#/components/schemas/PublicImageListResponseBody
+    PrivateImageResource:
+      $ref: ./private-images.yaml#/components/schemas/PrivateImageResource
+    PrivateImageListResponseBody:
+      $ref: ./private-images.yaml#/components/schemas/PrivateImageListResponseBody
+    CreatePrivateImageRequestBody:
+      $ref: ./private-images.yaml#/components/schemas/CreatePrivateImageRequestBody
+    UpdatePrivateImageRequestBody:
+      $ref: ./private-images.yaml#/components/schemas/UpdatePrivateImageRequestBody
+    CreatePrivateImageResponseBody:
+      $ref: ./private-images.yaml#/components/schemas/CreatePrivateImageResponseBody
+    PrivateImageOperation:
+      $ref: ./private-images.yaml#/components/schemas/PrivateImageOperation
     MachineType:
       $ref: ./machine-types.yaml#/components/schemas/MachineType
     MachineTypeListResponseBody:

@@ -1,18 +1,16 @@
 paths:
-  /api/v1/images:
+  /api/v1/private-images:
     get:
-      summary: List images
+      summary: List private images
       description: |-
-        Lists the public images on sale together with the private images of this project. `visibility` narrows the list to one of the two.
+        Lists the private images of this project, newest first, in every status: including while a capture is in progress and after it failed. Private images of other projects are never listed.
 
-        A public image is offered to every project. Only public images currently on sale are listed: one the platform withdraws disappears from here and can no longer install new virtual machines, while the virtual machines already running it keep running and can still be rebuilt onto it.
+        A private image is usable only by the project that captured it from one of its virtual machines. Its storage is metered by the hour on a subscription of the project.
 
-        A private image belongs to this project, which captured it from one of its virtual machines, and is listed in every status, including while its capture is in progress and after the capture failed.
-
-        An image can only be used in the region that holds it. An image whose `min_ram_mb` exceeds the memory of the selected machine type cannot boot; filter the options accordingly.
-      operationId: list-images
+        An image can only be used in the region that holds it. An image whose `min_ram_mb` exceeds the memory of the selected machine type cannot boot; filter the options accordingly. Public images are in `/public-images`.
+      operationId: list-private-images
       tags:
-      - images
+      - private-images
       parameters:
       - name: region_id
         in: query
@@ -21,12 +19,6 @@ paths:
         explode: false
         schema:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
-      - name: visibility
-        in: query
-        description: Return only public or only private images. Both are returned when omitted
-        explode: false
-        schema:
-          $ref: '#/components/schemas/ImageVisibility'
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -35,7 +27,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImageListResponseBody'
+                $ref: '#/components/schemas/PrivateImageListResponseBody'
         default:
           description: Error
           content:
@@ -51,22 +43,22 @@ paths:
         as the order is accepted; with deferred checkout it stays `pending` until the customer completes checkout in
         Billing. The source and project quotas are checked before the Checkout Session is created, and a refused
         request creates nothing.\n\nThe image shows the `create` operation from the moment its Checkout Session is created until it is delivered or its checkout or order ends. While its purchase awaits checkout or payment its deletion is refused with `COMPUTE_PURCHASE_PENDING`; once the capture runs, deletion is the one operation it accepts."
-      operationId: create-image
+      operationId: create-private-image
       tags:
-      - images
+      - private-images
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateImageRequestBody'
+              $ref: '#/components/schemas/CreatePrivateImageRequestBody'
       responses:
         '202':
           description: The private image and its Checkout Session were created; the capture has not started.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateImageResponseBody'
+                $ref: '#/components/schemas/CreatePrivateImageResponseBody'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -75,17 +67,17 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/images/{imageId}:
+  /api/v1/private-images/{privateImageId}:
     get:
-      summary: Retrieve an image
-      description: Returns a public image, or a private image of this project; any other image is reported as not 
+      summary: Retrieve a private image
+      description: Returns a private image of this project; any other image, public images included, is reported as not
         found. Use this endpoint to poll capture progress. When `status` is `failed`, `failure` describes the 
         outcome.
-      operationId: get-image
+      operationId: get-private-image
       tags:
-      - images
+      - private-images
       parameters:
-      - name: imageId
+      - name: privateImageId
         in: path
         required: true
         schema:
@@ -96,7 +88,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImageResource'
+                $ref: '#/components/schemas/PrivateImageResource'
         default:
           description: Error
           content:
@@ -104,13 +96,13 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
-      summary: Rename a private image
-      description: Only a private image of this project can be renamed; any other image is reported as not found.
-      operationId: rename-image
+      summary: Update a private image
+      description: Renames a private image of this project. Any other image, public images included, is reported as not found.
+      operationId: update-private-image
       tags:
-      - images
+      - private-images
       parameters:
-      - name: imageId
+      - name: privateImageId
         in: path
         required: true
         schema:
@@ -120,14 +112,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RenameImageRequestBody'
+              $ref: '#/components/schemas/UpdatePrivateImageRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImageResource'
+                $ref: '#/components/schemas/PrivateImageResource'
         default:
           description: Error
           content:
@@ -136,7 +128,7 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
       summary: Delete a private image
-      description: "Only a private image of this project can be deleted; any other image is reported as not found.\n\n\
+      description: "Deletes a private image of this project; any other image, public images included, is reported as not found.\n\n\
         Deletion is rejected while virtual machines created from the image still exist, as they need it in order to be
         rebuilt.\n\nAn image whose capture has not finished can be deleted; the capture is aborted. This is the one operation
         accepted while the `create` operation is in progress.\n\nQuota capacity and storage metering are released only
@@ -144,11 +136,11 @@ paths:
         A resource whose purchase still awaits checkout or payment is refused with `COMPUTE_PURCHASE_PENDING`; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead. A subscribed resource is
         released through its subscription cancellation. Cleanup must be confirmed before metering is stopped; unknown
         cleanup is not proof of release."
-      operationId: delete-image
+      operationId: delete-private-image
       tags:
-      - images
+      - private-images
       parameters:
-      - name: imageId
+      - name: privateImageId
         in: path
         required: true
         schema:
@@ -161,7 +153,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ImageResource'
+                $ref: '#/components/schemas/PrivateImageResource'
         default:
           description: Error
           content:
@@ -170,24 +162,15 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    ImageVisibility:
-      description: Who can see and use an image. `public` — offered to every project by the platform. `private` — 
-        usable only by the project that owns it.
-      type: string
-      enum:
-      - public
-      - private
-    ImageResource:
-      description: "An image used to install a virtual machine. Platform and project images retain their respective visibility
-        and ownership rules. Project image storage is billed only to its owner."
+    PrivateImageResource:
+      description: "An image this project captured from one of its virtual machines, used to install virtual machines of
+        this project. Its storage is billed only to this project."
       type: object
       properties:
         id:
           $ref: ./identifiers.yaml#/components/schemas/ImageID
         region_id:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
-        visibility:
-          $ref: '#/components/schemas/ImageVisibility'
         name:
           type: string
         os_family:
@@ -215,9 +198,8 @@ components:
             image
           type: boolean
         status:
-          description: Only available images can install virtual machines. A public image is available; a private 
-            capture starts pending, then provisioning and uploading before available. Failed means no usable image 
-            was produced; failure describes the outcome. Missing means a private image is absent from the 
+          description: Only available images can install virtual machines. A capture starts pending, then provisioning and uploading before available. Failed means no usable image 
+            was produced; failure describes the outcome. Missing means the image is absent from the 
             infrastructure.
           type: string
           enum:
@@ -239,29 +221,18 @@ components:
           type: integer
           format: int64
         source_virtual_machine_id:
-          description: The virtual machine a private image was captured from. The image remains usable after that 
-            virtual machine is released. Null for public images
-          anyOf:
-          - $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-          - type: 'null'
+          description: The virtual machine this image was captured from. The image remains usable after that
+            virtual machine is released
+          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
         created_at:
           type: string
           format: date-time
         operation:
           description: The operation in progress on this image, or null when none is.
           anyOf:
-          - $ref: '#/components/schemas/ImageOperation'
+          - $ref: '#/components/schemas/PrivateImageOperation'
           - type: 'null'
           readOnly: true
-        generation:
-          type: integer
-          format: int64
-          minimum: 1
-        observed_at:
-          type:
-          - string
-          - 'null'
-          format: date-time
         failure_reason:
           description: Why creation failed; null unless `status` is `failed`. `checkout_expired` means checkout was
             not completed before its Checkout Session expired. `provisioning_failed` means creation failed after the
@@ -308,7 +279,6 @@ components:
       required:
       - id
       - region_id
-      - visibility
       - name
       - os_family
       - os_version
@@ -323,28 +293,26 @@ components:
       - source_virtual_machine_id
       - created_at
       - operation
-      - generation
-      - observed_at
       - failure_reason
       - checkout_session_id
       - order_id
       - order_item_id
       - subscription_id
       additionalProperties: false
-    ImageListResponseBody:
+    PrivateImageListResponseBody:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/ImageResource'
+            $ref: '#/components/schemas/PrivateImageResource'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
       - items
       - pagination
       additionalProperties: false
-    CreateImageRequestBody:
+    CreatePrivateImageRequestBody:
       type: object
       properties:
         virtual_machine_id:
@@ -362,7 +330,7 @@ components:
       additionalProperties: false
       description: "Creation configuration for this resource. Compute project quotas and Billing authorization are checked
         independently."
-    RenameImageRequestBody:
+    UpdatePrivateImageRequestBody:
       type: object
       properties:
         name:
@@ -372,12 +340,12 @@ components:
       required:
       - name
       additionalProperties: false
-    CreateImageResponseBody:
+    CreatePrivateImageResponseBody:
       type: object
       description: The new private image, `pending` until its order is accepted, and its Checkout Session.
       properties:
-        image:
-          $ref: '#/components/schemas/ImageResource'
+        private_image:
+          $ref: '#/components/schemas/PrivateImageResource'
         checkout_session_id:
           description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
             in Billing.
@@ -390,11 +358,11 @@ components:
           - 'null'
           format: uuid
       required:
-      - image
+      - private_image
       - checkout_session_id
       - order_id
       additionalProperties: false
-    ImageOperation:
+    PrivateImageOperation:
       description: An operation still running on this image. It is not a separate resource; once it finishes, the 
         image's `operation` is null again and the image shows the result.
       type: object
