@@ -121,7 +121,7 @@ components:
             the platform failed to carry it out (5xx).'
           type: string
           enum:
-          - outcome
+          - succeeded
           - rejected
           - failed
       required:
