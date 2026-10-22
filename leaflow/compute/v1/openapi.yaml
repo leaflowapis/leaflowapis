@@ -43,7 +43,7 @@ tags:
   description: Disk types resources and operations.
 - name: disks
   description: Disks resources and operations.
-- name: elastic-ip-types
+- name: elastic-ip-lines
   description: Public network products; prices and checkout belong to Billing.
 - name: elastic-ips
   description: Elastic IP resources, bandwidth and associations.
@@ -96,10 +96,10 @@ paths:
     $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}
   /api/v1/disks/{diskId}/reverts:
     $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}~1reverts
-  /api/v1/elastic-ip-types:
-    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types
-  /api/v1/elastic-ip-types/{elasticIpTypeId}:
-    $ref: ./elastic-ip-types.yaml#/paths/~1api~1v1~1elastic-ip-types~1{elasticIpTypeId}
+  /api/v1/elastic-ip-lines:
+    $ref: ./elastic-ip-lines.yaml#/paths/~1api~1v1~1elastic-ip-lines
+  /api/v1/elastic-ip-lines/{elasticIpLineId}:
+    $ref: ./elastic-ip-lines.yaml#/paths/~1api~1v1~1elastic-ip-lines~1{elasticIpLineId}
   /api/v1/elastic-ips:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips
   /api/v1/elastic-ips/{elasticIpId}:
@@ -255,10 +255,10 @@ components:
       $ref: ./disks.yaml#/components/schemas/DiskAttachmentList
     DiskOperation:
       $ref: ./disks.yaml#/components/schemas/DiskOperation
-    ElasticIPType:
-      $ref: ./elastic-ip-types.yaml#/components/schemas/ElasticIPType
-    ElasticIPTypeListResponseBody:
-      $ref: ./elastic-ip-types.yaml#/components/schemas/ElasticIPTypeListResponseBody
+    ElasticIPLine:
+      $ref: ./elastic-ip-lines.yaml#/components/schemas/ElasticIPLine
+    ElasticIPLineListResponseBody:
+      $ref: ./elastic-ip-lines.yaml#/components/schemas/ElasticIPLineListResponseBody
     InternetChargeType:
       $ref: ./elastic-ips.yaml#/components/schemas/InternetChargeType
     IPv4HostAddress:
@@ -293,8 +293,8 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
     ElasticIPID:
       $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
-    ElasticIPTypeID:
-      $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
+    ElasticIPLineID:
+      $ref: ./identifiers.yaml#/components/schemas/ElasticIPLineID
     RegionID:
       $ref: ./identifiers.yaml#/components/schemas/RegionID
     MachineTypeID:

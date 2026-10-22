@@ -24,7 +24,7 @@ paths:
     post:
       summary: Allocate an elastic IP
       description: |-
-        Select a public elastic IP type. The elastic IP is bought through a Billing Checkout Session, and no address is allocated before its order is accepted.
+        Select an elastic IP line. The elastic IP is bought through a Billing Checkout Session, and no address is allocated before its order is accepted.
 
         Returns the elastic IP as `pending` with its Checkout Session; `address` is null until the address is allocated after the order is accepted. A requested `address` is not held while pending; if it is no longer available then, the elastic IP ends `failed` with `provisioning_failed` and its charge is refunded.
 
@@ -87,7 +87,12 @@ paths:
       description: |-
         Changes the bandwidth of this elastic IP. `bandwidth_mbps` is an operational field: it starts a change and cannot be combined with any other field in the same request. Such a request is refused with 422 `UPDATE_FIELDS_COMBINED`, because a change that committed beside another that was then refused would leave the request half applied. An elastic IP has no descriptive field today, so 200 is reserved for the fields that may be added to it and every accepted update answers 202. `checkout` and `proration_date` belong to the purchase of the `bandwidth_mbps` change and are accepted only together with it.
 
-        The change goes through a Checkout Session that keeps the elastic IP's usage type and period; no separate bandwidth resource is created. The limit applies to inbound and outbound traffic alike. The elastic IP shows the `update_bandwidth` operation until the change is applied, its Checkout Session expires or its order is canceled, so other operations and a second change are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The current limit stays in effect until the change is applied. If checkout is not completed, the order is not accepted or the change fails, `bandwidth_mbps` keeps its value and Billing shows the outcome.
+        No separate bandwidth resource is created, and the limit applies to inbound and outbound traffic alike. The new value must lie within the line's bandwidth range and step, otherwise the request is refused with `ELASTIC_IP_BANDWIDTH_RANGE`. How the change is paid follows the elastic IP's network subscription:
+
+        - **Prepaid**: the change goes through a Checkout Session that changes the network subscription, priced for the rest of its period. It starts once Billing accepts the order; if checkout is not completed, the order is not accepted or the change fails, `bandwidth_mbps` keeps its value and Billing shows the outcome.
+        - **Pay-as-you-go**: there is no checkout. The change starts at once, `checkout_session_id` and `order_id` are null, and the new limit is metered from the instant it is applied; if it fails, the old limit stays in effect and metered. `checkout` and `proration_date` are refused with `ELASTIC_IP_CHECKOUT_UNUSED`.
+
+        The elastic IP shows the `update_bandwidth` operation until the change is applied or ends, so other operations and a second change are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The current limit stays in effect until the change is applied.
 
         While the address is associated with a virtual machine, the limit must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `VIRTUAL_MACHINE_BANDWIDTH_CEILING`. The limit of an address that is not associated is checked when the address is associated with a virtual machine.
       operationId: update-elastic-ip
@@ -113,7 +118,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/UpdateElasticIPResponseBody'
         '202':
-          description: The elastic IP and the Checkout Session for the change; the new limit is not yet in effect.
+          description: The elastic IP, and the Checkout Session for the change of a prepaid network subscription; the
+            new limit is not yet in effect.
           content:
             application/json:
               schema:
@@ -131,7 +137,7 @@ paths:
       description: |-
         Releases the elastic IP after dissociating it. The elastic IP shows the `delete` operation until cleanup is confirmed; the address then immediately returns to available inventory, with no cooldown period. Deleting the association or replacing it alone does not release the address.
 
-        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for the address, including a pay-as-you-go subscription. `meta.resource_id` names the elastic IP. It is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_set`.
+        Refused with `COMPUTE_RESOURCE_SUBSCRIBED` while a subscription pays for it, including a pay-as-you-go subscription, which every elastic IP has for its address. `meta.resource_id` names the elastic IP. It is released by canceling the subscriptions listed in `meta.subscription_ids` through Billing, the same set as its `release_set`: the address's and the network's together.
 
         Refused with `COMPUTE_PURCHASE_PENDING` while the purchase that created it still awaits checkout or payment; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead.
       operationId: delete-elastic-ip
@@ -259,7 +265,10 @@ components:
   schemas:
     InternetChargeType:
       type: string
-      description: Bandwidth billing is available. Traffic billing is reserved and cannot currently be selected for creation.
+      description: What the network subscription of an elastic IP charges for. `bandwidth` charges for the bandwidth
+        ceiling, prepaid for a period or by the Mbit/s-second while the address is associated. `traffic` charges for the
+        bytes the address sends; it is reserved and refused with `ELASTIC_IP_TRAFFIC_UNAVAILABLE` until traffic is
+        metered.
       enum:
       - bandwidth
       - traffic
@@ -270,9 +279,11 @@ components:
       pattern: '^(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])){3}$'
     ElasticIP:
       description: |-
-        One public IP resource, including its bandwidth configuration. Bandwidth has no
-        separate Compute resource ID; one subscription pays for the address and its bandwidth.
-        Changing bandwidth updates this same resource, not another allocation.
+        One public IP resource, including its bandwidth configuration. Bandwidth has no separate Compute resource ID.
+        Two subscriptions of one order pay for it: the address subscription, always pay-as-you-go, charges for the
+        address while it is not associated with anything, and the network subscription, on the terms chosen at
+        purchase, charges for the bandwidth or the traffic. Changing bandwidth updates this same resource, not another
+        allocation.
       type: object
       properties:
         internet_charge_type:
@@ -304,8 +315,8 @@ components:
           format: date-time
         id:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
-        type_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
+        line_id:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPLineID
         region_id:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
         status:
@@ -320,7 +331,7 @@ components:
           - failed
           - error
         checkout_session_id:
-          description: The Billing Checkout Session that bought this resource; `order_id` and `order_item_id` stay null
+          description: The Billing Checkout Session that bought this resource; `order_id` and the order items stay null
             until its checkout completes. Null when the resource was not bought through one.
           type:
           - string
@@ -332,25 +343,37 @@ components:
           - string
           - 'null'
           format: uuid
-        order_item_id:
-          description: The Billing order item for this resource.
+        address_order_item_id:
+          description: The Billing order item of the address, always pay-as-you-go.
           type:
           - string
           - 'null'
           format: uuid
-        subscription_id:
-          description: |-
-            The Billing subscription associated with this resource. It may still be pending; its
-            presence does not imply delivery or metering. Null when no subscription is associated.
+        address_subscription_id:
+          description: The Billing subscription of the address. It may still be pending; its presence does not imply
+            delivery or metering.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        network_order_item_id:
+          description: The Billing order item of the bandwidth or traffic.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        network_subscription_id:
+          description: The Billing subscription of the bandwidth or traffic. It may still be pending; its presence does
+            not imply delivery or metering.
           type:
           - string
           - 'null'
           format: uuid
         release_set:
-          description: The subscription a cancellation through Billing has to cover to release this elastic IP,
-            with the resource it pays for, so that each line of a cancellation can name what it releases.
-            A subscription that has ended is not listed, and the set is empty when no subscription pays for the
-            elastic IP.
+          description: The subscriptions a cancellation through Billing has to cover to release this elastic IP, both
+            the address's and the network's, each with the resource it pays for, so that each line of a cancellation
+            can name what it releases. A subscription that has ended is not listed, and the set is empty when no
+            subscription pays for the elastic IP.
           type: array
           items:
             $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
@@ -391,7 +414,7 @@ components:
       required:
       - internet_charge_type
       - id
-      - type_id
+      - line_id
       - region_id
       - address
       - allocated_at
@@ -401,8 +424,10 @@ components:
       - created_at
       - checkout_session_id
       - order_id
-      - order_item_id
-      - subscription_id
+      - address_order_item_id
+      - address_subscription_id
+      - network_order_item_id
+      - network_subscription_id
       - release_set
       - access_state
       - failure_reason
@@ -441,22 +466,24 @@ components:
             charged nothing for the traffic, while the address itself bills normally — so the invoice
             looks correct and nothing anywhere reports it.
 
-            It is part of this elastic IP resource and uses the same commercial terms,
-            selected from Billing's catalog. Changing it later updates the
-            same elastic IP through `update-elastic-ip`, not an independent bandwidth resource.
+            It must lie within the line's `min_bandwidth_mbps` and `max_bandwidth_mbps` and be a multiple of its
+            `bandwidth_step_mbps`, otherwise the request is refused with `ELASTIC_IP_BANDWIDTH_RANGE`. Changing it
+            later updates the same elastic IP through `update-elastic-ip`, not an independent bandwidth resource.
           type: integer
           format: int64
           minimum: 1
           maximum: 1000
-        type_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
+        line_id:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPLineID
         billing:
+          description: The terms of the network subscription, which pays for the bandwidth or the traffic. The address
+            subscription is always pay-as-you-go and takes no terms. Traffic is only sold pay-as-you-go.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
         checkout:
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       required:
       - bandwidth_mbps
-      - type_id
+      - line_id
       - billing
       additionalProperties: false
     UpdateElasticIPRequestBody:
@@ -474,13 +501,15 @@ components:
           minimum: 1
         proration_date:
           description: The `proration_date` of the Billing quote for this change, so that the order is priced from
-            the same instant. Only with `bandwidth_mbps`, and only for automatic checkout; deferred checkout is priced
-            when the customer completes it. Defaults to the time of the request; it must be a whole second, not in the
+            the same instant. Only with `bandwidth_mbps` on a prepaid network subscription, and only for automatic
+            checkout; deferred checkout is priced when the customer completes it. Defaults to the time of the request; it must be a whole second, not in the
             future and at most 10 minutes old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
           format: date-time
         checkout:
-          description: How the purchase of the `bandwidth_mbps` change is checked out. Only with `bandwidth_mbps`.
+          description: How the purchase of the `bandwidth_mbps` change is checked out. Only with `bandwidth_mbps` on a
+            prepaid network subscription; a pay-as-you-go one has nothing to check out and refuses it with
+            `ELASTIC_IP_CHECKOUT_UNUSED`.
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       minProperties: 1
       additionalProperties: false

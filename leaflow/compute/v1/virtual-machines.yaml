@@ -1269,18 +1269,22 @@ components:
           $ref: ./elastic-ips.yaml#/components/schemas/InternetChargeType
           default: bandwidth
         bandwidth_mbps:
+          description: Within the line's `min_bandwidth_mbps` and `max_bandwidth_mbps` and a multiple of its
+            `bandwidth_step_mbps`, otherwise refused with `ELASTIC_IP_BANDWIDTH_RANGE`.
           type: integer
           format: int64
           minimum: 1
           maximum: 1000
-        type_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIPTypeID
+        line_id:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPLineID
         billing:
+          description: The terms of the elastic IP's network subscription, which follow the rule shared by every
+            component of the purchase. Its address subscription is always pay-as-you-go and is exempt from that rule.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
       required:
       - billing
       - bandwidth_mbps
-      - type_id
+      - line_id
       additionalProperties: false
     VirtualMachineRestriction:
       description: An independent restriction on use. Removing one restriction never removes another source’s restriction,

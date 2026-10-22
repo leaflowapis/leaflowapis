@@ -28,12 +28,12 @@ components:
       minLength: 30
       maxLength: 30
       pattern: ^eip_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
-    ElasticIPTypeID:
+    ElasticIPLineID:
       type: string
       minLength: 34
       maxLength: 34
-      pattern: ^eiptype_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
-      description: Compute ElasticIPType TypeID. UUID text is not accepted.
+      pattern: ^eipline_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute ElasticIPLine TypeID. UUID text is not accepted.
     RegionID:
       type: string
       minLength: 33
