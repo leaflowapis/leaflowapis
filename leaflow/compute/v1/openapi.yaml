@@ -47,6 +47,8 @@ tags:
   description: Public network products; prices and checkout belong to Billing.
 - name: elastic-ips
   description: Elastic IP resources, bandwidth and associations.
+- name: launch-templates
+  description: Launch templates, reusable descriptions of how to create virtual machines.
 - name: machine-types
   description: Virtual machine specifications and their Billing Plan references.
 - name: network-interfaces
@@ -108,6 +110,14 @@ paths:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1traffic-usage
   /api/v1/elastic-ips/{elasticIpId}/association:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1association
+  /api/v1/launch-templates:
+    $ref: ./launch-templates.yaml#/paths/~1api~1v1~1launch-templates
+  /api/v1/launch-templates/{launchTemplateId}:
+    $ref: ./launch-templates.yaml#/paths/~1api~1v1~1launch-templates~1{launchTemplateId}
+  /api/v1/launch-templates/{launchTemplateId}/versions:
+    $ref: ./launch-templates.yaml#/paths/~1api~1v1~1launch-templates~1{launchTemplateId}~1versions
+  /api/v1/launch-templates/{launchTemplateId}/versions/{version}:
+    $ref: ./launch-templates.yaml#/paths/~1api~1v1~1launch-templates~1{launchTemplateId}~1versions~1{version}
   /api/v1/machine-types:
     $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types
   /api/v1/machine-types/{machineTypeId}:
@@ -295,6 +305,8 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
     NetworkInterfaceID:
       $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+    LaunchTemplateID:
+      $ref: ./identifiers.yaml#/components/schemas/LaunchTemplateID
     VirtualPrivateCloudID:
       $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
     ElasticIPID:
@@ -337,6 +349,30 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/RouteID
     SecurityGroupRuleID:
       $ref: ./identifiers.yaml#/components/schemas/SecurityGroupRuleID
+    LaunchTemplate:
+      $ref: ./launch-templates.yaml#/components/schemas/LaunchTemplate
+    LaunchTemplateListResponseBody:
+      $ref: ./launch-templates.yaml#/components/schemas/LaunchTemplateListResponseBody
+    CreateLaunchTemplateRequestBody:
+      $ref: ./launch-templates.yaml#/components/schemas/CreateLaunchTemplateRequestBody
+    CreateLaunchTemplateResponseBody:
+      $ref: ./launch-templates.yaml#/components/schemas/CreateLaunchTemplateResponseBody
+    UpdateLaunchTemplateRequestBody:
+      $ref: ./launch-templates.yaml#/components/schemas/UpdateLaunchTemplateRequestBody
+    NewLaunchTemplateVersion:
+      $ref: ./launch-templates.yaml#/components/schemas/NewLaunchTemplateVersion
+    LaunchTemplateVersion:
+      $ref: ./launch-templates.yaml#/components/schemas/LaunchTemplateVersion
+    LaunchTemplateVersionListResponseBody:
+      $ref: ./launch-templates.yaml#/components/schemas/LaunchTemplateVersionListResponseBody
+    LaunchTemplateBootDisk:
+      $ref: ./launch-templates.yaml#/components/schemas/LaunchTemplateBootDisk
+    LaunchTemplateDataDisk:
+      $ref: ./launch-templates.yaml#/components/schemas/LaunchTemplateDataDisk
+    LaunchTemplateNetworkInterface:
+      $ref: ./launch-templates.yaml#/components/schemas/LaunchTemplateNetworkInterface
+    LaunchTemplateElasticIP:
+      $ref: ./launch-templates.yaml#/components/schemas/LaunchTemplateElasticIP
     MachineType:
       $ref: ./machine-types.yaml#/components/schemas/MachineType
     MachineTypeListResponseBody:
@@ -493,6 +529,8 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/SuppliedPassword
     NewCompute:
       $ref: ./virtual-machines.yaml#/components/schemas/NewCompute
+    LaunchTemplateReference:
+      $ref: ./virtual-machines.yaml#/components/schemas/LaunchTemplateReference
     BootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/BootDisk
     ExistingBootDisk:

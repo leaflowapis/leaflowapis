@@ -14,6 +14,13 @@ components:
       minLength: 30
       maxLength: 30
       pattern: ^eni_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+    LaunchTemplateID:
+      description: The public lt resource identifier. Only this fixed TypeID prefix is accepted; UUID text is not an
+        alternative representation.
+      type: string
+      minLength: 29
+      maxLength: 29
+      pattern: ^lt_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
     VirtualPrivateCloudID:
       description: The public vpc resource identifier. Only this fixed TypeID prefix is accepted; UUID text is not
         an alternative representation.
