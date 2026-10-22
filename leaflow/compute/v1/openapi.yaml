@@ -223,8 +223,6 @@ components:
       $ref: ./billing-terms.yaml#/components/schemas/TerminationPolicy
     CheckoutOptions:
       $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
-    DiskTypePurpose:
-      $ref: ./disk-types.yaml#/components/schemas/DiskTypePurpose
     DiskTypeResource:
       $ref: ./disk-types.yaml#/components/schemas/DiskTypeResource
     PerformanceFormula:
@@ -351,6 +349,8 @@ components:
       $ref: ./private-images.yaml#/components/schemas/CreatePrivateImageResponseBody
     PrivateImageOperation:
       $ref: ./private-images.yaml#/components/schemas/PrivateImageOperation
+    OfferedAvailabilityZone:
+      $ref: ./availability-zones.yaml#/components/schemas/OfferedAvailabilityZone
     MachineType:
       $ref: ./machine-types.yaml#/components/schemas/MachineType
     MachineTypeListResponseBody:

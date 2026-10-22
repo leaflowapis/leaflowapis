@@ -2,9 +2,9 @@ paths:
   /api/v1/disk-types:
     get:
       summary: List disk types on sale
-      description: Only disk types currently on sale are listed, both system disk types and data disk types; `purpose`
-        narrows the list to one of the two. A withdrawn one disappears from here and can no longer be bought, while
-        the disks already on it keep working and can still be resized.
+      description: Only disk types currently on sale are listed. Any of them boots a virtual machine, holds data or takes
+        a restore. A withdrawn one disappears from here and can no longer be bought, while the disks already on it keep
+        working and can still be resized.
       operationId: list-disk-types
       tags:
       - disk-types
@@ -15,12 +15,13 @@ paths:
         explode: false
         schema:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
-      - name: purpose
+      - name: availability_zone_id
         in: query
         required: false
-        description: Filter by intended creation use. Omit to include both system and data disk types.
+        description: Return only the types sold in this availability zone, sold out there or not.
+        explode: false
         schema:
-          $ref: '#/components/schemas/DiskTypePurpose'
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -39,8 +40,8 @@ paths:
   /api/v1/disk-types/{diskTypeId}:
     get:
       summary: Get a disk type
-      description: Retrieve capacity and performance constraints for an existing disk, including system disk types
-        and types withdrawn from sale.
+      description: Retrieve capacity and performance constraints for an existing disk, including types withdrawn from
+        sale.
       operationId: get-disk-type
       tags:
       - disk-types
@@ -65,22 +66,17 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    DiskTypePurpose:
-      description: The intended creation use of a disk type, not the current boot role or deletion policy of an
-        individual disk.
-      type: string
-      enum:
-      - system
-      - data
     DiskTypeResource:
       type: object
       properties:
-        availability_zone_id:
-          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        availability_zones:
+          description: The availability zones of its region the type is sold in. A disk is created in one of them, and
+            only a virtual machine in the same zone can attach it.
+          type: array
+          items:
+            $ref: ./availability-zones.yaml#/components/schemas/OfferedAvailabilityZone
         id:
           $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
-        purpose:
-          $ref: '#/components/schemas/DiskTypePurpose'
         max_size_gb:
           type: integer
           format: int64
@@ -112,9 +108,8 @@ components:
       - id
       - name
       - media
-      - purpose
       - region_id
-      - availability_zone_id
+      - availability_zones
       - min_size_gb
       - max_size_gb
       - step_gb
@@ -163,9 +158,7 @@ components:
       type: object
       properties:
         items:
-          type:
-          - array
-          - 'null'
+          type: array
           items:
             $ref: '#/components/schemas/DiskTypeResource'
         pagination:

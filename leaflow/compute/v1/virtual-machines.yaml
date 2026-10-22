@@ -38,6 +38,8 @@ paths:
 
         Creation starts once Billing accepts the order: the virtual machine stays `pending` with the `create` operation while it is created, then becomes `active`. With automatic checkout, insufficient funds refuse the request and nothing is created. With deferred checkout, the virtual machines stay `pending` until the customer completes checkout in Billing and the order is paid; an expired Checkout Session, or a canceled or expired order, leaves them `failed` with `checkout_expired`, `order_canceled` or `order_expired`. Do not submit another creation request after paying. After an uncertain response, look the Checkout Session up in Billing before submitting again.
 
+        The virtual machines are created in `availability_zone_id`, which the machine type has to be sold in (`availability_zones` of the machine type; otherwise 404 `MACHINE_TYPE_AVAILABILITY_ZONE_NOT_FOUND`), and so does the disk type of a new system disk (404 `DISK_TYPE_AVAILABILITY_ZONE_NOT_FOUND`). The zone has to have room for all of them, checked before anything is ordered: refused with 409 `MACHINE_TYPE_SOLD_OUT` or `DISK_TYPE_SOLD_OUT` when the type takes no new orders there for now, `MACHINE_TYPE_CAPACITY_REACHED` or `DISK_TYPE_CAPACITY_REACHED` when what is sold there is used up, `MACHINE_TYPE_NO_HOST_ROOM` when no host there can take the machine, and `DISK_TYPE_NO_POOL_ROOM` when the storage there cannot take the system disk. Two orders placed at the same moment can both pass; a virtual machine that finds the zone full when its order is accepted is not created and is refunded, ending `failed` with `provisioning_failed`.
+
         Choose an image or existing disk through boot_disk, and exactly one of network_interface_id or subnet_id. Existing network interfaces, boot disks or elastic IPs require count=1. They are not held while the virtual machine is pending; if one is no longer usable when the order is accepted, the virtual machine ends `failed` with `provisioning_failed`. Image boots require boot_disk; existing disks retain their own subscription. Virtual machines, disks and public IPs keep their own subscription items on the same order.
 
         Virtual machines of one request succeed or fail individually. Each virtual machine, with its system disk, network interface and elastic IP, is created or fails as a whole. Virtual machines that were created are kept; each failed virtual machine ends `failed` with `provisioning_failed`, its part of the order is refunded, and the order then ends `partially_completed`. A virtual machine is delivered whole or not at all: when the customer cancels any of its order items before the order is accepted, it is not created, its remaining items are canceled and refunded, and it ends `failed` with `order_canceled`. Each virtual machine is named after this request with a number appended.
@@ -945,6 +947,10 @@ components:
           type: boolean
         compute:
           $ref: '#/components/schemas/NewCompute'
+        availability_zone_id:
+          description: The availability zone of the machine type's region the virtual machines are created in. An existing
+            boot disk has to be in it already
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
         name:
           type: string
           minLength: 1
@@ -980,6 +986,7 @@ components:
       required:
       - name
       - compute
+      - availability_zone_id
       - boot_disk
       additionalProperties: false
     UpdateVirtualMachineRequestBody:
@@ -1013,8 +1020,10 @@ components:
           - running
           - stopped
         machine_type_id:
-          description: The machine type to resize to; must be in the same region and availability zone as the current
-            machine type. Operational field; the change is purchased through Billing.
+          description: The machine type to resize to. It has to be on sale, in the virtual machine's region and sold in
+            its availability zone (404 `MACHINE_TYPE_AVAILABILITY_ZONE_NOT_FOUND`), and the zone has to have room for one
+            more machine of it (409 `MACHINE_TYPE_SOLD_OUT`, `MACHINE_TYPE_CAPACITY_REACHED` or `MACHINE_TYPE_NO_HOST_ROOM`).
+            Operational field; the change is purchased through Billing.
           $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
         proration_date:
           description: The `proration_date` of the Billing quote for this change, so that the order is priced from
@@ -1172,8 +1181,8 @@ components:
           enum:
           - disk
         disk_id:
-          description: A prepared boot disk owned by this project, available and unattached in the same availability
-            zone as the machine type. Only one virtual machine may be created when used.
+          description: A prepared boot disk owned by this project, available, unattached and in `availability_zone_id`.
+            Only one virtual machine may be created when used.
           $ref: ./identifiers.yaml#/components/schemas/DiskID
         login_username:
           description: The existing account used to log in to this disk's operating system.
@@ -1226,8 +1235,8 @@ components:
           description: A public image on sale (`/public-images`), or an available private image of this project (`/private-images`).
           $ref: ./identifiers.yaml#/components/schemas/ImageID
         disk_type_id:
-          description: A system disk type on sale in the availability zone of the virtual machine, one whose `purpose`
-            is `system`
+          description: A disk type on sale and sold in the virtual machine's availability zone; any disk type boots a
+            virtual machine
           $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
         size_gb:
           type: integer
