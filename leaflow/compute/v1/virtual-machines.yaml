@@ -946,6 +946,13 @@ components:
           $ref: '#/components/schemas/NewCompute'
         boot_disk:
           $ref: '#/components/schemas/BootDisk'
+        data_disks:
+          description: Data disks created with each virtual machine in its order and attached to it at boot, after the
+            boot disk in the order given. A virtual machine and its disks are delivered together or not at all.
+          type: array
+          maxItems: 16
+          items:
+            $ref: '#/components/schemas/NewDataDisk'
         network_interface:
           $ref: '#/components/schemas/PrimaryNetworkInterface'
         elastic_ip:
@@ -1269,6 +1276,35 @@ components:
       - billing
       - disk_type_id
       - size_gb
+      additionalProperties: false
+    NewDataDisk:
+      description: An empty data disk created in the virtual machine's availability zone. Its terms follow the rule
+        shared by every component of the purchase, so a pay-as-you-go virtual machine gets pay-as-you-go data disks,
+        which stay pay-as-you-go once detached.
+      type: object
+      properties:
+        disk_type_id:
+          description: A disk type on sale and sold in the virtual machine's availability zone.
+          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
+        size_gb:
+          description: Within the disk type's `min_size_gb` and `max_size_gb` and a multiple of its `step_gb`.
+          type: integer
+          format: int64
+          minimum: 1
+        on_virtual_machine_release:
+          description: What releasing the virtual machine does to this disk. `delete` deletes it with the virtual
+            machine; `detach` keeps it, still billed on its own terms, for you to attach elsewhere or delete.
+          type: string
+          enum:
+          - delete
+          - detach
+          default: delete
+        billing:
+          $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+      required:
+      - disk_type_id
+      - size_gb
+      - billing
       additionalProperties: false
     PrimaryNetworkInterface:
       description: The virtual machine's primary network interface, its network location. `new` creates one in a

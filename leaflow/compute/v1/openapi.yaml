@@ -501,6 +501,8 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/UpdateVirtualMachineResponseBody
     NewBootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/NewBootDisk
+    NewDataDisk:
+      $ref: ./virtual-machines.yaml#/components/schemas/NewDataDisk
     PrimaryNetworkInterface:
       $ref: ./virtual-machines.yaml#/components/schemas/PrimaryNetworkInterface
     NewPrimaryNetworkInterface:
