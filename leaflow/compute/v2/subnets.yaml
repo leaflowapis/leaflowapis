@@ -1,5 +1,5 @@
 paths:
-  /api/v1/subnets:
+  /api/v2/subnets:
     get:
       summary: List subnets
       description: IPv6 subnets are included, with `ip_version` 6. One is created when IPv6 is enabled on its virtual
@@ -54,7 +54,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/subnets/{subnetId}:
+  /api/v2/subnets/{subnetId}:
     parameters:
     - name: subnetId
       in: path

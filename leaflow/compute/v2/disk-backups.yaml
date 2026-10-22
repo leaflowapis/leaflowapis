@@ -1,17 +1,17 @@
 paths:
-  /api/v1/snapshots:
+  /api/v2/disk-backups:
     get:
-      summary: List snapshots
-      operationId: list-snapshots
+      summary: List disk backups
+      operationId: list-disk-backups
       tags:
-      - snapshots
+      - disk-backups
       parameters:
       - name: disk_id
         in: query
-        description: Return only the snapshots of this disk
+        description: Return only the backups of this disk
         explode: false
         schema:
-          description: Return only the snapshots of this disk
+          description: Return only the backups of this disk
           $ref: ./identifiers.yaml#/components/schemas/DiskID
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
@@ -21,7 +21,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SnapshotListResponseBody'
+                $ref: '#/components/schemas/DiskBackupListResponseBody'
         default:
           description: Error
           content:
@@ -29,57 +29,59 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     post:
-      summary: Create a snapshot
-      description: "Creates a snapshot of the disk. A running virtual machine may produce a file-system-inconsistent
-        snapshot; flush pending writes first. A system disk cannot be reverted while attached. Pending snapshots count
-        toward Compute project quotas until creation fails and cleanup is confirmed.\n\nIt is metered by the hour on a subscription of its own and takes no billing choice. It is bought through a
-        Billing Checkout Session: automatic checkout completes at once for metered pricing and the snapshot is taken as soon
+      summary: Create a disk backup
+      description: "Creates a backup of the disk. It remains restorable after the source disk is deleted and may be restored
+        to another availability zone in the same region, by creating a disk with `disk_backup_id` (`create-disk`). A running virtual machine may produce a file-system-inconsistent
+        backup. Pending backups count toward Compute project quotas until cleanup is confirmed.\n\nIt is metered by the hour on a subscription of its own and takes no billing choice. It is bought through a
+        Billing Checkout Session: automatic checkout completes at once for metered pricing and the backup is taken as soon
         as the order is accepted; with deferred checkout it stays `pending` until the customer completes checkout in
         Billing. The source and project quotas are checked before the Checkout Session is created, and a refused
-        request creates nothing.\n\nThe snapshot shows the `create` operation from the moment its Checkout Session is created until it is delivered or its checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its deletion with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment."
-      operationId: create-snapshot
+        request creates nothing.\n\nThe backup shows the `create` operation from the moment its Checkout Session is created until it is delivered or its checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its deletion with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment."
+      operationId: create-disk-backup
       tags:
-      - snapshots
+      - disk-backups
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateSnapshotRequestBody'
+              $ref: '#/components/schemas/CreateDiskBackupRequestBody'
       responses:
         '202':
-          description: The snapshot and its Checkout Session were created; the snapshot is not taken yet.
+          description: The backup and its Checkout Session were created; the backup is not taken yet.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateSnapshotResponseBody'
+                $ref: '#/components/schemas/CreateDiskBackupResponseBody'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-        '409':
-          $ref: ./openapi.yaml#/components/responses/Conflict
-  /api/v1/snapshots/{snapshotId}:
+  /api/v2/disk-backups/{diskBackupId}:
     get:
-      summary: Retrieve a snapshot
-      operationId: get-snapshot
+      summary: Retrieve a disk backup
+      description: Returns the stored state of the backup; it does not query the cloud. Use it to poll creation 
+        progress.
+      operationId: get-disk-backup
       tags:
-      - snapshots
+      - disk-backups
       parameters:
-      - name: snapshotId
+      - name: diskBackupId
         in: path
         required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SnapshotResource'
+                $ref: '#/components/schemas/DiskBackupResource'
         default:
           description: Error
           content:
@@ -87,30 +89,30 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
-      summary: Update a snapshot
-      description: Changes the name only. A snapshot's source disk and capacity cannot be changed.
-      operationId: update-snapshot
+      summary: Update a disk backup
+      description: Changes the name only. A backup's source disk and capacity cannot be changed.
+      operationId: update-disk-backup
       tags:
-      - snapshots
+      - disk-backups
       parameters:
-      - name: snapshotId
+      - name: diskBackupId
         in: path
         required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateSnapshotRequestBody'
+              $ref: '#/components/schemas/UpdateDiskBackupRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SnapshotResource'
+                $ref: '#/components/schemas/DiskBackupResource'
         default:
           description: Error
           content:
@@ -118,29 +120,30 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
-      summary: Delete a snapshot
-      description: "Deletes this resource. Quota capacity and storage metering are released only after cleanup is confirmed.\n\
-        \nA resource whose purchase still awaits checkout or payment is refused with `COMPUTE_PURCHASE_PENDING`; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead. A subscribed resource
-        is released through its subscription cancellation. Cleanup must be confirmed before metering is stopped; unknown
-        cleanup is not proof of release."
-      operationId: delete-snapshot
+      summary: Delete a disk backup
+      description: "Independent of the source disk: deletion succeeds whether or not that disk still exists. Metering
+        of the backup ends once it is deleted.\n\nQuota capacity and storage metering are released only after cleanup
+        is confirmed. Billing determines whether its commercial subscription must be canceled first.\n\nA resource whose purchase still awaits checkout or payment is refused with `COMPUTE_PURCHASE_PENDING`; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead. A subscribed resource is released through
+        its subscription cancellation. Cleanup must be confirmed before metering is stopped; unknown cleanup is not proof
+        of release."
+      operationId: delete-disk-backup
       tags:
-      - snapshots
+      - disk-backups
       parameters:
-      - name: snapshotId
+      - name: diskBackupId
         in: path
         required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
       responses:
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         '202':
-          description: Deletion was accepted. The snapshot shows the `delete` operation until it is deleted.
+          description: Deletion was accepted. The backup shows the `delete` operation until it is deleted.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SnapshotResource'
+                $ref: '#/components/schemas/DiskBackupResource'
         default:
           description: Error
           content:
@@ -149,34 +152,36 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    SnapshotResource:
-      description: "A snapshot of a disk. Compute project quotas constrain its count; retained storage is metered independently
-        of that quota."
+    DiskBackupResource:
+      description: "A retained copy of a disk, restorable after its source disk is deleted. Compute project quotas constrain
+        its count; retained storage is metered independently."
       type: object
       properties:
-        availability_zone_id:
-          description: A disk restored from this snapshot must reside in this availability zone
-          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
         created_at:
           type: string
           format: date-time
-        disk_id:
-          $ref: ./identifiers.yaml#/components/schemas/DiskID
         id:
-          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
         name:
           type: string
         region_id:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
         size_gb:
-          description: Capacity of the source disk when the snapshot was created. A disk restored from it cannot be
-            smaller
+          description: Capacity of the source disk when the backup was created. A restored disk cannot be smaller 
+            than this
           type: integer
           format: int64
+        capacity_gib:
+          description: 'The capacity metered for this backup, in GiB: the size of the source disk when the backup was
+            taken. Usage is this capacity multiplied by the time the backup is retained.'
+          type: integer
+          format: int64
+        source_disk_id:
+          description: The disk this backup was taken from. The backup remains usable after that disk is deleted
+          $ref: ./identifiers.yaml#/components/schemas/DiskID
         status:
-          description: '`pending` once a quota slot is reserved and until the snapshot is taken, showing the `create`
-            operation while it is taken; then `available`. `failed` means the snapshot was not created; its slot is
-            released once no snapshot data remains. `error` means the cloud reports the snapshot broken.'
+          description: '`pending` from the purchase until the backup is taken, then `available`; while it is taken the
+            backup shows the `create` operation. `failed` means the backup was not created.'
           type: string
           enum:
           - pending
@@ -185,15 +190,18 @@ components:
           - failed
           - error
         operation:
-          description: The operation in progress on this snapshot, or null when none is.
+          description: The operation in progress on this backup, or null when none is.
           anyOf:
-          - $ref: '#/components/schemas/SnapshotOperation'
+          - $ref: '#/components/schemas/DiskBackupOperation'
           - type: 'null'
           readOnly: true
+        source_availability_zone_id:
+          description: Availability zone of the source disk. A restore may target another zone in the same region
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
         failure_reason:
           description: Why creation failed; null unless `status` is `failed`. `checkout_expired` means checkout was
             not completed before its Checkout Session expired. `provisioning_failed` means creation failed after the
-            order was accepted, and the charge for this snapshot is refunded.
+            order was accepted, and the charge for this backup is refunded.
           type:
           - string
           - 'null'
@@ -234,7 +242,7 @@ components:
           readOnly: true
           description: The subscription for this resource; its presence alone does not imply delivery.
         release_set:
-          description: The subscription that pays for this snapshot, with the resource it pays for, so that a
+          description: The subscription that pays for this disk backup, with the resource it pays for, so that a
             cancellation through Billing can name what it releases. Empty when no subscription pays for it, and
             once it is released.
           type: array
@@ -242,12 +250,13 @@ components:
             $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
       required:
       - id
-      - disk_id
+      - source_disk_id
       - name
       - size_gb
+      - capacity_gib
       - status
-      - availability_zone_id
       - region_id
+      - source_availability_zone_id
       - created_at
       - operation
       - failure_reason
@@ -257,7 +266,7 @@ components:
       - subscription_id
       - release_set
       additionalProperties: false
-    SnapshotListResponseBody:
+    DiskBackupListResponseBody:
       type: object
       properties:
         items:
@@ -265,16 +274,14 @@ components:
           - array
           - 'null'
           items:
-            $ref: '#/components/schemas/SnapshotResource'
+            $ref: '#/components/schemas/DiskBackupResource'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
       - items
       - pagination
       additionalProperties: false
-    CreateSnapshotRequestBody:
-      description: "Creation configuration for this resource. Compute project quotas and Billing authorization are checked
-        independently."
+    CreateDiskBackupRequestBody:
       type: object
       properties:
         disk_id:
@@ -289,8 +296,8 @@ components:
       - disk_id
       - name
       additionalProperties: false
-    UpdateSnapshotRequestBody:
-      description: The mutable fields of a snapshot. At least one must be given.
+    UpdateDiskBackupRequestBody:
+      description: The mutable fields of a disk backup. At least one must be given.
       type: object
       properties:
         name:
@@ -299,13 +306,13 @@ components:
           maxLength: 128
       minProperties: 1
       additionalProperties: false
-    SnapshotOperation:
-      description: An operation still running on this snapshot. It is not a separate resource; once it finishes, 
-        the snapshot's `operation` is null again and the snapshot shows the result.
+    DiskBackupOperation:
+      description: An operation still running on this backup. It is not a separate resource; once it finishes, the 
+        backup's `operation` is null again and the backup shows the result.
       type: object
       properties:
         type:
-          description: '`restore`: a disk is being reverted to this snapshot (`create-disk-revert`) or created from it (`create-disk` with `snapshot_id`).'
+          description: '`restore`: a disk is being created from this backup with `disk_backup_id` on `create-disk`.'
           type: string
           enum:
           - create
@@ -318,12 +325,12 @@ components:
       - type
       - started_at
       additionalProperties: false
-    CreateSnapshotResponseBody:
+    CreateDiskBackupResponseBody:
       type: object
-      description: The new snapshot, `pending` until its order is accepted, and its Checkout Session.
+      description: The new backup, `pending` until its order is accepted, and its Checkout Session.
       properties:
-        snapshot:
-          $ref: '#/components/schemas/SnapshotResource'
+        disk_backup:
+          $ref: '#/components/schemas/DiskBackupResource'
         checkout_session_id:
           description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
             in Billing.
@@ -336,7 +343,7 @@ components:
           - 'null'
           format: uuid
       required:
-      - snapshot
+      - disk_backup
       - checkout_session_id
       - order_id
       additionalProperties: false

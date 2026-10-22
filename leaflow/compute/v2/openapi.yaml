@@ -1,7 +1,7 @@
 openapi: 3.2.1
 info:
   title: Leaflow Compute API
-  version: 1.0.0
+  version: 2.0.0
   description: |-
     Leaflow Compute user API for managing virtual machines, disks, snapshots, disk backups, public and private images, virtual private clouds, subnets, routes, security groups, network interfaces and elastic IPs.
 
@@ -80,132 +80,132 @@ tags:
 - name: virtual-private-clouds
   description: Virtual private clouds and regional connectivity.
 paths:
-  /api/v1/availability-zones:
-    $ref: ./availability-zones.yaml#/paths/~1api~1v1~1availability-zones
-  /api/v1/availability-zones/{availabilityZoneId}:
-    $ref: ./availability-zones.yaml#/paths/~1api~1v1~1availability-zones~1{availabilityZoneId}
-  /api/v1/disk-backups:
-    $ref: ./disk-backups.yaml#/paths/~1api~1v1~1disk-backups
-  /api/v1/disk-backups/{diskBackupId}:
-    $ref: ./disk-backups.yaml#/paths/~1api~1v1~1disk-backups~1{diskBackupId}
-  /api/v1/disk-types:
-    $ref: ./disk-types.yaml#/paths/~1api~1v1~1disk-types
-  /api/v1/disk-types/{diskTypeId}:
-    $ref: ./disk-types.yaml#/paths/~1api~1v1~1disk-types~1{diskTypeId}
-  /api/v1/disks:
-    $ref: ./disks.yaml#/paths/~1api~1v1~1disks
-  /api/v1/disks/{diskId}:
-    $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}
-  /api/v1/disks/{diskId}/reverts:
-    $ref: ./disks.yaml#/paths/~1api~1v1~1disks~1{diskId}~1reverts
-  /api/v1/elastic-ip-lines:
-    $ref: ./elastic-ip-lines.yaml#/paths/~1api~1v1~1elastic-ip-lines
-  /api/v1/elastic-ip-lines/{elasticIpLineId}:
-    $ref: ./elastic-ip-lines.yaml#/paths/~1api~1v1~1elastic-ip-lines~1{elasticIpLineId}
-  /api/v1/elastic-ips:
-    $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips
-  /api/v1/elastic-ips/{elasticIpId}:
-    $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}
-  /api/v1/elastic-ips/{elasticIpId}/traffic-usage:
-    $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1traffic-usage
-  /api/v1/elastic-ips/{elasticIpId}/association:
-    $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1association
-  /api/v1/launch-templates:
-    $ref: ./launch-templates.yaml#/paths/~1api~1v1~1launch-templates
-  /api/v1/launch-templates/{launchTemplateId}:
-    $ref: ./launch-templates.yaml#/paths/~1api~1v1~1launch-templates~1{launchTemplateId}
-  /api/v1/launch-templates/{launchTemplateId}/versions:
-    $ref: ./launch-templates.yaml#/paths/~1api~1v1~1launch-templates~1{launchTemplateId}~1versions
-  /api/v1/launch-templates/{launchTemplateId}/versions/{version}:
-    $ref: ./launch-templates.yaml#/paths/~1api~1v1~1launch-templates~1{launchTemplateId}~1versions~1{version}
-  /api/v1/machine-types:
-    $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types
-  /api/v1/machine-types/{machineTypeId}:
-    $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types~1{machineTypeId}
-  /api/v1/network-interfaces:
-    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces
-  /api/v1/network-interfaces/{networkInterfaceId}:
-    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}
-  /api/v1/network-interfaces/{networkInterfaceId}/addresses:
-    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}~1addresses
-  /api/v1/network-interfaces/{networkInterfaceId}/addresses/{addressId}:
-    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}~1addresses~1{addressId}
-  /api/v1/operation-logs:
-    $ref: ./operation-logs.yaml#/paths/~1api~1v1~1operation-logs
-  /api/v1/operation-logs/{operationLogId}:
-    $ref: ./operation-logs.yaml#/paths/~1api~1v1~1operation-logs~1{operationLogId}
-  /api/v1/peerings:
-    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings
-  /api/v1/peerings/{peeringId}:
-    $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}
-  /api/v1/private-images:
-    $ref: ./private-images.yaml#/paths/~1api~1v1~1private-images
-  /api/v1/private-images/{privateImageId}:
-    $ref: ./private-images.yaml#/paths/~1api~1v1~1private-images~1{privateImageId}
-  /api/v1/public-images:
-    $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images
-  /api/v1/public-images/{publicImageId}:
-    $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images~1{publicImageId}
-  /api/v1/regions/{regionId}/quotas:
-    $ref: ./quotas.yaml#/paths/~1api~1v1~1regions~1{regionId}~1quotas
-  /api/v1/regions/{regionId}/quotas/{resource}:
-    $ref: ./quotas.yaml#/paths/~1api~1v1~1regions~1{regionId}~1quotas~1{resource}
-  /api/v1/regions:
-    $ref: ./regions.yaml#/paths/~1api~1v1~1regions
-  /api/v1/regions/{regionId}:
-    $ref: ./regions.yaml#/paths/~1api~1v1~1regions~1{regionId}
-  /api/v1/routes:
-    $ref: ./routes.yaml#/paths/~1api~1v1~1routes
-  /api/v1/routes/{routeId}:
-    $ref: ./routes.yaml#/paths/~1api~1v1~1routes~1{routeId}
-  /api/v1/security-group-rules:
-    $ref: ./security-group-rules.yaml#/paths/~1api~1v1~1security-group-rules
-  /api/v1/security-group-rules/{securityGroupRuleId}:
-    $ref: ./security-group-rules.yaml#/paths/~1api~1v1~1security-group-rules~1{securityGroupRuleId}
-  /api/v1/security-groups:
-    $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups
-  /api/v1/security-groups/{securityGroupId}:
-    $ref: ./security-groups.yaml#/paths/~1api~1v1~1security-groups~1{securityGroupId}
-  /api/v1/snapshots:
-    $ref: ./snapshots.yaml#/paths/~1api~1v1~1snapshots
-  /api/v1/snapshots/{snapshotId}:
-    $ref: ./snapshots.yaml#/paths/~1api~1v1~1snapshots~1{snapshotId}
-  /api/v1/subnets:
-    $ref: ./subnets.yaml#/paths/~1api~1v1~1subnets
-  /api/v1/subnets/{subnetId}:
-    $ref: ./subnets.yaml#/paths/~1api~1v1~1subnets~1{subnetId}
-  /api/v1/virtual-machines:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines
-  /api/v1/virtual-machines/{virtualMachineId}:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}
-  /api/v1/virtual-machines/{virtualMachineId}/commands:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1commands
-  /api/v1/virtual-machines/{virtualMachineId}/console:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1console
-  /api/v1/virtual-machines/{virtualMachineId}/password:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1password
-  /api/v1/virtual-machines/{virtualMachineId}/reboots:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1reboots
-  /api/v1/virtual-machines/{virtualMachineId}/rebuilds:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rebuilds
-  /api/v1/virtual-machines/{virtualMachineId}/disks:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1disks
-  /api/v1/virtual-machines/{virtualMachineId}/disks/{diskId}:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1disks~1{diskId}
-  /api/v1/virtual-machines/{virtualMachineId}/network-interfaces:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces
-  /api/v1/virtual-machines/{virtualMachineId}/network-interfaces/{networkInterfaceId}:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces~1{networkInterfaceId}
-  /api/v1/virtual-machines/{virtualMachineId}/rescue:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rescue
-  /api/v1/virtual-private-clouds:
-    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}:
-    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/ipv6:
-    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1ipv6
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/free-subnet-cidr:
-    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds~1{virtualPrivateCloudId}~1free-subnet-cidr
+  /api/v2/availability-zones:
+    $ref: ./availability-zones.yaml#/paths/~1api~1v2~1availability-zones
+  /api/v2/availability-zones/{availabilityZoneId}:
+    $ref: ./availability-zones.yaml#/paths/~1api~1v2~1availability-zones~1{availabilityZoneId}
+  /api/v2/disk-backups:
+    $ref: ./disk-backups.yaml#/paths/~1api~1v2~1disk-backups
+  /api/v2/disk-backups/{diskBackupId}:
+    $ref: ./disk-backups.yaml#/paths/~1api~1v2~1disk-backups~1{diskBackupId}
+  /api/v2/disk-types:
+    $ref: ./disk-types.yaml#/paths/~1api~1v2~1disk-types
+  /api/v2/disk-types/{diskTypeId}:
+    $ref: ./disk-types.yaml#/paths/~1api~1v2~1disk-types~1{diskTypeId}
+  /api/v2/disks:
+    $ref: ./disks.yaml#/paths/~1api~1v2~1disks
+  /api/v2/disks/{diskId}:
+    $ref: ./disks.yaml#/paths/~1api~1v2~1disks~1{diskId}
+  /api/v2/disks/{diskId}/reverts:
+    $ref: ./disks.yaml#/paths/~1api~1v2~1disks~1{diskId}~1reverts
+  /api/v2/elastic-ip-lines:
+    $ref: ./elastic-ip-lines.yaml#/paths/~1api~1v2~1elastic-ip-lines
+  /api/v2/elastic-ip-lines/{elasticIpLineId}:
+    $ref: ./elastic-ip-lines.yaml#/paths/~1api~1v2~1elastic-ip-lines~1{elasticIpLineId}
+  /api/v2/elastic-ips:
+    $ref: ./elastic-ips.yaml#/paths/~1api~1v2~1elastic-ips
+  /api/v2/elastic-ips/{elasticIpId}:
+    $ref: ./elastic-ips.yaml#/paths/~1api~1v2~1elastic-ips~1{elasticIpId}
+  /api/v2/elastic-ips/{elasticIpId}/traffic-usage:
+    $ref: ./elastic-ips.yaml#/paths/~1api~1v2~1elastic-ips~1{elasticIpId}~1traffic-usage
+  /api/v2/elastic-ips/{elasticIpId}/association:
+    $ref: ./elastic-ips.yaml#/paths/~1api~1v2~1elastic-ips~1{elasticIpId}~1association
+  /api/v2/launch-templates:
+    $ref: ./launch-templates.yaml#/paths/~1api~1v2~1launch-templates
+  /api/v2/launch-templates/{launchTemplateId}:
+    $ref: ./launch-templates.yaml#/paths/~1api~1v2~1launch-templates~1{launchTemplateId}
+  /api/v2/launch-templates/{launchTemplateId}/versions:
+    $ref: ./launch-templates.yaml#/paths/~1api~1v2~1launch-templates~1{launchTemplateId}~1versions
+  /api/v2/launch-templates/{launchTemplateId}/versions/{version}:
+    $ref: ./launch-templates.yaml#/paths/~1api~1v2~1launch-templates~1{launchTemplateId}~1versions~1{version}
+  /api/v2/machine-types:
+    $ref: ./machine-types.yaml#/paths/~1api~1v2~1machine-types
+  /api/v2/machine-types/{machineTypeId}:
+    $ref: ./machine-types.yaml#/paths/~1api~1v2~1machine-types~1{machineTypeId}
+  /api/v2/network-interfaces:
+    $ref: ./network-interfaces.yaml#/paths/~1api~1v2~1network-interfaces
+  /api/v2/network-interfaces/{networkInterfaceId}:
+    $ref: ./network-interfaces.yaml#/paths/~1api~1v2~1network-interfaces~1{networkInterfaceId}
+  /api/v2/network-interfaces/{networkInterfaceId}/addresses:
+    $ref: ./network-interfaces.yaml#/paths/~1api~1v2~1network-interfaces~1{networkInterfaceId}~1addresses
+  /api/v2/network-interfaces/{networkInterfaceId}/addresses/{addressId}:
+    $ref: ./network-interfaces.yaml#/paths/~1api~1v2~1network-interfaces~1{networkInterfaceId}~1addresses~1{addressId}
+  /api/v2/operation-logs:
+    $ref: ./operation-logs.yaml#/paths/~1api~1v2~1operation-logs
+  /api/v2/operation-logs/{operationLogId}:
+    $ref: ./operation-logs.yaml#/paths/~1api~1v2~1operation-logs~1{operationLogId}
+  /api/v2/peerings:
+    $ref: ./peerings.yaml#/paths/~1api~1v2~1peerings
+  /api/v2/peerings/{peeringId}:
+    $ref: ./peerings.yaml#/paths/~1api~1v2~1peerings~1{peeringId}
+  /api/v2/private-images:
+    $ref: ./private-images.yaml#/paths/~1api~1v2~1private-images
+  /api/v2/private-images/{privateImageId}:
+    $ref: ./private-images.yaml#/paths/~1api~1v2~1private-images~1{privateImageId}
+  /api/v2/public-images:
+    $ref: ./public-images.yaml#/paths/~1api~1v2~1public-images
+  /api/v2/public-images/{publicImageId}:
+    $ref: ./public-images.yaml#/paths/~1api~1v2~1public-images~1{publicImageId}
+  /api/v2/regions/{regionId}/quotas:
+    $ref: ./quotas.yaml#/paths/~1api~1v2~1regions~1{regionId}~1quotas
+  /api/v2/regions/{regionId}/quotas/{resource}:
+    $ref: ./quotas.yaml#/paths/~1api~1v2~1regions~1{regionId}~1quotas~1{resource}
+  /api/v2/regions:
+    $ref: ./regions.yaml#/paths/~1api~1v2~1regions
+  /api/v2/regions/{regionId}:
+    $ref: ./regions.yaml#/paths/~1api~1v2~1regions~1{regionId}
+  /api/v2/routes:
+    $ref: ./routes.yaml#/paths/~1api~1v2~1routes
+  /api/v2/routes/{routeId}:
+    $ref: ./routes.yaml#/paths/~1api~1v2~1routes~1{routeId}
+  /api/v2/security-group-rules:
+    $ref: ./security-group-rules.yaml#/paths/~1api~1v2~1security-group-rules
+  /api/v2/security-group-rules/{securityGroupRuleId}:
+    $ref: ./security-group-rules.yaml#/paths/~1api~1v2~1security-group-rules~1{securityGroupRuleId}
+  /api/v2/security-groups:
+    $ref: ./security-groups.yaml#/paths/~1api~1v2~1security-groups
+  /api/v2/security-groups/{securityGroupId}:
+    $ref: ./security-groups.yaml#/paths/~1api~1v2~1security-groups~1{securityGroupId}
+  /api/v2/snapshots:
+    $ref: ./snapshots.yaml#/paths/~1api~1v2~1snapshots
+  /api/v2/snapshots/{snapshotId}:
+    $ref: ./snapshots.yaml#/paths/~1api~1v2~1snapshots~1{snapshotId}
+  /api/v2/subnets:
+    $ref: ./subnets.yaml#/paths/~1api~1v2~1subnets
+  /api/v2/subnets/{subnetId}:
+    $ref: ./subnets.yaml#/paths/~1api~1v2~1subnets~1{subnetId}
+  /api/v2/virtual-machines:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines
+  /api/v2/virtual-machines/{virtualMachineId}:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}
+  /api/v2/virtual-machines/{virtualMachineId}/commands:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1commands
+  /api/v2/virtual-machines/{virtualMachineId}/console:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1console
+  /api/v2/virtual-machines/{virtualMachineId}/password:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1password
+  /api/v2/virtual-machines/{virtualMachineId}/reboots:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1reboots
+  /api/v2/virtual-machines/{virtualMachineId}/rebuilds:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1rebuilds
+  /api/v2/virtual-machines/{virtualMachineId}/disks:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1disks
+  /api/v2/virtual-machines/{virtualMachineId}/disks/{diskId}:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1disks~1{diskId}
+  /api/v2/virtual-machines/{virtualMachineId}/network-interfaces:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1network-interfaces
+  /api/v2/virtual-machines/{virtualMachineId}/network-interfaces/{networkInterfaceId}:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1network-interfaces~1{networkInterfaceId}
+  /api/v2/virtual-machines/{virtualMachineId}/rescue:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v2~1virtual-machines~1{virtualMachineId}~1rescue
+  /api/v2/virtual-private-clouds:
+    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v2~1virtual-private-clouds
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}:
+    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v2~1virtual-private-clouds~1{virtualPrivateCloudId}
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}/ipv6:
+    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v2~1virtual-private-clouds~1{virtualPrivateCloudId}~1ipv6
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}/free-subnet-cidr:
+    $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v2~1virtual-private-clouds~1{virtualPrivateCloudId}~1free-subnet-cidr
 components:
   securitySchemes:
     scopedTokenAuth:

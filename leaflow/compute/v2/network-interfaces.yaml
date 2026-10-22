@@ -1,5 +1,5 @@
 paths:
-  /api/v1/network-interfaces:
+  /api/v2/network-interfaces:
     get:
       summary: List network interfaces
       operationId: list-network-interfaces
@@ -47,7 +47,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/network-interfaces/{networkInterfaceId}:
+  /api/v2/network-interfaces/{networkInterfaceId}:
     get:
       summary: Retrieve a network interface
       description: Returns the stored state of the network interface; it does not query the cloud.
@@ -144,7 +144,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/network-interfaces/{networkInterfaceId}/addresses:
+  /api/v2/network-interfaces/{networkInterfaceId}/addresses:
     post:
       summary: Add a secondary IPv4 address
       description: |-
@@ -181,7 +181,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/network-interfaces/{networkInterfaceId}/addresses/{addressId}:
+  /api/v2/network-interfaces/{networkInterfaceId}/addresses/{addressId}:
     delete:
       summary: Remove a secondary IPv4 address
       description: Removes a secondary IPv4 address and answers 202 with the network interface showing the `remove_address`

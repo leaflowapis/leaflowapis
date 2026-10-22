@@ -1,5 +1,5 @@
 paths:
-  /api/v1/availability-zones:
+  /api/v2/availability-zones:
     get:
       summary: List availability zones
       description: A disk and a virtual machine must reside in the same availability zone to be attached. Confirm
@@ -30,7 +30,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/availability-zones/{availabilityZoneId}:
+  /api/v2/availability-zones/{availabilityZoneId}:
     get:
       summary: Retrieve an availability zone
       description: A disk and a virtual machine must reside in the same availability zone to be attached.

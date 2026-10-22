@@ -1,5 +1,5 @@
 paths:
-  /api/v1/regions:
+  /api/v2/regions:
     get:
       summary: List available regions
       operationId: list-regions
@@ -21,7 +21,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/regions/{regionId}:
+  /api/v2/regions/{regionId}:
     get:
       summary: Retrieve a region
       description: The availability zones of a region are listed by `list-availability-zones` with `region_id`.

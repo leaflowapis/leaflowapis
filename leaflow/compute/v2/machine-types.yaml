@@ -1,5 +1,5 @@
 paths:
-  /api/v1/machine-types:
+  /api/v2/machine-types:
     get:
       summary: List machine types on sale
       description: Only machine types currently on sale are listed. A withdrawn one disappears from here
@@ -36,7 +36,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/machine-types/{machineTypeId}:
+  /api/v2/machine-types/{machineTypeId}:
     get:
       summary: Get a machine type
       description: Returns only an on-sale machine type, under the same access rules as listing. Off-sale, retired

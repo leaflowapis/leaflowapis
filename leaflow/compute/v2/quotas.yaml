@@ -1,5 +1,5 @@
 paths:
-  /api/v1/regions/{regionId}/quotas:
+  /api/v2/regions/{regionId}/quotas:
     parameters:
     - name: regionId
       in: path
@@ -32,7 +32,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/regions/{regionId}/quotas/{resource}:
+  /api/v2/regions/{regionId}/quotas/{resource}:
     parameters:
     - name: regionId
       in: path

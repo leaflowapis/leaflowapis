@@ -1,5 +1,5 @@
 paths:
-  /api/v1/launch-templates:
+  /api/v2/launch-templates:
     get:
       summary: List launch templates
       operationId: list-launch-templates
@@ -56,7 +56,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/launch-templates/{launchTemplateId}:
+  /api/v2/launch-templates/{launchTemplateId}:
     parameters:
     - name: launchTemplateId
       in: path
@@ -123,7 +123,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/launch-templates/{launchTemplateId}/versions:
+  /api/v2/launch-templates/{launchTemplateId}/versions:
     parameters:
     - name: launchTemplateId
       in: path
@@ -179,7 +179,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/launch-templates/{launchTemplateId}/versions/{version}:
+  /api/v2/launch-templates/{launchTemplateId}/versions/{version}:
     parameters:
     - name: launchTemplateId
       in: path

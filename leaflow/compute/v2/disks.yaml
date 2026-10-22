@@ -1,5 +1,5 @@
 paths:
-  /api/v1/disks:
+  /api/v2/disks:
     get:
       summary: List disks
       description: When both `region_id` and `availability_zone_id` are supplied, only disks attachable to a virtual
@@ -76,7 +76,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/disks/{diskId}:
+  /api/v2/disks/{diskId}:
     get:
       summary: Retrieve a disk
       description: Returns the stored state of the disk; it does not query the cloud.
@@ -184,7 +184,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/disks/{diskId}/reverts:
+  /api/v2/disks/{diskId}/reverts:
     post:
       summary: Revert a disk to a snapshot
       description: |-

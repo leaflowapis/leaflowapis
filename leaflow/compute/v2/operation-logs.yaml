@@ -1,5 +1,5 @@
 paths:
-  /api/v1/operation-logs:
+  /api/v2/operation-logs:
     get:
       summary: List the operation log of the project
       description: |-
@@ -35,7 +35,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/operation-logs/{operationLogId}:
+  /api/v2/operation-logs/{operationLogId}:
     get:
       summary: Retrieve an operation log entry
       description: Returns one entry of the project's operation log. Like the listing, it never discloses the

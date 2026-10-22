@@ -1,5 +1,5 @@
 paths:
-  /api/v1/disk-types:
+  /api/v2/disk-types:
     get:
       summary: List disk types on sale
       description: Only disk types currently on sale are listed. Any of them boots a virtual machine, holds data or takes
@@ -37,7 +37,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/disk-types/{diskTypeId}:
+  /api/v2/disk-types/{diskTypeId}:
     get:
       summary: Get a disk type
       description: Retrieve capacity and performance constraints for an existing disk, including types withdrawn from

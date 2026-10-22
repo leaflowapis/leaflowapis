@@ -1,5 +1,5 @@
 paths:
-  /api/v1/virtual-machines:
+  /api/v2/virtual-machines:
     get:
       summary: List virtual machines
       description: Every virtual machine in the project, newest first, in their stored state.
@@ -72,7 +72,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}:
+  /api/v2/virtual-machines/{virtualMachineId}:
     get:
       summary: Retrieve a virtual machine
       description: Returns the stored state of the virtual machine; it does not query the cloud. Use it to poll
@@ -193,7 +193,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/commands:
+  /api/v2/virtual-machines/{virtualMachineId}/commands:
     post:
       summary: Run a command on a virtual machine
       description: |-
@@ -242,7 +242,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/console:
+  /api/v2/virtual-machines/{virtualMachineId}/console:
     get:
       summary: Retrieve a VNC console
       description: |-
@@ -271,7 +271,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/password:
+  /api/v2/virtual-machines/{virtualMachineId}/password:
     put:
       summary: Reset the login password
       description: |-
@@ -310,7 +310,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/reboots:
+  /api/v2/virtual-machines/{virtualMachineId}/reboots:
     post:
       summary: Reboot a virtual machine
       description: |-
@@ -353,7 +353,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/rebuilds:
+  /api/v2/virtual-machines/{virtualMachineId}/rebuilds:
     post:
       summary: Rebuild a virtual machine
       description: |-
@@ -395,7 +395,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/disks:
+  /api/v2/virtual-machines/{virtualMachineId}/disks:
     get:
       summary: List the disks attached to a virtual machine
       operationId: list-virtual-machine-disks
@@ -458,7 +458,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/disks/{diskId}:
+  /api/v2/virtual-machines/{virtualMachineId}/disks/{diskId}:
     delete:
       summary: Detach a disk
       description: |-
@@ -496,7 +496,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/network-interfaces:
+  /api/v2/virtual-machines/{virtualMachineId}/network-interfaces:
     get:
       summary: List the network interfaces of a virtual machine
       operationId: list-virtual-machine-network-interfaces
@@ -558,7 +558,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/network-interfaces/{networkInterfaceId}:
+  /api/v2/virtual-machines/{virtualMachineId}/network-interfaces/{networkInterfaceId}:
     delete:
       summary: Detach a network interface
       description: |-
@@ -594,7 +594,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/rescue:
+  /api/v2/virtual-machines/{virtualMachineId}/rescue:
     put:
       summary: Put a virtual machine into rescue mode
       description: |-

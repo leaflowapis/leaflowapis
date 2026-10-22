@@ -1,5 +1,5 @@
 paths:
-  /api/v1/peerings:
+  /api/v2/peerings:
     get:
       summary: List peerings
       operationId: list-peerings
@@ -47,7 +47,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/peerings/{peeringId}:
+  /api/v2/peerings/{peeringId}:
     get:
       summary: Get peering
       operationId: get-peering

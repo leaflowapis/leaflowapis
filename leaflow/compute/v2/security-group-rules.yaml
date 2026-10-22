@@ -1,5 +1,5 @@
 paths:
-  /api/v1/security-group-rules:
+  /api/v2/security-group-rules:
     get:
       summary: List security group rules
       operationId: list-security-group-rules
@@ -53,7 +53,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/security-group-rules/{securityGroupRuleId}:
+  /api/v2/security-group-rules/{securityGroupRuleId}:
     parameters:
     - name: securityGroupRuleId
       in: path

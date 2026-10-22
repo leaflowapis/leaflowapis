@@ -1,5 +1,5 @@
 paths:
-  /api/v1/virtual-private-clouds:
+  /api/v2/virtual-private-clouds:
     get:
       summary: List virtual private clouds
       operationId: list-virtual-private-clouds
@@ -54,7 +54,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}:
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}:
     get:
       summary: Retrieve a virtual private cloud
       operationId: get-virtual-private-cloud
@@ -139,7 +139,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/ipv6:
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}/ipv6:
     parameters:
     - name: virtualPrivateCloudId
       in: path
@@ -207,7 +207,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-private-clouds/{virtualPrivateCloudId}/free-subnet-cidr:
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}/free-subnet-cidr:
     get:
       summary: Get a free subnet CIDR
       description: The first CIDR of the given prefix length inside the virtual private cloud that no subnet

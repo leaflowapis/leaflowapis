@@ -1,5 +1,5 @@
 paths:
-  /api/v1/public-images:
+  /api/v2/public-images:
     get:
       summary: List public images
       description: |-
@@ -34,7 +34,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/public-images/{publicImageId}:
+  /api/v2/public-images/{publicImageId}:
     get:
       summary: Retrieve a public image
       description: Returns a public image, on sale or withdrawn. A withdrawn image (`sale_status` is `off_sale`) is still

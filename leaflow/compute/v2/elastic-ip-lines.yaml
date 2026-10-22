@@ -1,5 +1,5 @@
 paths:
-  /api/v1/elastic-ip-lines:
+  /api/v2/elastic-ip-lines:
     get:
       operationId: list-elastic-ip-lines
       summary: List and search elastic IP lines
@@ -39,7 +39,7 @@ paths:
           maxLength: 255
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-  /api/v1/elastic-ip-lines/{elasticIpLineId}:
+  /api/v2/elastic-ip-lines/{elasticIpLineId}:
     get:
       operationId: get-elastic-ip-line
       summary: Get an elastic IP line

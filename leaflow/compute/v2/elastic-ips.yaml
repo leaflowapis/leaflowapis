@@ -1,5 +1,5 @@
 paths:
-  /api/v1/elastic-ips:
+  /api/v2/elastic-ips:
     get:
       summary: List elastic IPs
       operationId: list-elastic-ips
@@ -57,7 +57,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/elastic-ips/{elasticIpId}:
+  /api/v2/elastic-ips/{elasticIpId}:
     get:
       summary: Retrieve an elastic IP
       operationId: get-elastic-ip
@@ -164,7 +164,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ElasticIP'
-  /api/v1/elastic-ips/{elasticIpId}/traffic-usage:
+  /api/v2/elastic-ips/{elasticIpId}/traffic-usage:
     get:
       summary: List the traffic an elastic IP sent
       description: |-
@@ -215,7 +215,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/elastic-ips/{elasticIpId}/association:
+  /api/v2/elastic-ips/{elasticIpId}/association:
     get:
       summary: Retrieve the association of an elastic IP
       description: |-

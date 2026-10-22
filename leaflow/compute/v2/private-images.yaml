@@ -1,5 +1,5 @@
 paths:
-  /api/v1/private-images:
+  /api/v2/private-images:
     get:
       summary: List private images
       description: |-
@@ -67,7 +67,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/private-images/{privateImageId}:
+  /api/v2/private-images/{privateImageId}:
     get:
       summary: Retrieve a private image
       description: Returns a private image of this project; any other image, public images included, is reported as not

@@ -1,5 +1,5 @@
 paths:
-  /api/v1/routes:
+  /api/v2/routes:
     get:
       summary: List routes
       description: Static routes of the project's virtual private clouds, including the routes peerings install,
@@ -57,7 +57,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/routes/{routeId}:
+  /api/v2/routes/{routeId}:
     parameters:
     - name: routeId
       in: path
