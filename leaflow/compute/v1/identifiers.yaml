@@ -142,9 +142,3 @@ components:
       maxLength: 33
       pattern: ^sgrule_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute SecurityGroupRule TypeID. UUID text is not accepted.
-    VirtualMachineRestrictionID:
-      type: string
-      minLength: 40
-      maxLength: 40
-      pattern: ^vmrestriction_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
-      description: Compute VirtualMachineRestriction TypeID. UUID text is not accepted.

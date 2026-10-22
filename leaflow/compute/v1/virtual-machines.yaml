@@ -1287,35 +1287,51 @@ components:
       - line_id
       additionalProperties: false
     VirtualMachineRestriction:
-      description: An independent restriction on use. Removing one restriction never removes another source’s restriction,
-        and never starts a virtual machine its user stopped.
+      description: |-
+        One hold on the virtual machine. While any holds it, the virtual machine is stopped and refuses being started,
+        rebooted, rebuilt, resized, rescued, having its password reset and running commands, with 409
+        `VIRTUAL_MACHINE_SUSPENDED`. Holds are independent: lifting one never lifts another, and once none remains
+        the virtual machine is started again only if a hold stopped it, never one its user stopped.
       type: object
       properties:
-        id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineRestrictionID
-        source:
+        reason:
+          description: |-
+            Why it is held. `operator_suspended` is a suspension by the platform. `billing_suspended` is the virtual
+            machine's own subscription suspended for non-payment, and `billing_reclaimed` that subscription ending,
+            after which the virtual machine is released. `boot_disk_suspended` and `boot_disk_reclaimed` are the same
+            for the subscription of the disk the virtual machine boots from: that disk is billed apart, and the
+            virtual machine cannot run without it, so renewing the disk's subscription lifts the hold, and a reclaimed
+            boot disk is released together with its virtual machine.
           type: string
           enum:
-          - billing
-          - iam
-          - operator
-        source_id:
-          type: string
-          minLength: 1
-          maxLength: 255
-        reason_code:
-          type: string
-          minLength: 1
-          maxLength: 128
-        created_at:
-          type: string
+          - operator_suspended
+          - billing_suspended
+          - billing_reclaimed
+          - boot_disk_suspended
+          - boot_disk_reclaimed
+        subscription_id:
+          description: The Billing subscription whose state holds the virtual machine; null for `operator_suspended`.
+          type:
+          - string
+          - 'null'
+          format: uuid
+        disk_id:
+          description: The disk the virtual machine boots from, for `boot_disk_suspended` and `boot_disk_reclaimed`;
+            null otherwise.
+          anyOf:
+          - $ref: ./identifiers.yaml#/components/schemas/DiskID
+          - type: 'null'
+        started_at:
+          description: When the hold began; null when that instant was not recorded.
+          type:
+          - string
+          - 'null'
           format: date-time
       required:
-      - id
-      - source
-      - source_id
-      - reason_code
-      - created_at
+      - reason
+      - subscription_id
+      - disk_id
+      - started_at
       additionalProperties: false
     CreateVirtualMachineResponseBody:
       description: The new virtual machines, `pending` until their order is accepted, and the Checkout Session they share.

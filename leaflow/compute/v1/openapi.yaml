@@ -337,8 +337,6 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/RouteID
     SecurityGroupRuleID:
       $ref: ./identifiers.yaml#/components/schemas/SecurityGroupRuleID
-    VirtualMachineRestrictionID:
-      $ref: ./identifiers.yaml#/components/schemas/VirtualMachineRestrictionID
     MachineType:
       $ref: ./machine-types.yaml#/components/schemas/MachineType
     MachineTypeListResponseBody:
