@@ -126,6 +126,10 @@ paths:
     $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces
   /api/v1/network-interfaces/{networkInterfaceId}:
     $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}
+  /api/v1/network-interfaces/{networkInterfaceId}/addresses:
+    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}~1addresses
+  /api/v1/network-interfaces/{networkInterfaceId}/addresses/{addressId}:
+    $ref: ./network-interfaces.yaml#/paths/~1api~1v1~1network-interfaces~1{networkInterfaceId}~1addresses~1{addressId}
   /api/v1/operation-logs:
     $ref: ./operation-logs.yaml#/paths/~1api~1v1~1operation-logs
   /api/v1/operation-logs/{operationLogId}:
@@ -385,6 +389,8 @@ components:
       $ref: ./network-interfaces.yaml#/components/schemas/CreateNetworkInterfaceRequestBody
     UpdateNetworkInterfaceRequestBody:
       $ref: ./network-interfaces.yaml#/components/schemas/UpdateNetworkInterfaceRequestBody
+    CreateNetworkInterfaceAddressRequestBody:
+      $ref: ./network-interfaces.yaml#/components/schemas/CreateNetworkInterfaceAddressRequestBody
     NetworkInterfaceAddress:
       $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAddress
     NetworkInterfaceAttachment:

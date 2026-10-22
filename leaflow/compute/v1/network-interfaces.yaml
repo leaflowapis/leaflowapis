@@ -75,8 +75,13 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     patch:
       summary: Update a network interface
-      description: Changes the name only. Renaming is not an operation and is accepted at any time. The security
-        groups and addresses of a network interface cannot be changed through this endpoint.
+      description: |-
+        Changes the name, or replaces the security groups. The two are never combined (422 `UPDATE_FIELDS_COMBINED`).
+
+        - `name` is not an operation, is accepted at any time and answers 200.
+        - `security_group_ids` is the complete new set, one to five groups of the network interface's virtual private cloud; groups left out are removed. It applies to traffic of the running virtual machine as soon as it is in place, and answers 202 with the network interface showing the `update_security_groups` operation until then.
+
+        Secondary IPv4 addresses are added and removed under `/network-interfaces/{networkInterfaceId}/addresses`.
       operationId: update-network-interface
       tags:
       - network-interfaces
@@ -94,7 +99,13 @@ paths:
               $ref: '#/components/schemas/UpdateNetworkInterfaceRequestBody'
       responses:
         '200':
-          description: OK
+          description: The name was changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkInterface'
+        '202':
+          description: The replacement of the security groups was accepted.
           content:
             application/json:
               schema:
@@ -133,6 +144,77 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/network-interfaces/{networkInterfaceId}/addresses:
+    post:
+      summary: Add a secondary IPv4 address
+      description: |-
+        Adds an IPv4 address in the network interface's subnet, given or chosen by the network, and answers 202 with the network interface showing the `add_address` operation until the address is in place; it then appears among `addresses` with `role` `secondary`. An elastic IP can be associated with it like the primary address.
+
+        **The operating system has to be configured to use it**: DHCP hands out only the primary address. Changing the addresses of a network interface in use may briefly interrupt its traffic.
+
+        A network interface holds at most its virtual machine's machine type's `max_ipv4_per_network_interface` IPv4 addresses while attached, and 50 otherwise (409 `NETWORK_INTERFACE_ADDRESS_CEILING`). An address already in use in the subnet is refused with 409 `NETWORK_INTERFACE_ADDRESS_ALREADY_TAKEN`, a full subnet with 409 `NETWORK_INTERFACE_SUBNET_EXHAUSTED`.
+      operationId: create-network-interface-address
+      tags:
+      - network-interfaces
+      parameters:
+      - name: networkInterfaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateNetworkInterfaceAddressRequestBody'
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkInterface'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v1/network-interfaces/{networkInterfaceId}/addresses/{addressId}:
+    delete:
+      summary: Remove a secondary IPv4 address
+      description: Removes a secondary IPv4 address and answers 202 with the network interface showing the `remove_address`
+        operation until it is gone. The primary address goes only with the network interface (409
+        `NETWORK_INTERFACE_ADDRESS_PRIMARY`), and an address an elastic IP is associated with is refused until it is
+        disassociated (409 `NETWORK_INTERFACE_ADDRESS_ASSOCIATED`).
+      operationId: delete-network-interface-address
+      tags:
+      - network-interfaces
+      parameters:
+      - name: networkInterfaceId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+      - name: addressId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceAddressID
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NetworkInterface'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
     NetworkInterface:
@@ -155,6 +237,11 @@ components:
           - 'null'
           items:
             type: string
+        security_group_ids:
+          description: The security groups the network interface holds.
+          type: array
+          items:
+            $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
         addresses:
           type: array
           items:
@@ -183,6 +270,7 @@ components:
       - name
       - mac
       - elastic_ip_addresses
+      - security_group_ids
       - attachment
       - status
       - operation
@@ -241,7 +329,22 @@ components:
         name:
           type: string
           maxLength: 128
+        security_group_ids:
+          description: The complete new set of security groups, of the network interface's virtual private cloud.
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
       minProperties: 1
+      additionalProperties: false
+    CreateNetworkInterfaceAddressRequestBody:
+      type: object
+      properties:
+        address:
+          description: The IPv4 address to add, in the network interface's subnet. Chosen by the network when omitted.
+          type: string
+          maxLength: 15
       additionalProperties: false
     NetworkInterfaceAddress:
       type: object
@@ -359,13 +462,17 @@ components:
       properties:
         type:
           description: '`associate_elastic_ip` holds the network interface while an elastic IP is associated with it
-            directly rather than through a virtual machine.'
+            directly rather than through a virtual machine. `update_security_groups` replaces its security groups,
+            `add_address` and `remove_address` change its secondary IPv4 addresses.'
           type: string
           enum:
           - create
           - attach
           - detach
           - associate_elastic_ip
+          - update_security_groups
+          - add_address
+          - remove_address
           - delete
         started_at:
           type: string
