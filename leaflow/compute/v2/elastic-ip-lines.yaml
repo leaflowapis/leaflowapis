@@ -2,6 +2,9 @@ paths:
   /api/v2/elastic-ip-lines:
     get:
       operationId: list-elastic-ip-lines
+      security:
+      - {}
+      - scopedTokenAuth: []
       summary: List and search elastic IP lines
       tags:
       - elastic-ip-lines
@@ -42,6 +45,9 @@ paths:
   /api/v2/elastic-ip-lines/{elasticIpLineId}:
     get:
       operationId: get-elastic-ip-line
+      security:
+      - {}
+      - scopedTokenAuth: []
       summary: Get an elastic IP line
       tags:
       - elastic-ip-lines
@@ -85,18 +91,17 @@ components:
           type: string
           minLength: 0
           maxLength: 255
-        address_plan_id:
-          description: The Billing Plan of the address subscription every elastic IP of this line has. It is always
-            used, and meters the address while no network interface holds it. Read its prices from Billing.
-          type: string
-          format: uuid
-          readOnly: true
-        network_plan_id:
-          description: The Billing Plan of the network subscription every elastic IP of this line has, which pays its
-            bandwidth, prepaid or used while associated, or its traffic. Read its prices from Billing.
-          type: string
-          format: uuid
-          readOnly: true
+        address_billing:
+          description: The address line every elastic IP of this line has. It is always metered, and meters the
+            address while no network interface holds it.
+          allOf:
+          - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
+        network_billing:
+          description: The network line every elastic IP of this line has, which pays its bandwidth, prepaid or used
+            while associated, or its traffic. Metered, the line's quantity is 1 and the bandwidth or the traffic is
+            what its meters read, by the elastic IP's `internet_charge_type`.
+          allOf:
+          - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
         min_bandwidth_mbps:
           description: The least bandwidth an elastic IP of this line can be bought with, in Mbps.
           type: integer
@@ -136,8 +141,8 @@ components:
       - region_id
       - name
       - description
-      - address_plan_id
-      - network_plan_id
+      - address_billing
+      - network_billing
       - min_bandwidth_mbps
       - max_bandwidth_mbps
       - bandwidth_step_mbps

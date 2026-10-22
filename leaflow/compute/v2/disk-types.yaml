@@ -6,6 +6,9 @@ paths:
         a restore. A withdrawn one disappears from here and can no longer be bought, while the disks already on it keep
         working and can still be resized.
       operationId: list-disk-types
+      security:
+      - {}
+      - scopedTokenAuth: []
       tags:
       - disk-types
       parameters:
@@ -43,6 +46,9 @@ paths:
       description: Retrieve capacity and performance constraints for an existing disk, including types withdrawn from
         sale.
       operationId: get-disk-type
+      security:
+      - {}
+      - scopedTokenAuth: []
       tags:
       - disk-types
       parameters:
@@ -98,12 +104,11 @@ components:
           format: int64
         performance:
           $ref: '#/components/schemas/DiskTypePerformance'
-        plan_id:
-          description: The actual Billing Plan associated with this resource. Read prices and commercial terms directly
-            from Billing using this identifier.
-          type: string
-          format: uuid
-          readOnly: true
+        billing:
+          description: The line a disk of this type is, whether bought on its own or as the system disk or a data disk
+            of a virtual machine. A disk bought on its own is licensed only.
+          allOf:
+          - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
       required:
       - id
       - name
@@ -114,7 +119,7 @@ components:
       - max_size_gb
       - step_gb
       - performance
-      - plan_id
+      - billing
       additionalProperties: false
     PerformanceFormula:
       description: One performance metric of a disk type for a disk of `size_gb`, `max(min, min(max, base + size_gb ×

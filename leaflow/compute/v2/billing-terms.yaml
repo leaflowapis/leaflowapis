@@ -45,3 +45,72 @@ components:
       - period_end
     CheckoutOptions:
       $ref: ../../billing/type/v1/checkout.yaml#/components/schemas/CheckoutOptions
+    BillingComponent:
+      description: How one order line of a catalog item is sold in Billing. To price a purchase with Billing's quote,
+        give the line `plan_id`, `dimensions` unchanged, and the quantity `quantity` names for the usage type chosen;
+        to estimate a metered line, give each of `meters` the same dimensions and the quantity it names. Prices and
+        amounts are Billing's alone.
+      type: object
+      properties:
+        plan_id:
+          description: The Billing Plan the line is sold under.
+          type: string
+          format: uuid
+        dimensions:
+          description: The line's dimensions, keyed as Billing's rate rules match them; every meter of the line reads
+            under the same ones. They are coordinates for Billing and name nothing a client needs to read.
+          type: object
+          additionalProperties:
+            type: string
+        quantity:
+          $ref: '#/components/schemas/BillingQuantity'
+        meters:
+          description: What a metered price of the line reads; empty when the line is never metered.
+          type: array
+          items:
+            $ref: '#/components/schemas/BillingMeter'
+      required:
+      - plan_id
+      - dimensions
+      - quantity
+      - meters
+      additionalProperties: false
+    BillingQuantity:
+      description: What the line's quantity counts under each usage type it is sold on; a usage type it is not sold on
+        is absent.
+      type: object
+      properties:
+        licensed:
+          $ref: '#/components/schemas/BillingLineQuantity'
+        metered:
+          $ref: '#/components/schemas/BillingLineQuantity'
+      additionalProperties: false
+    BillingLineQuantity:
+      description: '`one` is 1 for each item bought; `size_gib` is the disk''s size in GiB; `bandwidth_mbps` is the
+        elastic IP''s bandwidth in Mbps.'
+      type: string
+      enum:
+      - one
+      - size_gib
+      - bandwidth_mbps
+    BillingMeter:
+      description: One meter a metered line reads.
+      type: object
+      properties:
+        meter_lookup_key:
+          type: string
+        quantity:
+          description: What the meter measures. `one` counts each second the item is metered; `size_gib` the disk's
+            size in GiB each second; `stored_gib` the GiB stored each second; `bandwidth_mbps` the bandwidth in Mbps
+            each second; `egress_bytes` the bytes sent.
+          type: string
+          enum:
+          - one
+          - size_gib
+          - stored_gib
+          - bandwidth_mbps
+          - egress_bytes
+      required:
+      - meter_lookup_key
+      - quantity
+      additionalProperties: false

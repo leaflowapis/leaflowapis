@@ -3,6 +3,9 @@ paths:
     get:
       summary: List available regions
       operationId: list-regions
+      security:
+      - {}
+      - scopedTokenAuth: []
       tags:
       - regions
       parameters:
@@ -26,6 +29,9 @@ paths:
       summary: Retrieve a region
       description: The availability zones of a region are listed by `list-availability-zones` with `region_id`.
       operationId: get-region
+      security:
+      - {}
+      - scopedTokenAuth: []
       tags:
       - regions
       parameters:
@@ -64,11 +70,26 @@ components:
           type: string
         id:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
+        snapshot_billing:
+          description: The line every snapshot in this region is, metered on the size it stores.
+          allOf:
+          - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
+        disk_backup_billing:
+          description: The line every disk backup in this region is, metered on the size it stores.
+          allOf:
+          - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
+        private_image_billing:
+          description: The line every private image in this region is, metered on the size it stores.
+          allOf:
+          - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
       required:
       - code
       - name
       - country_code
       - id
+      - snapshot_billing
+      - disk_backup_billing
+      - private_image_billing
       additionalProperties: false
     RegionListResponseBody:
       type: object

@@ -5,6 +5,9 @@ paths:
       description: Only machine types currently on sale are listed. A withdrawn one disappears from here
         and can no longer be ordered, while the virtual machines already running it keep running.
       operationId: list-machine-types
+      security:
+      - {}
+      - scopedTokenAuth: []
       tags:
       - machine-types
       parameters:
@@ -42,6 +45,9 @@ paths:
       description: Returns only an on-sale machine type, under the same access rules as listing. Off-sale, retired
         or absent types return 404.
       operationId: get-machine-type
+      security:
+      - {}
+      - scopedTokenAuth: []
       tags:
       - machine-types
       parameters:
@@ -115,12 +121,11 @@ components:
         vcpus:
           type: integer
           format: int64
-        plan_id:
-          description: The actual Billing Plan associated with this resource. Read prices and commercial terms directly
-            from Billing using this identifier.
-          type: string
-          format: uuid
-          readOnly: true
+        billing:
+          description: The line a virtual machine of this type is. The system disk and data disks bought with it are
+            lines of their disk types, and a new elastic IP the two lines of its elastic IP line.
+          allOf:
+          - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
       required:
       - id
       - name
@@ -134,7 +139,7 @@ components:
       - max_network_interfaces
       - max_elastic_ips
       - max_bandwidth_mbps
-      - plan_id
+      - billing
       additionalProperties: false
     MachineTypeListResponseBody:
       type: object

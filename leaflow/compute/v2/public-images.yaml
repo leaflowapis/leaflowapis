@@ -9,6 +9,9 @@ paths:
 
         Images this project captured from its own virtual machines are in `/private-images`.
       operationId: list-public-images
+      security:
+      - {}
+      - scopedTokenAuth: []
       tags:
       - public-images
       parameters:
@@ -42,6 +45,9 @@ paths:
         only be rebuilt onto by a virtual machine that already runs it. A private image id is reported as not found
         here; use `/private-images`.
       operationId: get-public-image
+      security:
+      - {}
+      - scopedTokenAuth: []
       tags:
       - public-images
       parameters:

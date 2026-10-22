@@ -7,17 +7,17 @@ info:
 
     ## Authentication
 
-    Every request carries a scoped token; see the `scopedTokenAuth` security scheme.
+    Every request carries a scoped token; see the `scopedTokenAuth` security scheme. The catalog reads, which list and retrieve regions, availability zones, machine types, disk types, public images and elastic IP lines, also answer without a token, so a visitor can configure a purchase and price it with Billing before signing in. A token given to them is still verified, and an invalid one is refused.
 
     ## Conventions
 
     - **Purchases.** A purchase that creates resources returns them together with the `checkout_session_id` of its Billing Checkout Session and, once checkout completes, its `order_id`. They are readable at once and start as `pending`: checkout may not be complete, the order has not been accepted, nothing exists in the cloud, no inventory such as an address is held, and fields known only after allocation, such as addresses, are null. Once Billing accepts the order, the resource is created: it stays `pending` and shows the `create` operation, then reaches its usual status, such as `active` or `available`. When the Checkout Session expires, the order is declined, canceled or expires, or creation fails, the resource ends `failed` and `failure_reason` states why; the charge for a resource that failed after acceptance is refunded. A purchased change, such as a resize requested with `machine_type_id`, `size_gb` or `bandwidth_mbps` on the resource, returns the resource unchanged with the Checkout Session for the change, and applies once its order is accepted.
-    - **Commercial terms.** Compute catalogs describe technical specifications and reference the Billing Plan each item is sold under; prices and currency belong to Billing. A purchase chooses its terms with `billing`, and Billing selects the matching price. Price a proposed purchase with Billing's quote; Compute has no quote or price proxy endpoint.
+    - **Commercial terms.** Compute catalogs describe technical specifications and, for each order line a purchase makes, how it is sold in Billing (a `BillingComponent`: its Plan, dimensions, what its quantity counts and what its meters read); prices, amounts and currency belong to Billing. A purchase chooses its terms with `billing`, and Billing selects the matching price. Price a proposed purchase with Billing's quote from those components, and a change of a resource by its `subscription_id`; Compute has no quote or price proxy endpoint and returns no amounts.
     - **Checkout.** `checkout` is passed to Billing unchanged. Omit it for automatic checkout, which completes checkout within the request and pays from eligible credit grants and balance; insufficient funds refuse the request with HTTP 422 `BILLING_INSUFFICIENT_FUNDS`, and nothing is created. With `checkout.mode` set to `deferred`, the resources are returned `pending` with an open Checkout Session and no order, even for a zero total; nothing is created until the customer completes checkout in Billing, where a promotion code can be applied, and the order is paid. Do not submit the purchase again after paying; after an uncertain response, look the Checkout Session up in Billing first.
     - **Projects.** Resource ownership and project identifiers refer to IAM platform projects, not OpenStack tenants. Virtual machines, images and networks share one infrastructure OpenStack project; the platform project remains the authorization and ownership boundary.
     - **Operations.** Requests such as changing `power_state`, attaching or deleting return HTTP 202 with the resource as it is when the request is accepted. While an operation runs, the resource's `operation` field names it; the field is null once the operation has finished, and the resource then shows the result. A resource with an operation in progress refuses another operation with HTTP 409 `COMPUTE_RESOURCE_BUSY`; an operation involving two resources, such as attaching a disk, is refused when either has one. A purchased change, such as a resize, is an operation from the moment its Checkout Session is created until the change is applied, the session expires or its order is canceled. Renaming and replacing labels or notes are not operations and are accepted at any time. **Updating.** A `PATCH` carries only mutable fields, all optional and at least one given, and answers 200 when only descriptive fields changed and 202 when an operation started. An operational field (`power_state`, `machine_type_id`, `size_gb`, `bandwidth_mbps`) cannot be combined with any other field in the same request: it is refused with 422 `UPDATE_FIELDS_COMBINED`, because a rename that committed beside a change that was then refused would leave the request half applied.
     - **Billing relationships.** A purchased resource records its `checkout_session_id` and, once checkout completes, its `order_id`, `order_item_id` and `subscription_id`. Its `access_state` is `pending` until the order is accepted and delivery settles it, then `enabled`; a subscription that lapses suspends or reclaims the resource it pays for.
-    - **Availability zones.** A disk and a virtual machine must reside in the same availability zone to be attached. Virtual machine types and disk types are each bound to one availability zone, so choosing a type determines the zone.
+    - **Availability zones.** A disk and a virtual machine must reside in the same availability zone to be attached. Machine types and disk types belong to a region and list the availability zones they are sold in; a purchase names its zone, which has to be one of them.
     - **IPv6 is routed, not translated.** VPC IPv6 prefix delegation and security groups require no EIP or NAT gateway. EIP and NATGateway are IPv4 products; IPv6 EIP, NAT66 and IPv6 port forwarding are not supported.
     - **Elastic IP release.** A released address returns to available inventory as soon as its cleanup is confirmed, with no cooldown period. Removing or replacing an elastic IP's association keeps the address held by the project and does not release it.
     - **Passwords are returned once.** A password generated by the platform during creation or rebuild appears only in that response. Store it immediately.
@@ -225,6 +225,14 @@ components:
       $ref: ./billing-terms.yaml#/components/schemas/TerminationPolicy
     CheckoutOptions:
       $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
+    BillingComponent:
+      $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
+    BillingQuantity:
+      $ref: ./billing-terms.yaml#/components/schemas/BillingQuantity
+    BillingLineQuantity:
+      $ref: ./billing-terms.yaml#/components/schemas/BillingLineQuantity
+    BillingMeter:
+      $ref: ./billing-terms.yaml#/components/schemas/BillingMeter
     DiskBackupResource:
       $ref: ./disk-backups.yaml#/components/schemas/DiskBackupResource
     DiskBackupListResponseBody:
