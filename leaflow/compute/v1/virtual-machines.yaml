@@ -275,7 +275,7 @@ paths:
     put:
       summary: Reset the login password
       description: |-
-        Sets the root password without a reboot. The virtual machine must be running.
+        Sets the password of the login account (`login_username`) without a reboot; root is never given one. The virtual machine must be running.
 
         **Not every image supports this.** Images whose `supports_password_reset` is false cannot, and a new password can then only be set by rebuilding the virtual machine, which erases all data on the system disk.
 
@@ -294,7 +294,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PutVirtualMachinePasswordRequestBody'
+              $ref: '#/components/schemas/PasswordChoice'
       responses:
         '200':
           description: OK
@@ -926,20 +926,10 @@ components:
     CreateVirtualMachineRequestBody:
       type: object
       properties:
-        elastic_ip_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
-          description: |-
-            Associate an elastic IP you already hold, instead of allocating a new one. It must be idle and in
-            the same region.
-
-            Mutually exclusive with `bandwidth_mbps`: an address you already hold has its own bandwidth
-            ceiling, set when it was allocated, and changing it is a separate operation.
-
-            Like `bandwidth_mbps`, this happens **inside the creation**: if association fails, no virtual machine is
-            created. Associating afterwards is still possible (`put-elastic-ip-association`), but then it is two
-            operations and a failure in between leaves a virtual machine you cannot reach.
-
-            Only one virtual machine can be created when it is used — one address is associated with one interface.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
         count:
           description: Number of virtual machines to create; 1 when omitted. Names are numbered automatically for
             several
@@ -948,45 +938,26 @@ components:
           default: 1
           minimum: 1
           maximum: 20
-        generate_password:
-          description: Have the platform generate a random password, returned only in this response
-          type: boolean
-        compute:
-          $ref: '#/components/schemas/NewCompute'
         availability_zone_id:
           description: The availability zone of the machine type's region the virtual machines are created in. An existing
             boot disk has to be in it already
           $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
-        name:
-          type: string
-          minLength: 1
-          maxLength: 128
-        password:
-          description: The password to set, on the login account and on root. Only the SSH public keys of the project
-            are used when omitted
-          type: string
-          maxLength: 128
-        network_interface_id:
-          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
-          description: Use an existing network interface, which may already have an elastic IP associated. Exactly one
-            of this and `subnet_id`; only one virtual machine can be created when it is used
-        security_group_ids:
-          description: Required when a primary network interface is created, at least one; the default security
-            group is not applied automatically. Ignored together with `network_interface_id`, as the security groups
-            of that interface were fixed when it was created
-          type:
-          - array
-          - 'null'
-          minItems: 1
-          items:
-            $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
-        subnet_id:
-          description: Create the primary network interface in this subnet. Exactly one of this and `network_interface_id`
-          $ref: ./identifiers.yaml#/components/schemas/SubnetID
+        compute:
+          $ref: '#/components/schemas/NewCompute'
         boot_disk:
           $ref: '#/components/schemas/BootDisk'
+        network_interface:
+          $ref: '#/components/schemas/PrimaryNetworkInterface'
         elastic_ip:
-          $ref: '#/components/schemas/NewElasticIP'
+          description: |-
+            An elastic IP associated with the primary network interface **inside the creation**: if association
+            fails, no virtual machine is created. Associating afterwards is still possible
+            (`put-elastic-ip-association`), but then it is two operations and a failure in between leaves a virtual
+            machine you cannot reach. Omitted, the virtual machine has no public address.
+          $ref: '#/components/schemas/VirtualMachineElasticIP'
+        password:
+          description: The login account's password. Omitted, only the SSH public keys of the project log in.
+          $ref: '#/components/schemas/PasswordChoice'
         checkout:
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       required:
@@ -994,6 +965,7 @@ components:
       - compute
       - availability_zone_id
       - boot_disk
+      - network_interface
       additionalProperties: false
     UpdateVirtualMachineRequestBody:
       description: |-
@@ -1106,40 +1078,29 @@ components:
       required:
       - console_url
       additionalProperties: false
-    PutVirtualMachinePasswordRequestBody:
-      type: object
-      properties:
-        generate_password:
-          description: Have the platform generate a random password, returned only in this response
-          type: boolean
-        password:
-          description: New root password. Exactly one of this and `generate_password`
-          type: string
-          maxLength: 128
-      required: []
-      additionalProperties: false
     PutVirtualMachinePasswordResponseBody:
       type: object
       properties:
         password:
-          description: The password generated by the platform, returned only in this response. Empty when the password
-            was supplied in the request
-          type: string
+          description: The password the platform generated, returned only in this response; null when the password
+            was supplied.
+          type:
+          - string
+          - 'null'
       required:
       - password
       additionalProperties: false
     CreateVirtualMachineRebuildRequestBody:
       type: object
       properties:
-        generate_password:
-          type: boolean
         image_id:
           description: A public image (`/public-images`), which must be on sale unless it is the one this virtual machine
             already runs, or an available private image of this project (`/private-images`)
           $ref: ./identifiers.yaml#/components/schemas/ImageID
         password:
-          type: string
-          maxLength: 128
+          description: The login account's password on the reinstalled system. Omitted, only the SSH public keys of
+            the project log in.
+          $ref: '#/components/schemas/PasswordChoice'
       required:
       - image_id
       additionalProperties: false
@@ -1149,11 +1110,55 @@ components:
         virtual_machine:
           $ref: '#/components/schemas/VirtualMachine'
         password:
-          description: Returned only in this response; store it immediately
-          type: string
+          description: The password the platform generated, returned only in this response; store it immediately.
+            Null when the password was supplied or none was asked for.
+          type:
+          - string
+          - 'null'
       required:
       - virtual_machine
       - password
+      additionalProperties: false
+    PasswordChoice:
+      description: |-
+        The password of the login account (`login_username`). `generated` has the platform generate a strong random
+        password, returned once in the response and stored nowhere; `supplied` sets the one given. Password login
+        over SSH is enabled with it, so it answers on port 22 once a security group admits it. Root never gets a
+        password: where the login account is not root, root logs in by key only.
+      oneOf:
+      - $ref: '#/components/schemas/GeneratedPassword'
+      - $ref: '#/components/schemas/SuppliedPassword'
+      discriminator:
+        propertyName: type
+        mapping:
+          generated: '#/components/schemas/GeneratedPassword'
+          supplied: '#/components/schemas/SuppliedPassword'
+    GeneratedPassword:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - generated
+      required:
+      - type
+      additionalProperties: false
+    SuppliedPassword:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - supplied
+        value:
+          description: 12 to 128 characters with at least three of lowercase letters, uppercase letters, digits and
+            symbols, otherwise refused with `VIRTUAL_MACHINE_PASSWORD_TOO_WEAK`.
+          type: string
+          minLength: 12
+          maxLength: 128
+      required:
+      - type
+      - value
       additionalProperties: false
     NewCompute:
       description: The compute capacity requested for each virtual machine in this order.
@@ -1248,9 +1253,14 @@ components:
           type: integer
           format: int64
           minimum: 1
-        delete_with_virtual_machine:
-          type: boolean
-          default: true
+        on_virtual_machine_release:
+          description: What releasing the virtual machine does to this disk. `delete` deletes it with the virtual
+            machine; `detach` keeps it, still billed on its own terms, for you to attach elsewhere or delete.
+          type: string
+          enum:
+          - delete
+          - detach
+          default: delete
         billing:
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
       required:
@@ -1260,14 +1270,77 @@ components:
       - disk_type_id
       - size_gb
       additionalProperties: false
-    NewElasticIP:
-      description: One IPv4 elastic IP created with this bandwidth configuration in the virtual machine's order. Mutually
-        exclusive with elastic_ip_id.
+    PrimaryNetworkInterface:
+      description: The virtual machine's primary network interface, its network location. `new` creates one in a
+        subnet, deleted with the virtual machine; `existing` uses one you already hold, detached and kept when the
+        virtual machine is released.
+      oneOf:
+      - $ref: '#/components/schemas/NewPrimaryNetworkInterface'
+      - $ref: '#/components/schemas/ExistingPrimaryNetworkInterface'
+      discriminator:
+        propertyName: type
+        mapping:
+          new: '#/components/schemas/NewPrimaryNetworkInterface'
+          existing: '#/components/schemas/ExistingPrimaryNetworkInterface'
+    NewPrimaryNetworkInterface:
       type: object
       properties:
-        internet_charge_type:
-          $ref: ./elastic-ips.yaml#/components/schemas/InternetChargeType
-          default: bandwidth
+        type:
+          type: string
+          enum:
+          - new
+        subnet_id:
+          description: The subnet the interface is created in, in the machine type's region.
+          $ref: ./identifiers.yaml#/components/schemas/SubnetID
+        security_group_ids:
+          description: The security groups of the interface, of the subnet's virtual private cloud. The default
+            security group is not applied automatically.
+          type: array
+          minItems: 1
+          maxItems: 5
+          items:
+            $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+      required:
+      - type
+      - subnet_id
+      - security_group_ids
+      additionalProperties: false
+    ExistingPrimaryNetworkInterface:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - existing
+        network_interface_id:
+          description: An unattached network interface of this project in the machine type's region. It keeps its
+            security groups and any elastic IP associated with it. Only one virtual machine may be created when used.
+          $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
+      required:
+      - type
+      - network_interface_id
+      additionalProperties: false
+    VirtualMachineElasticIP:
+      description: '`new` buys an elastic IP in the virtual machine''s order; `existing` associates one you already
+        hold. One address is associated with one interface, so either creates only one virtual machine.'
+      oneOf:
+      - $ref: '#/components/schemas/NewElasticIP'
+      - $ref: '#/components/schemas/ExistingElasticIP'
+      discriminator:
+        propertyName: type
+        mapping:
+          new: '#/components/schemas/NewElasticIP'
+          existing: '#/components/schemas/ExistingElasticIP'
+    NewElasticIP:
+      description: One IPv4 elastic IP created with this bandwidth configuration in the virtual machine's order.
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - new
+        line_id:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPLineID
         bandwidth_mbps:
           description: Within the line's `min_bandwidth_mbps` and `max_bandwidth_mbps` and a multiple of its
             `bandwidth_step_mbps`, otherwise refused with `ELASTIC_IP_BANDWIDTH_RANGE`.
@@ -1275,16 +1348,33 @@ components:
           format: int64
           minimum: 1
           maximum: 1000
-        line_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIPLineID
+        internet_charge_type:
+          $ref: ./elastic-ips.yaml#/components/schemas/InternetChargeType
+          default: bandwidth
         billing:
           description: The terms of the elastic IP's network subscription, which follow the rule shared by every
             component of the purchase. Its address subscription is always pay-as-you-go and is exempt from that rule.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
       required:
-      - billing
-      - bandwidth_mbps
+      - type
       - line_id
+      - bandwidth_mbps
+      - billing
+      additionalProperties: false
+    ExistingElasticIP:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - existing
+        elastic_ip_id:
+          description: An idle elastic IP of this project in the same region. It keeps its own bandwidth and
+            subscriptions; changing its bandwidth is a separate operation.
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
+      required:
+      - type
+      - elastic_ip_id
       additionalProperties: false
     VirtualMachineRestriction:
       description: |-

@@ -479,14 +479,18 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineCommandResponseBody
     ConsoleResponseBody:
       $ref: ./virtual-machines.yaml#/components/schemas/ConsoleResponseBody
-    PutVirtualMachinePasswordRequestBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/PutVirtualMachinePasswordRequestBody
     PutVirtualMachinePasswordResponseBody:
       $ref: ./virtual-machines.yaml#/components/schemas/PutVirtualMachinePasswordResponseBody
     CreateVirtualMachineRebuildRequestBody:
       $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineRebuildRequestBody
     CreateVirtualMachineRebuildResponseBody:
       $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineRebuildResponseBody
+    PasswordChoice:
+      $ref: ./virtual-machines.yaml#/components/schemas/PasswordChoice
+    GeneratedPassword:
+      $ref: ./virtual-machines.yaml#/components/schemas/GeneratedPassword
+    SuppliedPassword:
+      $ref: ./virtual-machines.yaml#/components/schemas/SuppliedPassword
     NewCompute:
       $ref: ./virtual-machines.yaml#/components/schemas/NewCompute
     BootDisk:
@@ -497,8 +501,18 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/UpdateVirtualMachineResponseBody
     NewBootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/NewBootDisk
+    PrimaryNetworkInterface:
+      $ref: ./virtual-machines.yaml#/components/schemas/PrimaryNetworkInterface
+    NewPrimaryNetworkInterface:
+      $ref: ./virtual-machines.yaml#/components/schemas/NewPrimaryNetworkInterface
+    ExistingPrimaryNetworkInterface:
+      $ref: ./virtual-machines.yaml#/components/schemas/ExistingPrimaryNetworkInterface
+    VirtualMachineElasticIP:
+      $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachineElasticIP
     NewElasticIP:
       $ref: ./virtual-machines.yaml#/components/schemas/NewElasticIP
+    ExistingElasticIP:
+      $ref: ./virtual-machines.yaml#/components/schemas/ExistingElasticIP
     VirtualMachineRestriction:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachineRestriction
     CreateVirtualMachineResponseBody:

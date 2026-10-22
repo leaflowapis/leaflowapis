@@ -517,8 +517,15 @@ components:
           enum:
           - boot
           - data
-        delete_with_virtual_machine:
-          type: boolean
+        on_virtual_machine_release:
+          description: What releasing the virtual machine does to this disk. `delete` deletes it together with the
+            virtual machine; `detach` detaches it and leaves it to you. A disk you attached, or booted the virtual
+            machine from, is `detach`; a disk bought with the virtual machine follows the choice made when it was
+            bought.
+          type: string
+          enum:
+          - delete
+          - detach
         state:
           type: string
           enum:
@@ -555,7 +562,7 @@ components:
       - virtual_machine_id
       - disk_id
       - role
-      - delete_with_virtual_machine
+      - on_virtual_machine_release
       - state
       - attached_at
       - detached_at
