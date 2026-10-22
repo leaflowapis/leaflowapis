@@ -194,8 +194,6 @@ paths:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces~1{networkInterfaceId}
   /api/v1/virtual-machines/{virtualMachineId}/rescue:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rescue
-  /api/v1/virtual-machines/{virtualMachineId}/console-output:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1console-output
   /api/v1/virtual-private-clouds:
     $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds
   /api/v1/virtual-private-clouds/{virtualPrivateCloudId}:
@@ -497,8 +495,6 @@ components:
       $ref: ./subnets.yaml#/components/schemas/CreateSubnetRequestBody
     UpdateSubnetRequestBody:
       $ref: ./subnets.yaml#/components/schemas/UpdateSubnetRequestBody
-    ConsoleOutputResponseBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/ConsoleOutputResponseBody
     VirtualMachine:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachine
     VirtualMachineListResponseBody:

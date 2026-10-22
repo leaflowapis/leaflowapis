@@ -244,9 +244,9 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
   /api/v1/virtual-machines/{virtualMachineId}/console:
     get:
-      summary: Retrieve a remote console
+      summary: Retrieve a VNC console
       description: |-
-        Operates the virtual machine directly from a browser and does not require the virtual machine to be reachable over the network, which makes it usable when a network misconfiguration prevents login.
+        The virtual machine's VNC console, operated from a browser through a noVNC client. It does not require the virtual machine to be reachable over the network, which makes it usable when a network misconfiguration prevents login.
 
         The returned address is single-use and expires within minutes. Every request issues a new address, so request one before each use and do not cache the response.
       operationId: get-virtual-machine-console
@@ -659,54 +659,8 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v1/virtual-machines/{virtualMachineId}/console-output:
-    get:
-      summary: Retrieve the console output
-      description: |-
-        The raw text the virtual machine wrote to its serial console during boot and from the kernel. Consult it first when login fails or the remote console shows nothing: it shows where boot stopped, whether the system disk was mounted, and whether initialisation reported errors.
-
-        A virtual machine in `error` and one suspended by the platform can be read as well. Refused with `VIRTUAL_MACHINE_CONSOLE_UNAVAILABLE` while the cloud has no server for it.
-      operationId: get-virtual-machine-console-output
-      tags:
-      - virtual-machines
-      parameters:
-      - name: virtualMachineId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
-      - name: lines
-        in: query
-        description: How many trailing lines to return. Absent or 0 returns the whole output, which for a virtual machine that has run for weeks can be megabytes.
-        schema:
-          type: integer
-          format: int64
-          minimum: 0
-          maximum: 100000
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ConsoleOutputResponseBody'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    ConsoleOutputResponseBody:
-      type: object
-      properties:
-        output:
-          description: The console output as raw text, in the order the virtual machine wrote it.
-          type: string
-      required:
-      - output
-      additionalProperties: false
     VirtualMachine:
       type: object
       properties:
@@ -1109,7 +1063,7 @@ components:
       type: object
       properties:
         console_url:
-          description: Connection address of the remote console; single-use and expires within minutes
+          description: The WebSocket address a noVNC client connects to; single-use and expires within minutes
           type: string
       required:
       - console_url
