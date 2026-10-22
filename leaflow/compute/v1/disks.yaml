@@ -105,13 +105,15 @@ paths:
     patch:
       summary: Update a disk
       description: |-
-        Changes the name, or the capacity. Type and availability zone are immutable.
+        Changes the name, the capacity or the disk type. The availability zone is immutable.
 
-        `size_gb` is an operational field: it starts a resize and cannot be combined with any other field in the same request. Such a request is refused with 422 `UPDATE_FIELDS_COMBINED`, because a rename that committed beside a change that was then refused would leave the request half applied. `checkout` and `proration_date` belong to the purchase of the `size_gb` change and are accepted only together with it.
+        `size_gb` and `disk_type_id` are operational fields: each starts a change and cannot be combined with any other field in the same request, including the other one. Such a request is refused with 422 `UPDATE_FIELDS_COMBINED`, because a rename that committed beside a change that was then refused would leave the request half applied. `checkout` and `proration_date` belong to the purchase of the change and are accepted only together with one of them.
 
         **Renaming** is not an operation and is accepted at any time. It returns 200 with `checkout_session_id` and `order_id` null.
 
         **Resizing** accepts only an increase; a smaller `size_gb` is refused with `DISK_CANNOT_SHRINK` (422), since a file system cannot be shrunk from outside the virtual machine. It returns 202 with the disk and the Checkout Session for the resize, which keeps the disk's usage type and period. The disk shows the `resize` operation until the resize is applied, its Checkout Session expires or its order is canceled, so other operations and a second resize are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The disk keeps its current size until the resize is applied; once `size_gb` shows the new size, extend the file system inside the virtual machine. If checkout is not completed, the order is not accepted or the resize fails, the disk keeps its size and Billing shows the outcome.
+
+        **Changing the type** moves the disk to another disk type at the same capacity, priced as that type, and returns 202 with the disk and the Checkout Session for the change, which keeps the disk's usage type and period. The disk has to be detached (409 `DISK_RETYPE_ATTACHED`), so a system disk cannot change its type. The target has to be on sale (`DISK_TYPE_OFF_SALE`), in the disk's region (422 `DISK_RETYPE_OTHER_REGION`), sold in the disk's availability zone (404 `DISK_TYPE_AVAILABILITY_ZONE_NOT_FOUND`) with room there for the disk (409 `DISK_TYPE_SOLD_OUT`, `DISK_TYPE_CAPACITY_REACHED`, `DISK_TYPE_NO_POOL_ROOM`), admit the disk's capacity (422 `DISK_SIZE_OUT_OF_RANGE`, `DISK_SIZE_NOT_ON_STEP`) and differ from the current one (422 `DISK_RETYPE_SAME_TYPE`). The disk shows the `retype` operation until the change is applied, its Checkout Session expires or its order is canceled. A target on the same storage backend takes effect at once; one on another backend copies the disk's data there first, which takes longer the larger the disk is. The disk keeps its type until `disk_type_id` shows the new one, and its `performance` follows from then on; a change that did not take effect leaves the disk as it was and is refunded.
 
         An attached disk, including a system disk, can be resized. The capacity is usable at once, and the disk's `performance` shows what its type gives the new size. **That performance applies from the disk's next attachment, or the next start of its stopped virtual machine**: the storage reads a disk's limits only while connecting it. Until then the attachment's `performance` shows what is in effect.
       operationId: update-disk
@@ -404,8 +406,9 @@ components:
       - billing
       additionalProperties: false
     UpdateDiskRequestBody:
-      description: The mutable fields of a disk, all optional, at least one required. `size_gb` is an operational field
-        and cannot be combined with `name`; such a request is refused with 422 `UPDATE_FIELDS_COMBINED`.
+      description: The mutable fields of a disk, all optional, at least one required. `size_gb` and `disk_type_id` are
+        operational fields and cannot be combined with each other or with `name`; such a request is refused with 422
+        `UPDATE_FIELDS_COMBINED`.
       type: object
       properties:
         name:
@@ -417,15 +420,18 @@ components:
           type: integer
           format: int64
           minimum: 1
+        disk_type_id:
+          description: The disk type to move the detached disk to, at its current capacity
+          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
         proration_date:
           description: The `proration_date` of the Billing quote for this change, so that the order is priced from
-            the same instant. Only with `size_gb`, and only for automatic checkout; deferred checkout is priced when
+            the same instant. Only with `size_gb` or `disk_type_id`, and only for automatic checkout; deferred checkout is priced when
             the customer completes it. Defaults to the time of the request; it must be a whole second, not in the
             future and at most 10 minutes old, otherwise the request is refused with `BILLING_CHANGE_INVALID`.
           type: string
           format: date-time
         checkout:
-          description: How the purchase of the `size_gb` change is checked out. Only with `size_gb`.
+          description: How the purchase of the `size_gb` or `disk_type_id` change is checked out. Only with one of them.
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       minProperties: 1
       additionalProperties: false
@@ -596,6 +602,7 @@ components:
           enum:
           - create
           - resize
+          - retype
           - revert
           - attach
           - detach
