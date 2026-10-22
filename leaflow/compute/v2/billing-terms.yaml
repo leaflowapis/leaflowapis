@@ -123,12 +123,9 @@ components:
           type: string
           format: uuid
         mode:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationMode
           description: '`immediate` releases the resources once Billing has canceled the subscriptions, refunding a
             licensed one under its terms; `period_end` keeps them working until the paid period ends.'
-          type: string
-          enum:
-          - immediate
-          - period_end
         scheduled_at:
           description: When the subscriptions end and the resources are released; null while Billing has not fixed it.
           type:

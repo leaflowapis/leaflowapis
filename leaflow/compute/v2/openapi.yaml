@@ -210,6 +210,16 @@ components:
   securitySchemes:
     scopedTokenAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  parameters:
+    CancellationMode:
+      name: cancellation_mode
+      in: query
+      description: |-
+        When the subscriptions that pay for what is deleted end. `immediate` cancels them now and refunds a licensed one under its terms; `period_end` cancels them at the end of their paid period and keeps what is deleted working until then. Omitted, they are canceled now where the terms of every one of them allow it, and otherwise all at the end of the paid period, since one cancellation releases the whole set at one instant.
+
+        Billing alone judges the mode against the terms each subscription was bought with. It refuses with 422 `BILLING_CANCELLATION_MODE_FIXED` a mode those terms do not allow: a pay-as-you-go subscription ends only now, and a prepaid one whose terms allow only the end of its period only then. It refuses `period_end` with 409 `BILLING_CANCELLATION_SCHEDULES_DIFFER` when the paid periods end at different times. Ignored when nothing is subscribed, and when a cancellation is already open: deleting again answers with that one as it is.
+      schema:
+        $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationMode
   schemas:
     AvailabilityZoneResource:
       $ref: ./availability-zones.yaml#/components/schemas/AvailabilityZoneResource
