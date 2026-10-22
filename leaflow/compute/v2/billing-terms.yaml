@@ -114,3 +114,29 @@ components:
       - meter_lookup_key
       - quantity
       additionalProperties: false
+    BillingCancellation:
+      description: A Billing cancellation that Compute created to release a resource and the subscriptions in its
+        release set. Billing owns it; read its progress and any refund there by `id`.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        mode:
+          description: '`immediate` releases the resources once Billing has canceled the subscriptions, refunding a
+            licensed one under its terms; `period_end` keeps them working until the paid period ends.'
+          type: string
+          enum:
+          - immediate
+          - period_end
+        scheduled_at:
+          description: When the subscriptions end and the resources are released; null while Billing has not fixed it.
+          type:
+          - string
+          - 'null'
+          format: date-time
+      required:
+      - id
+      - mode
+      - scheduled_at
+      additionalProperties: false

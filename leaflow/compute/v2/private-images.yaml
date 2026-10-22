@@ -132,10 +132,10 @@ paths:
         Deletion is rejected while virtual machines created from the image still exist, as they need it in order to be
         rebuilt.\n\nAn image whose capture has not finished can be deleted; the capture is aborted. This is the one operation
         accepted while the `create` operation is in progress.\n\nQuota capacity and storage metering are released only
-        after cleanup is confirmed. Billing determines whether its commercial subscription must be canceled first.\n\n\
+        after cleanup is confirmed.\n\n\
         A resource whose purchase still awaits checkout or payment is refused with `COMPUTE_PURCHASE_PENDING`; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead. A subscribed resource is
         released through its subscription cancellation. Cleanup must be confirmed before metering is stopped; unknown
-        cleanup is not proof of release."
+        cleanup is not proof of release.\n\nWhile subscriptions pay for the private image (those in its `release_set`), deleting it cancels them rather than being refused: Compute creates one Billing cancellation for the whole set and answers with it in `cancellation`. The cancellation is `immediate` when every subscription in the set allows that, a licensed one being refunded under its terms, and `period_end` when any of them ends only with its paid period; the private image then keeps working until `scheduled_at` and is released then. Asking again while that cancellation is pending answers with it again."
       operationId: delete-private-image
       tags:
       - private-images
@@ -149,11 +149,11 @@ paths:
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         '202':
-          description: Deletion was accepted. The image shows the `delete` operation until it is deleted.
+          description: Deletion was accepted. Without a subscription the image shows the `delete` operation until it is deleted, and `cancellation` is null.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PrivateImageResource'
+                $ref: '#/components/schemas/DeletePrivateImageResponseBody'
         default:
           description: Error
           content:
@@ -162,6 +162,22 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
+    DeletePrivateImageResponseBody:
+      description: The private image as it is when the deletion is accepted, and the Billing cancellation that releases it when
+        subscriptions pay for it.
+      type: object
+      properties:
+        private_image:
+          $ref: '#/components/schemas/PrivateImageResource'
+        cancellation:
+          description: The cancellation Compute created for the private image's subscriptions; null when none pays for it.
+          oneOf:
+          - type: 'null'
+          - $ref: ./billing-terms.yaml#/components/schemas/BillingCancellation
+      required:
+      - private_image
+      - cancellation
+      additionalProperties: false
     PrivateImageResource:
       description: "An image this project captured from one of its virtual machines, used to install virtual machines of
         this project. Its storage is billed only to this project."
