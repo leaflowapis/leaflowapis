@@ -49,16 +49,16 @@ tags:
   description: Elastic IP resources, bandwidth and associations.
 - name: machine-types
   description: Virtual machine specifications and their Billing Plan references.
-- name: private-images
-  description: Images this project captured from its own virtual machines, and their billed storage.
-- name: public-images
-  description: Platform images offered to every project.
 - name: network-interfaces
   description: Network interfaces, addresses and attachments.
 - name: operation-logs
   description: Historical records of Compute operations.
 - name: peerings
   description: Peerings resources and operations.
+- name: private-images
+  description: Images this project captured from its own virtual machines, and their billed storage.
+- name: public-images
+  description: Platform images offered to every project.
 - name: quotas
   description: Effective per-project resource and capacity limits.
 - name: regions
@@ -104,16 +104,10 @@ paths:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips
   /api/v1/elastic-ips/{elasticIpId}:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}
+  /api/v1/elastic-ips/{elasticIpId}/traffic-usage:
+    $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1traffic-usage
   /api/v1/elastic-ips/{elasticIpId}/association:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v1~1elastic-ips~1{elasticIpId}~1association
-  /api/v1/public-images:
-    $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images
-  /api/v1/public-images/{publicImageId}:
-    $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images~1{publicImageId}
-  /api/v1/private-images:
-    $ref: ./private-images.yaml#/paths/~1api~1v1~1private-images
-  /api/v1/private-images/{privateImageId}:
-    $ref: ./private-images.yaml#/paths/~1api~1v1~1private-images~1{privateImageId}
   /api/v1/machine-types:
     $ref: ./machine-types.yaml#/paths/~1api~1v1~1machine-types
   /api/v1/machine-types/{machineTypeId}:
@@ -130,14 +124,22 @@ paths:
     $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings
   /api/v1/peerings/{peeringId}:
     $ref: ./peerings.yaml#/paths/~1api~1v1~1peerings~1{peeringId}
-  /api/v1/regions:
-    $ref: ./regions.yaml#/paths/~1api~1v1~1regions
-  /api/v1/regions/{regionId}:
-    $ref: ./regions.yaml#/paths/~1api~1v1~1regions~1{regionId}
+  /api/v1/private-images:
+    $ref: ./private-images.yaml#/paths/~1api~1v1~1private-images
+  /api/v1/private-images/{privateImageId}:
+    $ref: ./private-images.yaml#/paths/~1api~1v1~1private-images~1{privateImageId}
+  /api/v1/public-images:
+    $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images
+  /api/v1/public-images/{publicImageId}:
+    $ref: ./public-images.yaml#/paths/~1api~1v1~1public-images~1{publicImageId}
   /api/v1/regions/{regionId}/quotas:
     $ref: ./quotas.yaml#/paths/~1api~1v1~1regions~1{regionId}~1quotas
   /api/v1/regions/{regionId}/quotas/{resource}:
     $ref: ./quotas.yaml#/paths/~1api~1v1~1regions~1{regionId}~1quotas~1{resource}
+  /api/v1/regions:
+    $ref: ./regions.yaml#/paths/~1api~1v1~1regions
+  /api/v1/regions/{regionId}:
+    $ref: ./regions.yaml#/paths/~1api~1v1~1regions~1{regionId}
   /api/v1/routes:
     $ref: ./routes.yaml#/paths/~1api~1v1~1routes
   /api/v1/routes/{routeId}:
@@ -166,8 +168,6 @@ paths:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1commands
   /api/v1/virtual-machines/{virtualMachineId}/console:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1console
-  /api/v1/virtual-machines/{virtualMachineId}/console-output:
-    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1console-output
   /api/v1/virtual-machines/{virtualMachineId}/password:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1password
   /api/v1/virtual-machines/{virtualMachineId}/reboots:
@@ -184,6 +184,8 @@ paths:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1network-interfaces~1{networkInterfaceId}
   /api/v1/virtual-machines/{virtualMachineId}/rescue:
     $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1rescue
+  /api/v1/virtual-machines/{virtualMachineId}/console-output:
+    $ref: ./virtual-machines.yaml#/paths/~1api~1v1~1virtual-machines~1{virtualMachineId}~1console-output
   /api/v1/virtual-private-clouds:
     $ref: ./virtual-private-clouds.yaml#/paths/~1api~1v1~1virtual-private-clouds
   /api/v1/virtual-private-clouds/{virtualPrivateCloudId}:
@@ -197,12 +199,20 @@ components:
     scopedTokenAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
   schemas:
-    ConsoleOutputResponseBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/ConsoleOutputResponseBody
     AvailabilityZoneResource:
       $ref: ./availability-zones.yaml#/components/schemas/AvailabilityZoneResource
     AvailabilityZoneListResponseBody:
       $ref: ./availability-zones.yaml#/components/schemas/AvailabilityZoneListResponseBody
+    OfferedAvailabilityZone:
+      $ref: ./availability-zones.yaml#/components/schemas/OfferedAvailabilityZone
+    BillingPeriod:
+      $ref: ./billing-terms.yaml#/components/schemas/BillingPeriod
+    BillingChoice:
+      $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
+    TerminationPolicy:
+      $ref: ./billing-terms.yaml#/components/schemas/TerminationPolicy
+    CheckoutOptions:
+      $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
     DiskBackupResource:
       $ref: ./disk-backups.yaml#/components/schemas/DiskBackupResource
     DiskBackupListResponseBody:
@@ -215,14 +225,6 @@ components:
       $ref: ./disk-backups.yaml#/components/schemas/DiskBackupOperation
     CreateDiskBackupResponseBody:
       $ref: ./disk-backups.yaml#/components/schemas/CreateDiskBackupResponseBody
-    BillingPeriod:
-      $ref: ./billing-terms.yaml#/components/schemas/BillingPeriod
-    BillingChoice:
-      $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
-    TerminationPolicy:
-      $ref: ./billing-terms.yaml#/components/schemas/TerminationPolicy
-    CheckoutOptions:
-      $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
     DiskTypeResource:
       $ref: ./disk-types.yaml#/components/schemas/DiskTypeResource
     PerformanceFormula:
@@ -237,16 +239,16 @@ components:
       $ref: ./disks.yaml#/components/schemas/DiskListResponseBody
     CreateDiskRequestBody:
       $ref: ./disks.yaml#/components/schemas/CreateDiskRequestBody
-    CreateDiskRevertRequestBody:
-      $ref: ./disks.yaml#/components/schemas/CreateDiskRevertRequestBody
     UpdateDiskRequestBody:
       $ref: ./disks.yaml#/components/schemas/UpdateDiskRequestBody
-    UpdateDiskResponseBody:
-      $ref: ./disks.yaml#/components/schemas/UpdateDiskResponseBody
+    CreateDiskRevertRequestBody:
+      $ref: ./disks.yaml#/components/schemas/CreateDiskRevertRequestBody
     AttachDiskRequestBody:
       $ref: ./disks.yaml#/components/schemas/AttachDiskRequestBody
     CreateDiskResponseBody:
       $ref: ./disks.yaml#/components/schemas/CreateDiskResponseBody
+    UpdateDiskResponseBody:
+      $ref: ./disks.yaml#/components/schemas/UpdateDiskResponseBody
     DiskAttachment:
       $ref: ./disks.yaml#/components/schemas/DiskAttachment
     DiskPerformance:
@@ -265,22 +267,26 @@ components:
       $ref: ./elastic-ips.yaml#/components/schemas/IPv4HostAddress
     ElasticIP:
       $ref: ./elastic-ips.yaml#/components/schemas/ElasticIP
+    TrafficUsage:
+      $ref: ./elastic-ips.yaml#/components/schemas/TrafficUsage
+    TrafficUsageListResponseBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/TrafficUsageListResponseBody
     ElasticIPListResponseBody:
       $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPListResponseBody
     CreateElasticIPRequestBody:
       $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPRequestBody
+    UpdateElasticIPRequestBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/UpdateElasticIPRequestBody
     PutElasticIPAssociationRequestBody:
       $ref: ./elastic-ips.yaml#/components/schemas/PutElasticIPAssociationRequestBody
     VirtualMachineAssociationTarget:
       $ref: ./elastic-ips.yaml#/components/schemas/VirtualMachineAssociationTarget
     NetworkInterfaceAddressAssociationTarget:
       $ref: ./elastic-ips.yaml#/components/schemas/NetworkInterfaceAddressAssociationTarget
-    UpdateElasticIPRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/UpdateElasticIPRequestBody
-    UpdateElasticIPResponseBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/UpdateElasticIPResponseBody
     CreateElasticIPResponseBody:
       $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIPResponseBody
+    UpdateElasticIPResponseBody:
+      $ref: ./elastic-ips.yaml#/components/schemas/UpdateElasticIPResponseBody
     ElasticIPAssociation:
       $ref: ./elastic-ips.yaml#/components/schemas/ElasticIPAssociation
     ElasticIPOperation:
@@ -333,24 +339,6 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/SecurityGroupRuleID
     VirtualMachineRestrictionID:
       $ref: ./identifiers.yaml#/components/schemas/VirtualMachineRestrictionID
-    PublicImageResource:
-      $ref: ./public-images.yaml#/components/schemas/PublicImageResource
-    PublicImageListResponseBody:
-      $ref: ./public-images.yaml#/components/schemas/PublicImageListResponseBody
-    PrivateImageResource:
-      $ref: ./private-images.yaml#/components/schemas/PrivateImageResource
-    PrivateImageListResponseBody:
-      $ref: ./private-images.yaml#/components/schemas/PrivateImageListResponseBody
-    CreatePrivateImageRequestBody:
-      $ref: ./private-images.yaml#/components/schemas/CreatePrivateImageRequestBody
-    UpdatePrivateImageRequestBody:
-      $ref: ./private-images.yaml#/components/schemas/UpdatePrivateImageRequestBody
-    CreatePrivateImageResponseBody:
-      $ref: ./private-images.yaml#/components/schemas/CreatePrivateImageResponseBody
-    PrivateImageOperation:
-      $ref: ./private-images.yaml#/components/schemas/PrivateImageOperation
-    OfferedAvailabilityZone:
-      $ref: ./availability-zones.yaml#/components/schemas/OfferedAvailabilityZone
     MachineType:
       $ref: ./machine-types.yaml#/components/schemas/MachineType
     MachineTypeListResponseBody:
@@ -387,6 +375,22 @@ components:
       $ref: ./peerings.yaml#/components/schemas/UpdatePeeringRequestBody
     PeeringOperation:
       $ref: ./peerings.yaml#/components/schemas/PeeringOperation
+    PrivateImageResource:
+      $ref: ./private-images.yaml#/components/schemas/PrivateImageResource
+    PrivateImageListResponseBody:
+      $ref: ./private-images.yaml#/components/schemas/PrivateImageListResponseBody
+    CreatePrivateImageRequestBody:
+      $ref: ./private-images.yaml#/components/schemas/CreatePrivateImageRequestBody
+    UpdatePrivateImageRequestBody:
+      $ref: ./private-images.yaml#/components/schemas/UpdatePrivateImageRequestBody
+    CreatePrivateImageResponseBody:
+      $ref: ./private-images.yaml#/components/schemas/CreatePrivateImageResponseBody
+    PrivateImageOperation:
+      $ref: ./private-images.yaml#/components/schemas/PrivateImageOperation
+    PublicImageResource:
+      $ref: ./public-images.yaml#/components/schemas/PublicImageResource
+    PublicImageListResponseBody:
+      $ref: ./public-images.yaml#/components/schemas/PublicImageListResponseBody
     QuotaResourceType:
       $ref: ./quotas.yaml#/components/schemas/QuotaResourceType
     QuotaSource:
@@ -459,6 +463,8 @@ components:
       $ref: ./subnets.yaml#/components/schemas/CreateSubnetRequestBody
     UpdateSubnetRequestBody:
       $ref: ./subnets.yaml#/components/schemas/UpdateSubnetRequestBody
+    ConsoleOutputResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/ConsoleOutputResponseBody
     VirtualMachine:
       $ref: ./virtual-machines.yaml#/components/schemas/VirtualMachine
     VirtualMachineListResponseBody:
@@ -467,8 +473,6 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineRequestBody
     UpdateVirtualMachineRequestBody:
       $ref: ./virtual-machines.yaml#/components/schemas/UpdateVirtualMachineRequestBody
-    UpdateVirtualMachineResponseBody:
-      $ref: ./virtual-machines.yaml#/components/schemas/UpdateVirtualMachineResponseBody
     CreateVirtualMachineRebootRequestBody:
       $ref: ./virtual-machines.yaml#/components/schemas/CreateVirtualMachineRebootRequestBody
     CreateVirtualMachineCommandRequestBody:
@@ -491,6 +495,8 @@ components:
       $ref: ./virtual-machines.yaml#/components/schemas/BootDisk
     ExistingBootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/ExistingBootDisk
+    UpdateVirtualMachineResponseBody:
+      $ref: ./virtual-machines.yaml#/components/schemas/UpdateVirtualMachineResponseBody
     NewBootDisk:
       $ref: ./virtual-machines.yaml#/components/schemas/NewBootDisk
     NewElasticIP:

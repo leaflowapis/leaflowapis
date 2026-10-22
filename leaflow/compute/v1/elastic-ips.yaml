@@ -164,6 +164,57 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ElasticIP'
+  /api/v1/elastic-ips/{elasticIpId}/traffic-usage:
+    get:
+      summary: List the traffic an elastic IP sent
+      description: |-
+        The bytes and packets the elastic IP's address sent upstream while the elastic IP held it, summed by hour or by day in UTC over `[start_time, end_time)`. Only intervals with traffic are listed. Inbound traffic is not measured.
+
+        Traffic is reported by the region's collectors and appears some minutes after it is sent. Every elastic IP's traffic is shown, whatever it is billed by; only one billed by traffic is charged for it. A span longer than 31 days by hour, or 366 days by day, is refused with `TRAFFIC_USAGE_QUERY_INVALID`.
+      operationId: list-elastic-ip-traffic-usage
+      tags:
+      - elastic-ips
+      parameters:
+      - name: elasticIpId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
+      - name: interval
+        in: query
+        schema:
+          type: string
+          enum:
+          - hour
+          - day
+          default: hour
+      - name: start_time
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - name: end_time
+        in: query
+        required: true
+        schema:
+          type: string
+          format: date-time
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TrafficUsageListResponseBody'
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
   /api/v1/elastic-ips/{elasticIpId}/association:
     get:
       summary: Retrieve the association of an elastic IP
@@ -267,8 +318,9 @@ components:
       type: string
       description: What the network subscription of an elastic IP charges for. `bandwidth` charges for the bandwidth
         ceiling, prepaid for a period or by the Mbit/s-second while the address is associated. `traffic` charges for the
-        bytes the address sends; it is reserved and refused with `ELASTIC_IP_TRAFFIC_UNAVAILABLE` until traffic is
-        metered.
+        bytes the address sends upstream, pay-as-you-go only, while the bandwidth is only a ceiling; it is refused with
+        `ELASTIC_IP_TRAFFIC_UNAVAILABLE` on a line whose `traffic_sale_status` is `off_sale`. Inbound traffic is never
+        charged.
       enum:
       - bandwidth
       - traffic
@@ -433,6 +485,40 @@ components:
       - failure_reason
       - operation
       - association
+      additionalProperties: false
+    TrafficUsage:
+      description: The traffic an elastic IP sent in one interval.
+      type: object
+      properties:
+        start_time:
+          description: The start of the interval, in UTC.
+          type: string
+          format: date-time
+        egress_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        egress_packets:
+          type: integer
+          format: int64
+          minimum: 0
+      required:
+      - start_time
+      - egress_bytes
+      - egress_packets
+      additionalProperties: false
+    TrafficUsageListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TrafficUsage'
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+      - items
+      - pagination
       additionalProperties: false
     ElasticIPListResponseBody:
       type: object

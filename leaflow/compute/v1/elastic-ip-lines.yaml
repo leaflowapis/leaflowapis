@@ -118,6 +118,13 @@ components:
           enum:
           - on_sale
           - off_sale
+        traffic_sale_status:
+          description: Whether an elastic IP of this line can be bought with `internet_charge_type` `traffic`, billed by
+            the bytes it sends. `off_sale` refuses that with `ELASTIC_IP_TRAFFIC_UNAVAILABLE`.
+          type: string
+          enum:
+          - on_sale
+          - off_sale
         created_at:
           type: string
           format: date-time
@@ -135,6 +142,7 @@ components:
       - max_bandwidth_mbps
       - bandwidth_step_mbps
       - sale_status
+      - traffic_sale_status
       - created_at
       - updated_at
       additionalProperties: false
