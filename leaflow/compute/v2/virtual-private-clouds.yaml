@@ -139,48 +139,29 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}/ipv6:
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}:enableIpv6:
     parameters:
     - name: virtualPrivateCloudId
       in: path
       required: true
       schema:
         $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
-    get:
-      summary: Get the IPv6 prefix of a virtual private cloud
-      description: Refused with `VIRTUAL_PRIVATE_CLOUD_IPV6_NOT_ENABLED` while IPv6 is not enabled.
-      operationId: get-virtual-private-cloud-ipv6
-      tags:
-      - virtual-private-clouds
-      responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VirtualPrivateCloudIPv6'
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: ../../type/v1/error.yaml#/components/schemas/Error
-    put:
+    post:
       summary: Enable IPv6 on a virtual private cloud
       description: |-
-        Delegates and routes a /64 prefix to the virtual private cloud and creates its IPv6 subnet. It requires no elastic IP or NAT gateway: IPv6 is routed, not translated. Virtual machines receive an address from the prefix when their network interface is created; addresses cannot be requested or released individually, and security groups apply to them as to IPv4.
+        Gives the virtual private cloud a /56 that is routed to it, and every subnet of it a /64 of that /56; a subnet created afterwards takes its /64 at creation. It requires no elastic IP or NAT gateway: IPv6 is routed, not translated. A network interface created afterwards receives an address of its subnet's /64; addresses cannot be requested or released individually, and security groups apply to them as to IPv4. An interface created before IPv6 was enabled keeps only its IPv4 address.
 
-        Enabling IPv6 that is already enabled returns the current prefix.
-      operationId: put-virtual-private-cloud-ipv6
+        Enabling IPv6 that is already enabled answers with the virtual private cloud as it is.
+      operationId: enable-virtual-private-cloud-ipv6
       tags:
       - virtual-private-clouds
       responses:
         '202':
-          description: Enabling IPv6 was accepted.
+          description: Enabling IPv6 was accepted; `ipv6_cidr` names the /56 at once.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VirtualPrivateCloudIPv6'
+                $ref: '#/components/schemas/VirtualPrivateCloud'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -189,16 +170,27 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-    delete:
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}:disableIpv6:
+    parameters:
+    - name: virtualPrivateCloudId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+    post:
       summary: Disable IPv6 on a virtual private cloud
-      description: Removes the IPv6 subnet and returns the prefix. Refused while a network interface still holds an
-        IPv6 address. A returned prefix is never handed out again.
-      operationId: delete-virtual-private-cloud-ipv6
+      description: Removes the IPv6 of every subnet and gives the /56 back. Refused while a network interface remains in
+        the virtual private cloud, since its IPv6 address would stop working with nothing reporting it.
+      operationId: disable-virtual-private-cloud-ipv6
       tags:
       - virtual-private-clouds
       responses:
         '202':
           description: Disabling IPv6 was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualPrivateCloud'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -256,7 +248,8 @@ components:
         cidr:
           type: string
         ipv6_cidr:
-          description: The /64 prefix routed to the network, null while IPv6 is not enabled.
+          description: The /56 routed to the virtual private cloud, from which each of its subnets takes a /64; null
+            while IPv6 is not enabled.
           type:
           - string
           - 'null'
@@ -355,19 +348,6 @@ components:
           minLength: 1
           maxLength: 128
       minProperties: 1
-      additionalProperties: false
-    VirtualPrivateCloudIPv6:
-      type: object
-      properties:
-        cidr:
-          description: The /64 prefix routed to the virtual private cloud.
-          type: string
-        subnet_id:
-          description: The IPv6 subnet carrying the prefix.
-          $ref: ./identifiers.yaml#/components/schemas/SubnetID
-      required:
-      - cidr
-      - subnet_id
       additionalProperties: false
     FreeSubnetCidr:
       type: object

@@ -2,8 +2,8 @@ paths:
   /api/v2/disk-types:
     get:
       summary: List disk types on sale
-      description: Only disk types currently on sale are listed. Any of them boots a virtual machine, holds data or takes
-        a restore. A withdrawn one disappears from here and can no longer be bought, while the disks already on it keep
+      description: Disk types on sale are listed, and sold-out ones with `sale_status` `sold_out`. Any of them boots a
+        virtual machine of its zone, holds data or takes a restore. A withdrawn one disappears from here and can no longer be bought, while the disks already on it keep
         working and can still be resized.
       operationId: list-disk-types
       security:
@@ -21,7 +21,7 @@ paths:
       - name: availability_zone_id
         in: query
         required: false
-        description: Return only the types sold in this availability zone, sold out there or not.
+        description: Return only the types of this availability zone, sold out or not.
         explode: false
         schema:
           $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
@@ -75,12 +75,17 @@ components:
     DiskTypeResource:
       type: object
       properties:
-        availability_zones:
-          description: The availability zones of its region the type is sold in. A disk is created in one of them, and
-            only a virtual machine in the same zone can attach it.
-          type: array
-          items:
-            $ref: ./availability-zones.yaml#/components/schemas/OfferedAvailabilityZone
+        availability_zone_id:
+          description: The availability zone the type belongs to, where a disk of it is created; only a virtual
+            machine of the same zone can attach it.
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        sale_status:
+          description: '`sold_out` takes no new orders for now while the type stays listed; the disks already of it keep
+            working.'
+          type: string
+          enum:
+          - on_sale
+          - sold_out
         id:
           $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
         max_size_gb:
@@ -114,7 +119,8 @@ components:
       - name
       - media
       - region_id
-      - availability_zones
+      - availability_zone_id
+      - sale_status
       - min_size_gb
       - max_size_gb
       - step_gb

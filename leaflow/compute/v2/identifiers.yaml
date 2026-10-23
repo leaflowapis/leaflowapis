@@ -28,6 +28,12 @@ components:
       minLength: 30
       maxLength: 30
       pattern: ^vpc_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+    VirtualPrivateCloudIDOrWildcard:
+      description: A virtual private cloud identifier, or `-` to read across every virtual private cloud of the
+        project (AIP-159).
+      type: string
+      pattern: ^(?:-|vpc_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25})$
+      example: '-'
     ElasticIPID:
       description: The public eip resource identifier. Only this fixed TypeID prefix is accepted; UUID text is not
         an alternative representation.
@@ -77,11 +83,11 @@ components:
       maxLength: 35
       pattern: ^disktype_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute DiskType TypeID. UUID text is not accepted.
-    SnapshotID:
+    DiskSnapshotID:
       type: string
       minLength: 35
       maxLength: 35
-      pattern: ^snapshot_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      pattern: ^disksnapshot_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute Snapshot TypeID. UUID text is not accepted.
     VirtualMachineDiskID:
       type: string
@@ -113,6 +119,12 @@ components:
       maxLength: 29
       pattern: ^sg_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute SecurityGroup TypeID. UUID text is not accepted.
+    SecurityGroupIDOrWildcard:
+      description: A security group identifier, or `-` to read across every security group of the project
+        (AIP-159).
+      type: string
+      pattern: ^(?:-|sg_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25})$
+      example: '-'
     SubnetID:
       type: string
       minLength: 33
@@ -131,17 +143,17 @@ components:
       maxLength: 32
       pattern: ^oplog_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute OperationLog TypeID. UUID text is not accepted.
-    PeeringID:
+    VirtualPrivateCloudPeeringID:
       type: string
       minLength: 34
       maxLength: 34
-      pattern: ^peering_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      pattern: ^vpcpeering_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute Peering TypeID. UUID text is not accepted.
-    RouteID:
+    VirtualPrivateCloudRouteID:
       type: string
       minLength: 32
       maxLength: 32
-      pattern: ^route_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      pattern: ^vpcroute_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute Route TypeID. UUID text is not accepted.
     SecurityGroupRuleID:
       type: string

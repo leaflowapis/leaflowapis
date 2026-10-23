@@ -99,19 +99,3 @@ components:
       - items
       - pagination
       additionalProperties: false
-    OfferedAvailabilityZone:
-      description: An availability zone a catalog type is sold in. `sold_out` takes no new orders there for now; the
-        resources already there keep working.
-      type: object
-      properties:
-        availability_zone_id:
-          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
-        status:
-          type: string
-          enum:
-          - available
-          - sold_out
-      required:
-      - availability_zone_id
-      - status
-      additionalProperties: false

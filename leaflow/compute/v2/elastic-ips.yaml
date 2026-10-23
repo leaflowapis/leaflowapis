@@ -247,15 +247,16 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-    put:
+  /api/v2/elastic-ips/{elasticIpId}:associate:
+    post:
       summary: Associate an elastic IP with a target
       description: |-
         Points the elastic IP at a target: a virtual machine, which means the primary private IPv4 address of its primary network interface, or a network interface address (`network_interface_address_id`) given directly. Exactly one of `virtual_machine_id` and `network_interface_address_id`. A network interface address must be an assigned, unreleased IPv4 address on a network interface in this project and region; IPv6 addresses are rejected.
 
-        The target becomes what the elastic IP points at. Repeating the request for the target it already points at changes nothing; an elastic IP associated with another target is refused with `ELASTIC_IP_ALREADY_ASSOCIATED` (409), and is moved by deleting the association first, so that the moment traffic stops reaching the old target is one the caller chose. The elastic IP shows the `associate` operation until the association is confirmed, and with a virtual machine as the target that virtual machine shows the `associate_elastic_ip` operation as well, so the virtual machine must not have another operation in progress.
+        The target becomes what the elastic IP points at. Repeating the request for the target it already points at changes nothing; an elastic IP associated with another target is refused with `ELASTIC_IP_ALREADY_ASSOCIATED` (409), and is moved by disassociating it first, so that the moment traffic stops reaching the old target is one the caller chose. The elastic IP shows the `associate` operation until the association is confirmed, and with a virtual machine as the target that virtual machine shows the `associate_elastic_ip` operation as well, so the virtual machine must not have another operation in progress.
 
         The elastic IP must be in the same region as the target. With a virtual machine as the target, the elastic IP's `bandwidth_mbps` must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `VIRTUAL_MACHINE_BANDWIDTH_CEILING`.
-      operationId: put-elastic-ip-association
+      operationId: associate-elastic-ip
       tags:
       - elastic-ips
       parameters:
@@ -269,7 +270,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PutElasticIPAssociationRequestBody'
+              $ref: '#/components/schemas/AssociateElasticIPRequestBody'
       responses:
         '202':
           description: The association was accepted.
@@ -285,13 +286,14 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-    delete:
+  /api/v2/elastic-ips/{elasticIpId}:disassociate:
+    post:
       summary: Remove the association of an elastic IP
       description: The address remains held by the project and simply no longer points at any network interface.
         The elastic IP shows the `disassociate` operation until the change is confirmed, and a virtual machine whose primary
         interface it pointed at shows the `disassociate_elastic_ip` operation. Removing an association that does not exist is
         refused with 404 `ELASTIC_IP_NOT_ASSOCIATED`.
-      operationId: delete-elastic-ip-association
+      operationId: disassociate-elastic-ip
       tags:
       - elastic-ips
       parameters:
@@ -628,7 +630,7 @@ components:
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       minProperties: 1
       additionalProperties: false
-    PutElasticIPAssociationRequestBody:
+    AssociateElasticIPRequestBody:
       description: The target an elastic IP points at. Exactly one of the two forms.
       oneOf:
       - $ref: '#/components/schemas/VirtualMachineAssociationTarget'

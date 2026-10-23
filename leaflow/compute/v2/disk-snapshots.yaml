@@ -1,10 +1,10 @@
 paths:
-  /api/v2/snapshots:
+  /api/v2/disk-snapshots:
     get:
       summary: List snapshots
-      operationId: list-snapshots
+      operationId: list-disk-snapshots
       tags:
-      - snapshots
+      - disk-snapshots
       parameters:
       - name: disk_id
         in: query
@@ -21,7 +21,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SnapshotListResponseBody'
+                $ref: '#/components/schemas/DiskSnapshotListResponseBody'
         default:
           description: Error
           content:
@@ -37,22 +37,22 @@ paths:
         as the order is accepted; with deferred checkout it stays `pending` until the customer completes checkout in
         Billing. The source and project quotas are checked before the Checkout Session is created, and a refused
         request creates nothing.\n\nThe snapshot shows the `create` operation from the moment its Checkout Session is created until it is delivered or its checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its deletion with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment."
-      operationId: create-snapshot
+      operationId: create-disk-snapshot
       tags:
-      - snapshots
+      - disk-snapshots
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateSnapshotRequestBody'
+              $ref: '#/components/schemas/CreateDiskSnapshotRequestBody'
       responses:
         '202':
           description: The snapshot and its Checkout Session were created; the snapshot is not taken yet.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateSnapshotResponseBody'
+                $ref: '#/components/schemas/CreateDiskSnapshotResponseBody'
         default:
           description: Error
           content:
@@ -61,25 +61,25 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
-  /api/v2/snapshots/{snapshotId}:
+  /api/v2/disk-snapshots/{diskSnapshotId}:
     get:
       summary: Retrieve a snapshot
-      operationId: get-snapshot
+      operationId: get-disk-snapshot
       tags:
-      - snapshots
+      - disk-snapshots
       parameters:
-      - name: snapshotId
+      - name: diskSnapshotId
         in: path
         required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/DiskSnapshotID
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SnapshotResource'
+                $ref: '#/components/schemas/DiskSnapshotResource'
         default:
           description: Error
           content:
@@ -89,28 +89,28 @@ paths:
     patch:
       summary: Update a snapshot
       description: Changes the name only. A snapshot's source disk and capacity cannot be changed.
-      operationId: update-snapshot
+      operationId: update-disk-snapshot
       tags:
-      - snapshots
+      - disk-snapshots
       parameters:
-      - name: snapshotId
+      - name: diskSnapshotId
         in: path
         required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/DiskSnapshotID
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateSnapshotRequestBody'
+              $ref: '#/components/schemas/UpdateDiskSnapshotRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SnapshotResource'
+                $ref: '#/components/schemas/DiskSnapshotResource'
         default:
           description: Error
           content:
@@ -123,15 +123,15 @@ paths:
         \nA resource whose purchase still awaits checkout or payment is refused with `COMPUTE_PURCHASE_PENDING`; `meta.checkout_session_id` names its Checkout Session and `meta.order_id` its order once checkout created one. Expire the session or cancel the order in Billing instead. A subscribed resource
         is released through its subscription cancellation. Cleanup must be confirmed before metering is stopped; unknown
         cleanup is not proof of release.\n\nWhile subscriptions pay for the snapshot (those in its `release_set`), deleting it cancels them rather than being refused: Compute creates one Billing cancellation for the whole set and answers with it in `cancellation`. `cancellation_mode` chooses when: `immediate` cancels the set now, a licensed subscription being refunded under its terms, and `period_end` keeps the snapshot working until `scheduled_at` and releases it then. Asking again while that cancellation is pending answers with it again, whatever mode is asked for."
-      operationId: delete-snapshot
+      operationId: delete-disk-snapshot
       tags:
-      - snapshots
+      - disk-snapshots
       parameters:
-      - name: snapshotId
+      - name: diskSnapshotId
         in: path
         required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/DiskSnapshotID
       - $ref: ./openapi.yaml#/components/parameters/CancellationMode
       responses:
         '409':
@@ -141,7 +141,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DeleteSnapshotResponseBody'
+                $ref: '#/components/schemas/DeleteDiskSnapshotResponseBody'
         default:
           description: Error
           content:
@@ -150,23 +150,23 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    DeleteSnapshotResponseBody:
+    DeleteDiskSnapshotResponseBody:
       description: The snapshot as it is when the deletion is accepted, and the Billing cancellation that releases it when
         subscriptions pay for it.
       type: object
       properties:
-        snapshot:
-          $ref: '#/components/schemas/SnapshotResource'
+        disk_snapshot:
+          $ref: '#/components/schemas/DiskSnapshotResource'
         cancellation:
           description: The cancellation Compute created for the snapshot's subscriptions; null when none pays for it.
           oneOf:
           - type: 'null'
           - $ref: ./billing-terms.yaml#/components/schemas/BillingCancellation
       required:
-      - snapshot
+      - disk_snapshot
       - cancellation
       additionalProperties: false
-    SnapshotResource:
+    DiskSnapshotResource:
       description: "A snapshot of a disk. Compute project quotas constrain its count; retained storage is metered independently
         of that quota."
       type: object
@@ -180,7 +180,7 @@ components:
         disk_id:
           $ref: ./identifiers.yaml#/components/schemas/DiskID
         id:
-          $ref: ./identifiers.yaml#/components/schemas/SnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/DiskSnapshotID
         name:
           type: string
         region_id:
@@ -204,7 +204,7 @@ components:
         operation:
           description: The operation in progress on this snapshot, or null when none is.
           anyOf:
-          - $ref: '#/components/schemas/SnapshotOperation'
+          - $ref: '#/components/schemas/DiskSnapshotOperation'
           - type: 'null'
           readOnly: true
         failure_reason:
@@ -274,7 +274,7 @@ components:
       - subscription_id
       - release_set
       additionalProperties: false
-    SnapshotListResponseBody:
+    DiskSnapshotListResponseBody:
       type: object
       properties:
         items:
@@ -282,14 +282,14 @@ components:
           - array
           - 'null'
           items:
-            $ref: '#/components/schemas/SnapshotResource'
+            $ref: '#/components/schemas/DiskSnapshotResource'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
       - items
       - pagination
       additionalProperties: false
-    CreateSnapshotRequestBody:
+    CreateDiskSnapshotRequestBody:
       description: "Creation configuration for this resource. Compute project quotas and Billing authorization are checked
         independently."
       type: object
@@ -306,7 +306,7 @@ components:
       - disk_id
       - name
       additionalProperties: false
-    UpdateSnapshotRequestBody:
+    UpdateDiskSnapshotRequestBody:
       description: The mutable fields of a snapshot. At least one must be given.
       type: object
       properties:
@@ -316,13 +316,13 @@ components:
           maxLength: 128
       minProperties: 1
       additionalProperties: false
-    SnapshotOperation:
+    DiskSnapshotOperation:
       description: An operation still running on this snapshot. It is not a separate resource; once it finishes, 
         the snapshot's `operation` is null again and the snapshot shows the result.
       type: object
       properties:
         type:
-          description: '`restore`: a disk is being reverted to this snapshot (`create-disk-revert`) or created from it (`create-disk` with `snapshot_id`).'
+          description: '`restore`: a disk is being reverted to this snapshot (`revert-disk`) or created from it (`create-disk` with `disk_snapshot_id`).'
           type: string
           enum:
           - create
@@ -335,12 +335,12 @@ components:
       - type
       - started_at
       additionalProperties: false
-    CreateSnapshotResponseBody:
+    CreateDiskSnapshotResponseBody:
       type: object
       description: The new snapshot, `pending` until its order is accepted, and its Checkout Session.
       properties:
-        snapshot:
-          $ref: '#/components/schemas/SnapshotResource'
+        disk_snapshot:
+          $ref: '#/components/schemas/DiskSnapshotResource'
         checkout_session_id:
           description: The Billing Checkout Session of this purchase. With deferred checkout, the customer completes it
             in Billing.
@@ -353,7 +353,7 @@ components:
           - 'null'
           format: uuid
       required:
-      - snapshot
+      - disk_snapshot
       - checkout_session_id
       - order_id
       additionalProperties: false

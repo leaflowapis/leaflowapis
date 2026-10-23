@@ -334,9 +334,9 @@ components:
           type: string
           maxLength: 1024
         machine_type_id:
+          description: The machine type, which also names the availability zone a virtual machine of the version is
+            created in.
           $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
-        availability_zone_id:
-          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
         boot_disk:
           $ref: '#/components/schemas/LaunchTemplateBootDisk'
         data_disks:
@@ -372,10 +372,6 @@ components:
         machine_type_id:
           anyOf:
           - $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
-          - type: 'null'
-        availability_zone_id:
-          anyOf:
-          - $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
           - type: 'null'
         boot_disk:
           anyOf:
@@ -413,7 +409,6 @@ components:
       - version
       - description
       - machine_type_id
-      - availability_zone_id
       - boot_disk
       - data_disks
       - network_interface

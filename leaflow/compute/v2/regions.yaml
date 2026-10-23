@@ -70,7 +70,7 @@ components:
           type: string
         id:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
-        snapshot_billing:
+        disk_snapshot_billing:
           description: The line every snapshot in this region is, metered on the size it stores.
           allOf:
           - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
@@ -87,7 +87,7 @@ components:
       - name
       - country_code
       - id
-      - snapshot_billing
+      - disk_snapshot_billing
       - disk_backup_billing
       - private_image_billing
       additionalProperties: false

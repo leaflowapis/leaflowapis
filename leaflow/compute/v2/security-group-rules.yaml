@@ -1,16 +1,17 @@
 paths:
-  /api/v2/security-group-rules:
+  /api/v2/security-groups/{securityGroupId}/rules:
     get:
       summary: List security group rules
+      description: The rules of the security group, or with `-` those of every security group of the project.
       operationId: list-security-group-rules
       tags:
       - security-group-rules
       parameters:
-      - name: security_group_id
-        in: query
-        description: Only rules of this security group.
+      - name: securityGroupId
+        in: path
+        required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupIDOrWildcard
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -34,6 +35,12 @@ paths:
       operationId: create-security-group-rule
       tags:
       - security-group-rules
+      parameters:
+      - name: securityGroupId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
       requestBody:
         required: true
         content:
@@ -53,8 +60,13 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/security-group-rules/{securityGroupRuleId}:
+  /api/v2/security-groups/{securityGroupId}/rules/{securityGroupRuleId}:
     parameters:
+    - name: securityGroupId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
     - name: securityGroupRuleId
       in: path
       required: true
@@ -169,8 +181,6 @@ components:
     CreateSecurityGroupRuleRequestBody:
       type: object
       properties:
-        security_group_id:
-          $ref: ./identifiers.yaml#/components/schemas/SecurityGroupID
         direction:
           $ref: '#/components/schemas/SecurityGroupRuleDirection'
         ip_version:
@@ -200,7 +210,6 @@ components:
           type: string
           maxLength: 255
       required:
-      - security_group_id
       - direction
       - ip_version
       additionalProperties: false

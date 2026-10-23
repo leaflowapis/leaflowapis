@@ -2,8 +2,9 @@ paths:
   /api/v2/machine-types:
     get:
       summary: List machine types on sale
-      description: Only machine types currently on sale are listed. A withdrawn one disappears from here
-        and can no longer be ordered, while the virtual machines already running it keep running.
+      description: Machine types on sale are listed, and sold-out ones with `sale_status` `sold_out`. A withdrawn
+        one disappears from here and can no longer be ordered, while the virtual machines already running it keep
+        running.
       operationId: list-machine-types
       security:
       - {}
@@ -20,7 +21,7 @@ paths:
       - name: availability_zone_id
         in: query
         required: false
-        description: Return only the types sold in this availability zone, sold out there or not.
+        description: Return only the types of this availability zone, sold out or not.
         explode: false
         schema:
           $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
@@ -42,7 +43,7 @@ paths:
   /api/v2/machine-types/{machineTypeId}:
     get:
       summary: Get a machine type
-      description: Returns only an on-sale machine type, under the same access rules as listing. Off-sale, retired
+      description: Returns a machine type on sale or sold out, under the same access rules as listing. Off-sale, retired
         or absent types return 404.
       operationId: get-machine-type
       security:
@@ -74,12 +75,17 @@ components:
     MachineType:
       type: object
       properties:
-        availability_zones:
-          description: The availability zones of its region the type is sold in. A virtual machine is created in one of
-            them, and a resize stays in the virtual machine's zone, so the target type has to be sold there.
-          type: array
-          items:
-            $ref: ./availability-zones.yaml#/components/schemas/OfferedAvailabilityZone
+        availability_zone_id:
+          description: The availability zone the type belongs to, where a virtual machine of it is created. A resize stays in the virtual
+            machine's zone, so the target type has to be one of the same zone.
+          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
+        sale_status:
+          description: '`sold_out` takes no new orders for now while the type stays listed; the virtual machines already of it keep
+            working.'
+          type: string
+          enum:
+          - on_sale
+          - sold_out
         cpu_vendor:
           description: Who makes the CPU the type runs on.
           type: string
@@ -132,7 +138,8 @@ components:
       - vcpus
       - ram_mb
       - region_id
-      - availability_zones
+      - availability_zone_id
+      - sale_status
       - cpu_vendor
       - cpu_model
       - cpu_tier

@@ -1,18 +1,19 @@
 paths:
-  /api/v2/subnets:
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}/subnets:
     get:
       summary: List subnets
-      description: IPv6 subnets are included, with `ip_version` 6. One is created when IPv6 is enabled on its virtual
-        private cloud and goes away when IPv6 is disabled; it cannot be created or deleted on its own.
-      operationId: list-subnets
+      description: The subnets of the virtual private cloud, or with `-` those of every virtual private cloud of the
+        project. A subnet is dual-stack once IPv6 is enabled on its virtual private cloud, which gives every subnet a
+        /64 of the cloud's /56.
+      operationId: list-virtual-private-cloud-subnets
       tags:
-      - subnets
+      - virtual-private-cloud-subnets
       parameters:
-      - name: virtual_private_cloud_id
-        in: query
-        description: Only subnets of this virtual private cloud.
+      - name: virtualPrivateCloudId
+        in: path
+        required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudIDOrWildcard
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
       - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -21,7 +22,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SubnetListResponseBody'
+                $ref: '#/components/schemas/VirtualPrivateCloudSubnetListResponseBody'
         default:
           description: Error
           content:
@@ -30,32 +31,45 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     post:
       summary: Create a subnet
-      description: Creates an IPv4 subnet. The CIDR must fall inside the virtual private cloud's CIDR and must not
-        overlap another subnet of it. To find a free CIDR, read the virtual private cloud's `free-subnet-cidr`.
-      operationId: create-subnet
+      description: The IPv4 CIDR must fall inside the virtual private cloud's CIDR and must not overlap another subnet
+        of it; to find a free one, read the virtual private cloud's `free-subnet-cidr`. In a virtual private cloud with
+        IPv6 enabled the subnet also takes the lowest free /64 of the cloud's /56, refused with 409
+        `VIRTUAL_PRIVATE_CLOUD_SUBNET_IPV6_CIDR_EXHAUSTED` when none is left.
+      operationId: create-virtual-private-cloud-subnet
       tags:
-      - subnets
+      - virtual-private-cloud-subnets
+      parameters:
+      - name: virtualPrivateCloudId
+        in: path
+        required: true
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateSubnetRequestBody'
+              $ref: '#/components/schemas/CreateVirtualPrivateCloudSubnetRequestBody'
       responses:
         '201':
           description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Subnet'
+                $ref: '#/components/schemas/VirtualPrivateCloudSubnet'
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/subnets/{subnetId}:
+  /api/v2/virtual-private-clouds/{virtualPrivateCloudId}/subnets/{subnetId}:
     parameters:
+    - name: virtualPrivateCloudId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
     - name: subnetId
       in: path
       required: true
@@ -63,16 +77,16 @@ paths:
         $ref: ./identifiers.yaml#/components/schemas/SubnetID
     get:
       summary: Get a subnet
-      operationId: get-subnet
+      operationId: get-virtual-private-cloud-subnet
       tags:
-      - subnets
+      - virtual-private-cloud-subnets
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Subnet'
+                $ref: '#/components/schemas/VirtualPrivateCloudSubnet'
         default:
           description: Error
           content:
@@ -83,22 +97,22 @@ paths:
       summary: Update a subnet
       description: Only the name can change. The CIDR is fixed for the subnet's life, because addresses already handed
         out inside it would fall outside a changed range.
-      operationId: update-subnet
+      operationId: update-virtual-private-cloud-subnet
       tags:
-      - subnets
+      - virtual-private-cloud-subnets
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateSubnetRequestBody'
+              $ref: '#/components/schemas/UpdateVirtualPrivateCloudSubnetRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Subnet'
+                $ref: '#/components/schemas/VirtualPrivateCloudSubnet'
         default:
           description: Error
           content:
@@ -108,10 +122,10 @@ paths:
     delete:
       summary: Delete a subnet
       description: Refused while network interfaces remain in the subnet, or while a static route has a next hop
-        inside its CIDR. An IPv6 subnet is removed by disabling IPv6 on its virtual private cloud.
-      operationId: delete-subnet
+        inside its CIDR. Its /64 goes back to the virtual private cloud's /56.
+      operationId: delete-virtual-private-cloud-subnet
       tags:
-      - subnets
+      - virtual-private-cloud-subnets
       responses:
         '204':
           description: No Content
@@ -123,7 +137,7 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    Subnet:
+    VirtualPrivateCloudSubnet:
       type: object
       properties:
         id:
@@ -132,16 +146,23 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         name:
           type: string
-        ip_version:
-          type: integer
-          format: int64
-          enum:
-          - 4
-          - 6
         cidr:
+          description: The subnet's IPv4 range.
           type: string
         gateway_ip:
-          description: The subnet's gateway address, null for an IPv6 subnet, which is routed rather than gatewayed.
+          description: The IPv4 gateway address of the subnet.
+          type:
+          - string
+          - 'null'
+        ipv6_cidr:
+          description: The subnet's /64, from the virtual private cloud's /56; null while IPv6 is not enabled on the
+            virtual private cloud. A network interface created in the subnet takes an address of it that is never
+            handed out again within the subnet.
+          type:
+          - string
+          - 'null'
+        ipv6_gateway_ip:
+          description: The IPv6 gateway address of the subnet, the first address of its /64; null without IPv6.
           type:
           - string
           - 'null'
@@ -155,30 +176,29 @@ components:
       - id
       - virtual_private_cloud_id
       - name
-      - ip_version
       - cidr
       - gateway_ip
+      - ipv6_cidr
+      - ipv6_gateway_ip
       - created_at
       - updated_at
       additionalProperties: false
-    SubnetListResponseBody:
+    VirtualPrivateCloudSubnetListResponseBody:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Subnet'
+            $ref: '#/components/schemas/VirtualPrivateCloudSubnet'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
       - items
       - pagination
       additionalProperties: false
-    CreateSubnetRequestBody:
+    CreateVirtualPrivateCloudSubnetRequestBody:
       type: object
       properties:
-        virtual_private_cloud_id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         name:
           type: string
           minLength: 1
@@ -189,11 +209,10 @@ components:
           minLength: 1
           maxLength: 32
       required:
-      - virtual_private_cloud_id
       - name
       - cidr
       additionalProperties: false
-    UpdateSubnetRequestBody:
+    UpdateVirtualPrivateCloudSubnetRequestBody:
       type: object
       properties:
         name:

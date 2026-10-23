@@ -38,13 +38,13 @@ paths:
 
         Creation starts once Billing accepts the order: the virtual machine stays `pending` with the `create` operation while it is created, then becomes `active`. With automatic checkout, insufficient funds refuse the request and nothing is created. With deferred checkout, the virtual machines stay `pending` until the customer completes checkout in Billing and the order is paid; an expired Checkout Session, or a canceled or expired order, leaves them `failed` with `checkout_expired`, `order_canceled` or `order_expired`. Do not submit another creation request after paying. After an uncertain response, look the Checkout Session up in Billing before submitting again.
 
-        The virtual machines are created in `availability_zone_id`, which the machine type has to be sold in (`availability_zones` of the machine type; otherwise 404 `MACHINE_TYPE_AVAILABILITY_ZONE_NOT_FOUND`), and so does the disk type of a new system disk (404 `DISK_TYPE_AVAILABILITY_ZONE_NOT_FOUND`). The zone has to have room for all of them, checked before anything is ordered: refused with 409 `MACHINE_TYPE_SOLD_OUT` or `DISK_TYPE_SOLD_OUT` when the type takes no new orders there for now, `MACHINE_TYPE_CAPACITY_REACHED` or `DISK_TYPE_CAPACITY_REACHED` when what is sold there is used up, `MACHINE_TYPE_NO_HOST_ROOM` when no host there can take the machine, and `DISK_TYPE_NO_POOL_ROOM` when the storage there cannot take the system disk. Two orders placed at the same moment can both pass; a virtual machine that finds the zone full when its order is accepted is not created and is refunded, ending `failed` with `provisioning_failed`.
+        The virtual machines are created in the availability zone of their machine type, and the disks bought with them have to be of disk types of that zone (422 `DISK_TYPE_OTHER_AVAILABILITY_ZONE`). The types have to have room for all of them, checked before anything is ordered: refused with 409 `MACHINE_TYPE_SOLD_OUT` or `DISK_TYPE_SOLD_OUT` when a type takes no new orders for now, `MACHINE_TYPE_CAPACITY_REACHED` or `DISK_TYPE_CAPACITY_REACHED` when what is sold of it is used up, `MACHINE_TYPE_NO_HOST_ROOM` when no host of the zone can take the machine, and `DISK_TYPE_NO_POOL_ROOM` when the storage of the zone cannot take the system disk. Two orders placed at the same moment can both pass; a virtual machine that finds a type full when its order is accepted is not created and is refunded, ending `failed` with `provisioning_failed`.
 
         Choose an image or existing disk through boot_disk, and exactly one of network_interface_id or subnet_id. Existing network interfaces, boot disks or elastic IPs require count=1. They are not held while the virtual machine is pending; if one is no longer usable when the order is accepted, the virtual machine ends `failed` with `provisioning_failed`. Image boots require boot_disk; existing disks retain their own subscription. Virtual machines, disks and public IPs keep their own subscription items on the same order.
 
         Virtual machines of one request succeed or fail individually. Each virtual machine, with its system disk, network interface and elastic IP, is created or fails as a whole. Virtual machines that were created are kept; each failed virtual machine ends `failed` with `provisioning_failed`, its part of the order is refunded, and the order then ends `partially_completed`. A virtual machine is delivered whole or not at all: when the customer cancels any of its order items before the order is accepted, it is not created, its remaining items are canceled and refunded, and it ends `failed` with `order_canceled`. Each virtual machine is named after this request with a number appended.
 
-        The network is checked before the Checkout Session is created, and a request it refuses orders and charges nothing. It is refused with `VIRTUAL_PRIVATE_CLOUD_UNAVAILABLE` when the virtual private cloud's `status` is not `available`, `SUBNET_UNAVAILABLE` or `SECURITY_GROUP_UNAVAILABLE` when the subnet or a security group is not ready, `SECURITY_GROUP_OTHER_VIRTUAL_PRIVATE_CLOUD` when a security group belongs to another virtual private cloud, and `NETWORK_INTERFACE_UNAVAILABLE` when the port's `status` is not `available`. `meta` names the resource.
+        The network is checked before the Checkout Session is created, and a request it refuses orders and charges nothing. It is refused with `VIRTUAL_PRIVATE_CLOUD_UNAVAILABLE` when the virtual private cloud's `status` is not `available`, `VIRTUAL_PRIVATE_CLOUD_SUBNET_UNAVAILABLE` or `SECURITY_GROUP_UNAVAILABLE` when the subnet or a security group is not ready, `SECURITY_GROUP_OTHER_VIRTUAL_PRIVATE_CLOUD` when a security group belongs to another virtual private cloud, and `NETWORK_INTERFACE_UNAVAILABLE` when the port's `status` is not `available`. `meta` names the resource.
 
         Each virtual machine shows the `create` operation from the moment the Checkout Session is created until it is delivered or the checkout or order ends. Every other operation on it is refused with `COMPUTE_RESOURCE_BUSY` meanwhile, and its release with `COMPUTE_PURCHASE_PENDING` while its purchase awaits checkout or payment.
       operationId: create-virtual-machine
@@ -102,22 +102,15 @@ paths:
     patch:
       summary: Update a virtual machine
       description: |-
-        Changes the descriptive fields (`name`, `labels`, `notes`) or one operational field (`power_state` or `machine_type_id`). All fields are optional and at least one is required.
+        Changes the descriptive fields (`name`, `labels`, `notes`) or the operational field `machine_type_id`. All fields are optional and at least one is required. Starting and stopping are the `:start` and `:stop` methods.
 
-        `power_state` and `machine_type_id` are operational fields: each starts a workflow, and neither can be combined with any other field in the same request, including the other one. Such a request is refused with 422 `UPDATE_FIELDS_COMBINED`, because a rename that committed beside a change that was then refused would leave the request half applied. `checkout` and `proration_date` belong to the purchase of the `machine_type_id` change and are accepted only together with it.
+        `machine_type_id` starts a workflow and cannot be combined with any other field in the same request. Such a request is refused with 422 `UPDATE_FIELDS_COMBINED`, because a rename that committed beside a change that was then refused would leave the request half applied. `checkout` and `proration_date` belong to the purchase of the `machine_type_id` change and are accepted only together with it.
 
         **Descriptive fields** are not operations and are accepted at any time, whatever the virtual machine is doing. The request returns 200 with `checkout_session_id` and `order_id` null.
 
         - `name` changes the display name only. The hostname inside the virtual machine is unchanged; it equals the virtual machine id.
         - `labels` records what this virtual machine is for, as key-value pairs. Nothing on the platform reads them. **The whole set is replaced**: whatever is absent from the request is removed, and an empty object clears them all. Do not put credentials here. Labels are visible to platform operators.
         - `notes` is a free-text note about this virtual machine: what it runs, and what to be careful about before touching it. **The whole note is replaced**; send an empty string to clear it. Do not put credentials here. The note is visible to platform operators.
-
-        **`power_state`** is the state the virtual machine should be in, and the request returns 202 with the virtual machine as it is when the request is accepted.
-
-        - `stopped` stops it and **releases its host**, as on AWS and Alibaba Cloud: a stopped virtual machine keeps its disks, network interfaces, addresses and quota, holds no vCPU or memory, and is not charged for compute. It shows the `stop` operation until it is stopped.
-        - `running` starts it, placing it on a host of its availability zone again; outstanding restrictions can prevent starting. When no host of the zone has room for it now, the request is refused with 409 `VIRTUAL_MACHINE_START_NO_HOST_ROOM` and the virtual machine stays stopped; try again later. Another start can take the room after the request was accepted, and the start then ends with the virtual machine still stopped. It shows the `start` operation until it is running or the start has failed.
-        - Starting connects its disks afresh, so a disk grown while attached runs at the performance of its new size from the next start after a stop. A virtual machine powered off from inside its operating system keeps its host and starts on it again; stop it with `power_state` first for its disks to be connected afresh.
-        - A stopped virtual machine holds no host, so changing `machine_type_id`, rebuilding it, rescuing it and attaching or detaching a network interface are refused with 409 `VIRTUAL_MACHINE_NOT_RUNNING` until it is started. Disks can be attached and detached while it is stopped.
 
         **`machine_type_id`** resizes a running virtual machine, which restarts once during the resize, and returns 202 with the virtual machine and the Checkout Session for the change, including for metered terms. The virtual machine keeps its usage type and period, priced with the target type's matching option; a target type without that option is refused with 409 `BILLING_OPTION_UNAVAILABLE`. The resize starts once Billing accepts the order. Do not submit the change again after paying. After an uncertain response, look the Checkout Session up in Billing before submitting again.
 
@@ -145,8 +138,8 @@ paths:
               schema:
                 $ref: '#/components/schemas/UpdateVirtualMachineResponseBody'
         '202':
-          description: An operation started. For a start or stop the virtual machine as it is now; for a resize the virtual
-            machine, still on its current type, and the Checkout Session for the change.
+          description: A resize started. The virtual machine, still on its current type, and the Checkout Session for the
+            change.
           content:
             application/json:
               schema:
@@ -194,7 +187,69 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/virtual-machines/{virtualMachineId}/commands:
+  /api/v2/virtual-machines/{virtualMachineId}:start:
+    parameters:
+    - name: virtualMachineId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+    post:
+      summary: Start a virtual machine
+      description: |-
+        Places the virtual machine on a host of its availability zone again; outstanding restrictions can prevent starting. When no host of the zone has room for it now, the request is refused with 409 `VIRTUAL_MACHINE_START_NO_HOST_ROOM` and the virtual machine stays stopped; try again later. Another start can take the room after the request was accepted, and the start then ends with the virtual machine still stopped. It shows the `start` operation until it is running or the start has failed.
+
+        Starting connects its disks afresh, so a disk grown while attached runs at the performance of its new size from the next start after a stop. A virtual machine powered off from inside its operating system keeps its host and starts on it again; stop it with `:stop` first for its disks to be connected afresh. Starting a running virtual machine changes nothing.
+      operationId: start-virtual-machine
+      tags:
+      - virtual-machines
+      responses:
+        '202':
+          description: The start was accepted; the virtual machine as it is now.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v2/virtual-machines/{virtualMachineId}:stop:
+    parameters:
+    - name: virtualMachineId
+      in: path
+      required: true
+      schema:
+        $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+    post:
+      summary: Stop a virtual machine
+      description: |-
+        Stops the virtual machine and **releases its host**, as on AWS and Alibaba Cloud: a stopped virtual machine keeps its disks, network interfaces, addresses and quota, holds no vCPU or memory, and is not charged for compute. It shows the `stop` operation until it is stopped. Stopping a stopped virtual machine changes nothing.
+
+        A stopped virtual machine holds no host, so changing `machine_type_id`, rebuilding it, rescuing it and attaching or detaching a network interface are refused with 409 `VIRTUAL_MACHINE_NOT_RUNNING` until it is started. Disks can be attached and detached while it is stopped.
+      operationId: stop-virtual-machine
+      tags:
+      - virtual-machines
+      responses:
+        '202':
+          description: The stop was accepted; the virtual machine as it is now.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VirtualMachine'
+        '409':
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+  /api/v2/virtual-machines/{virtualMachineId}:runCommand:
     post:
       summary: Run a command on a virtual machine
       description: |-
@@ -215,7 +270,7 @@ paths:
         **Do not pass secrets in the command.** Read them from a file on the virtual machine instead: neither the command nor its output is a confidential channel.
 
         Each stream is capped at 1 MiB. Beyond that the rest is discarded and `truncated` is true.
-      operationId: create-virtual-machine-command
+      operationId: run-virtual-machine-command
       tags:
       - virtual-machines
       parameters:
@@ -229,14 +284,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateVirtualMachineCommandRequestBody'
+              $ref: '#/components/schemas/RunVirtualMachineCommandRequestBody'
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateVirtualMachineCommandResponseBody'
+                $ref: '#/components/schemas/RunVirtualMachineCommandResponseBody'
         default:
           description: Error
           content:
@@ -272,8 +327,8 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/virtual-machines/{virtualMachineId}/password:
-    put:
+  /api/v2/virtual-machines/{virtualMachineId}:resetPassword:
+    post:
       summary: Reset the login password
       description: |-
         Sets the password of the login account (`login_username`) without a reboot; root is never given one. The virtual machine must be running.
@@ -281,7 +336,7 @@ paths:
         **Not every image supports this.** Images whose `supports_password_reset` is false cannot, and a new password can then only be set by rebuilding the virtual machine, which erases all data on the system disk.
 
         The request is also rejected when the image is marked as supported but the corresponding component has been removed or stopped inside the virtual machine.
-      operationId: put-virtual-machine-password
+      operationId: reset-virtual-machine-password
       tags:
       - virtual-machines
       parameters:
@@ -302,7 +357,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PutVirtualMachinePasswordResponseBody'
+                $ref: '#/components/schemas/ResetVirtualMachinePasswordResponseBody'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -311,7 +366,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/virtual-machines/{virtualMachineId}/reboots:
+  /api/v2/virtual-machines/{virtualMachineId}:reboot:
     post:
       summary: Reboot a virtual machine
       description: |-
@@ -324,7 +379,7 @@ paths:
         A virtual machine suspended by the platform must be unsuspended first.
 
         The virtual machine shows the `reboot` operation until the reboot has finished.
-      operationId: create-virtual-machine-reboot
+      operationId: reboot-virtual-machine
       tags:
       - virtual-machines
       parameters:
@@ -338,7 +393,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateVirtualMachineRebootRequestBody'
+              $ref: '#/components/schemas/RebootVirtualMachineRequestBody'
       responses:
         '202':
           description: The reboot was accepted.
@@ -354,7 +409,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/virtual-machines/{virtualMachineId}/rebuilds:
+  /api/v2/virtual-machines/{virtualMachineId}:rebuild:
     post:
       summary: Rebuild a virtual machine
       description: |-
@@ -365,7 +420,7 @@ paths:
         The image this virtual machine already runs is accepted even after the platform has withdrawn it, since rebuilding is the only way back into a virtual machine broken from the inside. Any *other* withdrawn image is rejected with `IMAGE_RETIRED`, which is a change of image and therefore a new order.
 
         The virtual machine shows the `rebuild` operation until the rebuild has finished.
-      operationId: create-virtual-machine-rebuild
+      operationId: rebuild-virtual-machine
       tags:
       - virtual-machines
       parameters:
@@ -379,7 +434,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateVirtualMachineRebuildRequestBody'
+              $ref: '#/components/schemas/RebuildVirtualMachineRequestBody'
       responses:
         '202':
           description: The rebuild was accepted. The virtual machine shows the `rebuild` operation until it has
@@ -387,7 +442,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CreateVirtualMachineRebuildResponseBody'
+                $ref: '#/components/schemas/RebuildVirtualMachineResponseBody'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -595,14 +650,14 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/virtual-machines/{virtualMachineId}/rescue:
-    put:
+  /api/v2/virtual-machines/{virtualMachineId}:rescue:
+    post:
       summary: Put a virtual machine into rescue mode
       description: |-
-        Boots a temporary rescue environment while retaining the original system disk. Changing `power_state` or `machine_type_id`, rebuilding and putting a password are unavailable in rescue mode. A stopped virtual machine holds no host and is refused with 409 `VIRTUAL_MACHINE_NOT_RUNNING`; start it first, which works even when its operating system no longer boots.
+        Boots a temporary rescue environment while retaining the original system disk. Starting, stopping, changing `machine_type_id`, rebuilding and resetting the password are unavailable in rescue mode. A stopped virtual machine holds no host and is refused with 409 `VIRTUAL_MACHINE_NOT_RUNNING`; start it first, which works even when its operating system no longer boots.
 
         The request does not name an image. The rescue image is the region's enabled rescue image for the architecture of the virtual machine's system disk. A region and architecture with no enabled rescue image is refused with `RESCUE_IMAGE_NOT_CONFIGURED` (409).
-      operationId: put-virtual-machine-rescue
+      operationId: rescue-virtual-machine
       tags:
       - virtual-machines
       parameters:
@@ -617,7 +672,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PutVirtualMachineRescueResponseBody'
+                $ref: '#/components/schemas/RescueVirtualMachineResponseBody'
         '409':
           $ref: ./openapi.yaml#/components/responses/Conflict
         default:
@@ -631,12 +686,13 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PutVirtualMachineRescueRequestBody'
-    delete:
+              $ref: '#/components/schemas/RescueVirtualMachineRequestBody'
+  /api/v2/virtual-machines/{virtualMachineId}:unrescue:
+    post:
       summary: Take a virtual machine out of rescue mode
       description: Restores boot from the original system disk. Completion is shown by the virtual machine state, and
         the virtual machine shows the `unrescue` operation until then.
-      operationId: delete-virtual-machine-rescue
+      operationId: unrescue-virtual-machine
       tags:
       - virtual-machines
       parameters:
@@ -910,7 +966,7 @@ components:
       additionalProperties: false
     CreateVirtualMachineRequestBody:
       description: |-
-        Every part a launch template can describe may come from `launch_template` instead: a part given here overrides the template's, and `data_disks`, when given, replaces the template's list. After that the machine type, the availability zone, the boot disk and the network interface are required, each refused with 422 `VIRTUAL_MACHINE_CREATE_INVALID` naming the field when neither gives it.
+        Every part a launch template can describe may come from `launch_template` instead: a part given here overrides the template's, and `data_disks`, when given, replaces the template's list. After that the machine type, the boot disk and the network interface are required, each refused with 422 `VIRTUAL_MACHINE_CREATE_INVALID` naming the field when neither gives it.
 
         Every component bought with the virtual machine (its system disk, data disks and elastic IP) shares the usage type and period of `compute.billing`; a component's own `billing` exists to choose a different termination policy, and when omitted it is `compute.billing`.
       type: object
@@ -929,10 +985,6 @@ components:
           default: 1
           minimum: 1
           maximum: 20
-        availability_zone_id:
-          description: The availability zone of the machine type's region the virtual machines are created in. An existing
-            boot disk has to be in it already
-          $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
         compute:
           $ref: '#/components/schemas/NewCompute'
         boot_disk:
@@ -950,7 +1002,7 @@ components:
           description: |-
             An elastic IP associated with the primary network interface **inside the creation**: if association
             fails, no virtual machine is created. Associating afterwards is still possible
-            (`put-elastic-ip-association`), but then it is two operations and a failure in between leaves a virtual
+            (`associate-elastic-ip`), but then it is two operations and a failure in between leaves a virtual
             machine you cannot reach. Omitted, the virtual machine has no public address.
           $ref: '#/components/schemas/VirtualMachineElasticIP'
         password:
@@ -976,9 +1028,9 @@ components:
       additionalProperties: false
     UpdateVirtualMachineRequestBody:
       description: |-
-        The mutable fields of a virtual machine, all optional, at least one required. `power_state` and `machine_type_id`
-        are operational fields: each starts a workflow and cannot be combined with any other field, including the other;
-        such a request is refused with 422 `UPDATE_FIELDS_COMBINED`.
+        The mutable fields of a virtual machine, all optional, at least one required. `machine_type_id` is an operational
+        field: it starts a workflow and cannot be combined with any other field; such a request is refused with 422
+        `UPDATE_FIELDS_COMBINED`.
       type: object
       properties:
         name:
@@ -997,16 +1049,9 @@ components:
           description: The complete note. Send an empty string to clear it
           type: string
           maxLength: 4096
-        power_state:
-          description: The state the virtual machine should be in. `running` starts it and `stopped` stops it. Operational
-            field.
-          type: string
-          enum:
-          - running
-          - stopped
         machine_type_id:
-          description: The machine type to resize to. It has to be on sale, in the virtual machine's region and sold in
-            its availability zone (404 `MACHINE_TYPE_AVAILABILITY_ZONE_NOT_FOUND`), and the zone has to have room for one
+          description: The machine type to resize to. It has to be on sale, in the virtual machine's region and of
+            its availability zone (422 `VIRTUAL_MACHINE_RESIZE_OTHER_AVAILABILITY_ZONE`), and it has to have room for one
             more machine of it (409 `MACHINE_TYPE_SOLD_OUT`, `MACHINE_TYPE_CAPACITY_REACHED` or `MACHINE_TYPE_NO_HOST_ROOM`).
             Operational field; the change is purchased through Billing.
           $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
@@ -1022,7 +1067,7 @@ components:
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
       minProperties: 1
       additionalProperties: false
-    CreateVirtualMachineRebootRequestBody:
+    RebootVirtualMachineRequestBody:
       type: object
       properties:
         force:
@@ -1031,7 +1076,7 @@ components:
           type: boolean
       required: []
       additionalProperties: false
-    CreateVirtualMachineCommandRequestBody:
+    RunVirtualMachineCommandRequestBody:
       type: object
       properties:
         command:
@@ -1048,7 +1093,7 @@ components:
       required:
       - command
       additionalProperties: false
-    CreateVirtualMachineCommandResponseBody:
+    RunVirtualMachineCommandResponseBody:
       type: object
       properties:
         exit_code:
@@ -1085,7 +1130,7 @@ components:
       required:
       - console_url
       additionalProperties: false
-    PutVirtualMachinePasswordResponseBody:
+    ResetVirtualMachinePasswordResponseBody:
       type: object
       properties:
         password:
@@ -1097,7 +1142,7 @@ components:
       required:
       - password
       additionalProperties: false
-    CreateVirtualMachineRebuildRequestBody:
+    RebuildVirtualMachineRequestBody:
       type: object
       properties:
         image_id:
@@ -1111,7 +1156,7 @@ components:
       required:
       - image_id
       additionalProperties: false
-    CreateVirtualMachineRebuildResponseBody:
+    RebuildVirtualMachineResponseBody:
       type: object
       properties:
         virtual_machine:
@@ -1215,7 +1260,8 @@ components:
           enum:
           - disk
         disk_id:
-          description: A prepared boot disk owned by this project, available, unattached and in `availability_zone_id`.
+          description: A prepared boot disk owned by this project, available, unattached and in the machine type's
+            availability zone.
             Only one virtual machine may be created when used.
           $ref: ./identifiers.yaml#/components/schemas/DiskID
         login_username:
@@ -1547,7 +1593,7 @@ components:
       - type
       - started_at
       additionalProperties: false
-    PutVirtualMachineRescueRequestBody:
+    RescueVirtualMachineRequestBody:
       type: object
       properties:
         password:
@@ -1559,7 +1605,7 @@ components:
       required:
       - password
       additionalProperties: false
-    PutVirtualMachineRescueResponseBody:
+    RescueVirtualMachineResponseBody:
       type: object
       properties:
         login_username:
