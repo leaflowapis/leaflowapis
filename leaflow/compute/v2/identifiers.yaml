@@ -85,10 +85,10 @@ components:
       description: Compute DiskType TypeID. UUID text is not accepted.
     DiskSnapshotID:
       type: string
-      minLength: 35
-      maxLength: 35
+      minLength: 39
+      maxLength: 39
       pattern: ^disksnapshot_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
-      description: Compute Snapshot TypeID. UUID text is not accepted.
+      description: Compute DiskSnapshot TypeID. UUID text is not accepted.
     VirtualMachineDiskID:
       type: string
       minLength: 33
@@ -145,16 +145,16 @@ components:
       description: Compute OperationLog TypeID. UUID text is not accepted.
     VirtualPrivateCloudPeeringID:
       type: string
-      minLength: 34
-      maxLength: 34
+      minLength: 37
+      maxLength: 37
       pattern: ^vpcpeering_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
-      description: Compute Peering TypeID. UUID text is not accepted.
+      description: Compute VirtualPrivateCloudPeering TypeID. UUID text is not accepted.
     VirtualPrivateCloudRouteID:
       type: string
-      minLength: 32
-      maxLength: 32
+      minLength: 35
+      maxLength: 35
       pattern: ^vpcroute_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
-      description: Compute Route TypeID. UUID text is not accepted.
+      description: Compute VirtualPrivateCloudRoute TypeID. UUID text is not accepted.
     SecurityGroupRuleID:
       type: string
       minLength: 33
