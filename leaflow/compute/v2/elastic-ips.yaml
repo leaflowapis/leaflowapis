@@ -26,6 +26,8 @@ paths:
       description: |-
         Select an elastic IP line. The elastic IP is bought through a Billing Checkout Session, and no address is allocated before its order is accepted.
 
+        The line has to have an address left, counted before anything is ordered: refused with 409 `ELASTIC_IP_LINE_EXHAUSTED` when every address it sells is held or already promised to a purchase waiting for its order. Two purchases checked at the same moment can both pass on the last address; the later one ends `failed` with `provisioning_failed` and its charge is refunded.
+
         Returns the elastic IP as `pending` with its Checkout Session; `address` is null until the address is allocated after the order is accepted. A requested `address` is not held while pending; if it is no longer available then, the elastic IP ends `failed` with `provisioning_failed` and its charge is refunded.
 
         IPv6 is not requested through this endpoint. IPv6 addresses are assigned to instances by the virtual private cloud; enable IPv6 on that network instead.
