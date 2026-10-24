@@ -83,6 +83,7 @@ class SWASContract(unittest.TestCase):
   size,_=resolve(next(x['$ref'] for x in query if x.get('$ref','').endswith('/PageSize')))
   self.assertEqual(page['schema']['default'],1);self.assertEqual(page['schema']['maximum'],2147483647)
   self.assertEqual(size['schema']['default'],50);self.assertEqual(size['schema']['maximum'],200)
+  self.assertEqual(self.schemas['InstanceList']['properties']['items']['maxItems'],size['schema']['maximum'])
  def test_money_precision(self):
   amount=self.schemas['DecimalAmount'];money,_=resolve(amount['allOf'][0]['$ref']);self.assertEqual(money['type'],'string')
   pattern=amount['allOf'][1]['pattern']
