@@ -1444,8 +1444,8 @@ components:
         line_id:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIPLineID
         bandwidth_mbps:
-          description: Within the line's `min_bandwidth_mbps` and `max_bandwidth_mbps` and a multiple of its
-            `bandwidth_step_mbps`, otherwise refused with `ELASTIC_IP_BANDWIDTH_RANGE`.
+          description: Any whole number of Mbps within the line's `min_bandwidth_mbps` and `max_bandwidth_mbps`,
+            otherwise refused with `ELASTIC_IP_BANDWIDTH_RANGE`.
           type: integer
           format: int64
           minimum: 1

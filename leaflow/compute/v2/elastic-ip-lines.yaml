@@ -111,11 +111,6 @@ components:
             IP associated with an instance is also held to the instance type's `max_bandwidth_mbps`.
           type: integer
           format: int64
-        bandwidth_step_mbps:
-          description: Bandwidth is bought in multiples of this many Mbps, from `min_bandwidth_mbps` to
-            `max_bandwidth_mbps`, both of which are multiples of it too.
-          type: integer
-          format: int64
         sale_status:
           description: '`on_sale` is offered for new elastic IPs; `off_sale` takes none, while the elastic IPs already
             on it keep working.'
@@ -145,7 +140,6 @@ components:
       - internet_billing
       - min_bandwidth_mbps
       - max_bandwidth_mbps
-      - bandwidth_step_mbps
       - sale_status
       - traffic_sale_status
       - created_at
