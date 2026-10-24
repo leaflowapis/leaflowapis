@@ -38,7 +38,11 @@ paths:
       summary: Capture an instance as a private image
       description: "Creates a project image from the instance boot volume, excluding data volumes. Stop the instance
          first for file-system consistency. The instance cannot be released while its source volume is being
-        captured. Compute project quotas are enforced independently of billing.\n\nIt is metered by the hour on a subscription of its own and takes no billing choice. It is bought through a
+        captured. Compute project quotas are enforced independently of billing.\n\nIt is metered on a subscription of its own and takes no billing choice. Each second the image is stored is
+        reported under its region and its `billing_position`: its place among the project's stored private images in
+        the region, counted from the oldest, which moves up whenever an older one is deleted. Billing prices each
+        position, and a position it prices at zero costs nothing; that is how a number of images in each region are
+        free. The image's size does not change what it costs. It is bought through a
         Billing Checkout Session: automatic checkout completes at once for metered pricing and the image is captured as soon
         as the order is accepted; with deferred checkout it stays `pending` until the customer completes checkout in
         Billing. The source and project quotas are checked before the Checkout Session is created, and a refused
@@ -181,7 +185,8 @@ components:
       additionalProperties: false
     PrivateImageResource:
       description: "An image this project captured from one of its instances, used to install instances of
-        this project. Its storage is billed only to this project."
+        this project. Its storage is billed only to this project. Reclaimed for non-payment while instances installed
+        from it remain, it is kept, unusable and no longer charged, and deleted once the last of them is released."
       type: object
       properties:
         id:
@@ -232,9 +237,20 @@ components:
           - string
           - 'null'
         size_bytes:
-          description: "Storage occupied by the project image, in bytes. Zero until the capture reports its size."
+          description: "Storage occupied by the project image, in bytes. Zero until the capture reports its size. It
+            does not change what the image costs."
           type: integer
           format: int64
+        billing_position:
+          description: The `position` the image's storage is reported under now, the price Billing gives that position
+            in the region's `private_image_billing` being what it costs. A number from `1`, its place among this
+            project's stored private images in the region counted from the oldest, which moves up whenever an older
+            one is deleted; `legacy` for an image carried over from the previous version, which takes no position and
+            whose storage is never charged. Null while the image is not stored, before its capture finishes and once
+            it is deleted or failed.
+          type:
+          - string
+          - 'null'
         source_instance_id:
           description: The instance this image was captured from. The image remains usable after that
             instance is released
@@ -299,6 +315,7 @@ components:
           items:
             $ref: ./release-sets.yaml#/components/schemas/ReleaseSetItem
       required:
+      - billing_position
       - id
       - region_id
       - name

@@ -79,7 +79,7 @@ components:
           allOf:
           - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
         private_image_billing:
-          description: The line every private image in this region is, metered on the size it stores.
+          description: The line every private image in this region is, metered each second it is stored under its `billing_position`.
           allOf:
           - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
       required:
