@@ -29,9 +29,9 @@ paths:
     post:
       summary: Create a launch template
       description: |-
-        Creates a launch template with its first version, which becomes its default. A launch template describes how to create virtual machines in one region, and creating a virtual machine can name it (`launch_template`) instead of repeating every part. It costs nothing.
+        Creates a launch template with its first version, which becomes its default. A launch template describes how to create instances in one region, and creating an instance can name it (`launch_template`) instead of repeating every part. It costs nothing.
 
-        A template holds no billing terms, checkout options or password: those belong to each purchase. **What a version names is checked when a virtual machine is created from it**, against the catalog as it is then, so a version naming an image retired since is refused at that creation as any creation would be.
+        A template holds no billing terms, checkout options or password: those belong to each purchase. **What a version names is checked when an instance is created from it**, against the catalog as it is then, so a version naming an image retired since is refused at that creation as any creation would be.
 
         A project holds at most 100 launch templates in a region (`LAUNCH_TEMPLATE_LIMIT`), and names are unique among them (`LAUNCH_TEMPLATE_EXISTS`).
       operationId: create-launch-template
@@ -109,7 +109,7 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
       summary: Delete a launch template
-      description: Deletes the template with every version. Virtual machines created from it are not affected and
+      description: Deletes the template with every version. Instances created from it are not affected and
         keep naming the version they were created from.
       operationId: delete-launch-template
       tags:
@@ -155,7 +155,7 @@ paths:
     post:
       summary: Create a launch template version
       description: Adds a version, numbered after every version the template ever had, so a deleted version's number
-        is never reused. It does not become the default by itself; set `default_version` on the template for that. A
+        is never reused. It does not become the default by itself; set `default_version_number` on the template for that. A
         template holds at most 100 live versions (`LAUNCH_TEMPLATE_VERSION_LIMIT`).
       operationId: create-launch-template-version
       tags:
@@ -179,14 +179,14 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/launch-templates/{launchTemplateId}/versions/{version}:
+  /api/v2/launch-templates/{launchTemplateId}/versions/{versionNumber}:
     parameters:
     - name: launchTemplateId
       in: path
       required: true
       schema:
         $ref: ./identifiers.yaml#/components/schemas/LaunchTemplateID
-    - name: version
+    - name: versionNumber
       in: path
       required: true
       schema:
@@ -240,11 +240,11 @@ components:
           type: string
         description:
           type: string
-        default_version:
+        default_version_number:
           description: The version a creation naming no version uses.
           type: integer
           format: int64
-        latest_version:
+        latest_version_number:
           description: The highest version number the template ever had.
           type: integer
           format: int64
@@ -259,8 +259,8 @@ components:
       - region_id
       - name
       - description
-      - default_version
-      - latest_version
+      - default_version_number
+      - latest_version_number
       - created_at
       - updated_at
       additionalProperties: false
@@ -319,31 +319,31 @@ components:
         description:
           type: string
           maxLength: 1024
-        default_version:
+        default_version_number:
           description: A live version of this template.
           type: integer
           format: int64
           minimum: 1
       additionalProperties: false
     NewLaunchTemplateVersion:
-      description: What a version describes. Every part is optional; a virtual machine created from the version supplies
+      description: What a version describes. Every part is optional; an instance created from the version supplies
         what is left out and may override what is given.
       type: object
       properties:
-        description:
+        version_description:
           type: string
           maxLength: 1024
-        machine_type_id:
-          description: The machine type, which also names the availability zone a virtual machine of the version is
+        instance_type_id:
+          description: The instance type, which also names the availability zone an instance of the version is
             created in.
-          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
-        boot_disk:
-          $ref: '#/components/schemas/LaunchTemplateBootDisk'
-        data_disks:
+          $ref: ./identifiers.yaml#/components/schemas/InstanceTypeID
+        boot_volume:
+          $ref: '#/components/schemas/LaunchTemplateBootVolume'
+        data_volumes:
           type: array
           maxItems: 16
           items:
-            $ref: '#/components/schemas/LaunchTemplateDataDisk'
+            $ref: '#/components/schemas/LaunchTemplateDataVolume'
         network_interface:
           $ref: '#/components/schemas/LaunchTemplateNetworkInterface'
         elastic_ip:
@@ -355,7 +355,7 @@ components:
           additionalProperties:
             type: string
             maxLength: 63
-        notes:
+        description:
           type: string
           maxLength: 4096
       additionalProperties: false
@@ -364,23 +364,23 @@ components:
       properties:
         launch_template_id:
           $ref: ./identifiers.yaml#/components/schemas/LaunchTemplateID
-        version:
+        version_number:
           type: integer
           format: int64
-        description:
+        version_description:
           type: string
-        machine_type_id:
+        instance_type_id:
           anyOf:
-          - $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+          - $ref: ./identifiers.yaml#/components/schemas/InstanceTypeID
           - type: 'null'
-        boot_disk:
+        boot_volume:
           anyOf:
-          - $ref: '#/components/schemas/LaunchTemplateBootDisk'
+          - $ref: '#/components/schemas/LaunchTemplateBootVolume'
           - type: 'null'
-        data_disks:
+        data_volumes:
           type: array
           items:
-            $ref: '#/components/schemas/LaunchTemplateDataDisk'
+            $ref: '#/components/schemas/LaunchTemplateDataVolume'
         network_interface:
           anyOf:
           - $ref: '#/components/schemas/LaunchTemplateNetworkInterface'
@@ -396,7 +396,7 @@ components:
           - 'null'
           additionalProperties:
             type: string
-        notes:
+        description:
           description: Null when the version describes no note.
           type:
           - string
@@ -406,15 +406,15 @@ components:
           format: date-time
       required:
       - launch_template_id
-      - version
-      - description
-      - machine_type_id
-      - boot_disk
-      - data_disks
+      - version_number
+      - version_description
+      - instance_type_id
+      - boot_volume
+      - data_volumes
       - network_interface
       - elastic_ip
       - labels
-      - notes
+      - description
       - created_at
       additionalProperties: false
     LaunchTemplateVersionListResponseBody:
@@ -430,19 +430,19 @@ components:
       - items
       - pagination
       additionalProperties: false
-    LaunchTemplateBootDisk:
-      description: A system disk created from an image for each virtual machine.
+    LaunchTemplateBootVolume:
+      description: A boot volume created from an image for each instance.
       type: object
       properties:
         image_id:
           $ref: ./identifiers.yaml#/components/schemas/ImageID
-        disk_type_id:
-          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
-        size_gb:
+        volume_type_id:
+          $ref: ./identifiers.yaml#/components/schemas/VolumeTypeID
+        size_gib:
           type: integer
           format: int64
           minimum: 1
-        on_virtual_machine_release:
+        on_instance_release:
           type: string
           enum:
           - delete
@@ -450,32 +450,32 @@ components:
           default: delete
       required:
       - image_id
-      - disk_type_id
-      - size_gb
+      - volume_type_id
+      - size_gib
       additionalProperties: false
-    LaunchTemplateDataDisk:
-      description: An empty data disk created with each virtual machine.
+    LaunchTemplateDataVolume:
+      description: An empty data volume created with each instance.
       type: object
       properties:
-        disk_type_id:
-          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
-        size_gb:
+        volume_type_id:
+          $ref: ./identifiers.yaml#/components/schemas/VolumeTypeID
+        size_gib:
           type: integer
           format: int64
           minimum: 1
-        on_virtual_machine_release:
+        on_instance_release:
           type: string
           enum:
           - delete
           - detach
           default: delete
       required:
-      - disk_type_id
-      - size_gb
+      - volume_type_id
+      - size_gib
       additionalProperties: false
     LaunchTemplateNetworkInterface:
-      description: A new primary network interface for each virtual machine. An interface you already hold serves one
-        virtual machine, so a template cannot name one.
+      description: A new primary network interface for each instance. An interface you already hold serves one
+        instance, so a template cannot name one.
       type: object
       properties:
         subnet_id:
@@ -491,8 +491,8 @@ components:
       - security_group_ids
       additionalProperties: false
     LaunchTemplateElasticIP:
-      description: A new elastic IP bought with each virtual machine. An address you already hold serves one virtual
-        machine, so a template cannot name one.
+      description: A new elastic IP bought with each instance. An address you already hold serves one instance,
+        so a template cannot name one.
       type: object
       properties:
         line_id:

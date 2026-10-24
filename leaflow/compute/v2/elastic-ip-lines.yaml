@@ -96,7 +96,7 @@ components:
             address while no network interface holds it.
           allOf:
           - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
-        network_billing:
+        internet_billing:
           description: The network line every elastic IP of this line has, which pays its bandwidth, prepaid or used
             while associated, or its traffic. Metered, the line's quantity is 1 and the bandwidth or the traffic is
             what its meters read, by the elastic IP's `internet_charge_type`.
@@ -108,7 +108,7 @@ components:
           format: int64
         max_bandwidth_mbps:
           description: The most bandwidth an elastic IP of this line can be bought with, in Mbps, at most 1000. An elastic
-            IP associated with a virtual machine is also held to the machine type's `max_bandwidth_mbps`.
+            IP associated with an instance is also held to the instance type's `max_bandwidth_mbps`.
           type: integer
           format: int64
         bandwidth_step_mbps:
@@ -142,7 +142,7 @@ components:
       - name
       - description
       - address_billing
-      - network_billing
+      - internet_billing
       - min_bandwidth_mbps
       - max_bandwidth_mbps
       - bandwidth_step_mbps

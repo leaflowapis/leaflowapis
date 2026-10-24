@@ -128,9 +128,9 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         type:
           $ref: '#/components/schemas/VirtualPrivateCloudRouteType'
-        destination:
+        destination_cidr:
           type: string
-        nexthop:
+        next_hop_address:
           description: The private address traffic is sent to. Null for a peering route, whose next hop is the
             platform's side of the peering link.
           type:
@@ -150,8 +150,8 @@ components:
       - id
       - virtual_private_cloud_id
       - type
-      - destination
-      - nexthop
+      - destination_cidr
+      - next_hop_address
       - virtual_private_cloud_peering_id
       - description
       - created_at
@@ -172,14 +172,14 @@ components:
     CreateVirtualPrivateCloudRouteRequestBody:
       type: object
       properties:
-        destination:
+        destination_cidr:
           description: Destination CIDR. It cannot be `0.0.0.0/0`, nor the CIDR of a subnet of the virtual private
             cloud.
           type: string
           minLength: 1
           maxLength: 32
-        nexthop:
-          description: Private address of a virtual machine, inside a subnet of the virtual private cloud.
+        next_hop_address:
+          description: Private address of an instance, inside a subnet of the virtual private cloud.
           type: string
           minLength: 1
           maxLength: 64
@@ -187,6 +187,6 @@ components:
           type: string
           maxLength: 255
       required:
-      - destination
-      - nexthop
+      - destination_cidr
+      - next_hop_address
       additionalProperties: false

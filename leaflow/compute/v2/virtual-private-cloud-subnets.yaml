@@ -146,10 +146,10 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudID
         name:
           type: string
-        cidr:
+        ipv4_cidr:
           description: The subnet's IPv4 range.
           type: string
-        gateway_ip:
+        ipv4_gateway_address:
           description: The IPv4 gateway address of the subnet.
           type:
           - string
@@ -161,7 +161,7 @@ components:
           type:
           - string
           - 'null'
-        ipv6_gateway_ip:
+        ipv6_gateway_address:
           description: The IPv6 gateway address of the subnet, the first address of its /64; null without IPv6.
           type:
           - string
@@ -176,10 +176,10 @@ components:
       - id
       - virtual_private_cloud_id
       - name
-      - cidr
-      - gateway_ip
+      - ipv4_cidr
+      - ipv4_gateway_address
       - ipv6_cidr
-      - ipv6_gateway_ip
+      - ipv6_gateway_address
       - created_at
       - updated_at
       additionalProperties: false
@@ -203,14 +203,14 @@ components:
           type: string
           minLength: 1
           maxLength: 128
-        cidr:
+        ipv4_cidr:
           description: An IPv4 CIDR inside the virtual private cloud's CIDR, overlapping no other subnet of it.
           type: string
           minLength: 1
           maxLength: 32
       required:
       - name
-      - cidr
+      - ipv4_cidr
       additionalProperties: false
     UpdateVirtualPrivateCloudSubnetRequestBody:
       type: object

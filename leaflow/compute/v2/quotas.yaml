@@ -68,26 +68,26 @@ paths:
 components:
   schemas:
     QuotaResourceType:
-      description: 'The resource or capacity constrained by a project quota in a region. Platform defaults: virtual_machines=5;
-        vcpus=16; memory_mib=32768; disks=20; disk_gib=500; virtual_private_clouds=3; subnets=20; network_interfaces=20;
+      description: 'The resource or capacity constrained by a project quota in a region. Platform defaults: instances=5;
+        vcpus=16; memory_mib=32768; volumes=20; volume_gib=500; virtual_private_clouds=3; subnets=20; network_interfaces=20;
         elastic_ips=3; security_groups=10; security_group_rules=100; snapshots=20; backups=20; private_images=10.
-        memory_mib is measured in MiB and disk_gib in GiB. A zero limit permits no additional capacity; it is not
+        memory_mib is measured in MiB and volume_gib in GiB. A zero limit permits no additional capacity; it is not
         unlimited.'
       type: string
       enum:
-      - virtual_machines
+      - instances
       - vcpus
       - memory_mib
-      - disks
-      - disk_gib
+      - volumes
+      - volume_gib
       - virtual_private_clouds
       - virtual-private-cloud-subnets
       - network_interfaces
       - elastic_ips
       - security_groups
       - security_group_rules
-      - disk-snapshots
-      - disk_backups
+      - volume-snapshots
+      - volume_backups
       - private_images
     QuotaSource:
       description: Where a limit comes from. `default` is the platform default, which follows a change of the default;

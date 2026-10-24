@@ -1,16 +1,16 @@
 paths:
-  /api/v2/machine-types:
+  /api/v2/instance-types:
     get:
-      summary: List machine types on sale
-      description: Machine types on sale are listed, and sold-out ones with `sale_status` `sold_out`. A withdrawn
-        one disappears from here and can no longer be ordered, while the virtual machines already running it keep
+      summary: List instance types on sale
+      description: Instance types on sale are listed, and sold-out ones with `sale_status` `sold_out`. A withdrawn
+        one disappears from here and can no longer be ordered, while the instances already running it keep
         running.
-      operationId: list-machine-types
+      operationId: list-instance-types
       security:
       - {}
       - scopedTokenAuth: []
       tags:
-      - machine-types
+      - instance-types
       parameters:
       - name: region_id
         in: query
@@ -18,6 +18,13 @@ paths:
         explode: false
         schema:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
+      - name: instance_family_id
+        in: query
+        required: false
+        description: Return only the types of this instance family.
+        explode: false
+        schema:
+          $ref: ./identifiers.yaml#/components/schemas/InstanceFamilyID
       - name: availability_zone_id
         in: query
         required: false
@@ -33,37 +40,37 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MachineTypeListResponseBody'
+                $ref: '#/components/schemas/InstanceTypeListResponseBody'
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/machine-types/{machineTypeId}:
+  /api/v2/instance-types/{instanceTypeId}:
     get:
-      summary: Get a machine type
-      description: Returns a machine type on sale or sold out, under the same access rules as listing. Off-sale, retired
+      summary: Get an instance type
+      description: Returns an instance type on sale or sold out, under the same access rules as listing. Off-sale, retired
         or absent types return 404.
-      operationId: get-machine-type
+      operationId: get-instance-type
       security:
       - {}
       - scopedTokenAuth: []
       tags:
-      - machine-types
+      - instance-types
       parameters:
-      - name: machineTypeId
+      - name: instanceTypeId
         in: path
         required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+          $ref: ./identifiers.yaml#/components/schemas/InstanceTypeID
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MachineType'
+                $ref: '#/components/schemas/InstanceType'
         default:
           description: Error
           content:
@@ -72,43 +79,30 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    MachineType:
+    InstanceType:
       type: object
       properties:
         availability_zone_id:
-          description: The availability zone the type belongs to, where a virtual machine of it is created. A resize stays in the virtual
-            machine's zone, so the target type has to be one of the same zone.
+          description: The availability zone the type belongs to, where an instance of it is created. A resize stays in the instance's
+            zone, so the target type has to be one of the same zone.
           $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
         sale_status:
-          description: '`sold_out` takes no new orders for now while the type stays listed; the virtual machines already of it keep
+          description: '`sold_out` takes no new orders for now while the type stays listed; the instances already of it keep
             working.'
           type: string
           enum:
           - on_sale
           - sold_out
-        cpu_vendor:
-          description: Who makes the CPU the type runs on.
-          type: string
-          enum:
-          - intel
-          - amd
-        cpu_model:
-          description: The CPU model, such as `EPYC 9654`; empty when none is stated.
-          type: string
-        cpu_tier:
-          description: '`dedicated` gives each vCPU a host thread of its own; `shared` lets the vCPUs of several machines
-            share host threads.'
-          type: string
-          enum:
-          - dedicated
-          - shared
         id:
-          $ref: ./identifiers.yaml#/components/schemas/MachineTypeID
+          $ref: ./identifiers.yaml#/components/schemas/InstanceTypeID
+        instance_family_id:
+          description: The instance family the type is a size of, in the same region. It cannot change.
+          $ref: ./identifiers.yaml#/components/schemas/InstanceFamilyID
         max_bandwidth_mbps:
           description: |-
             The machine's network rate, in Mbps. **Each** network interface of the machine is limited to it in both directions — per interface rather than shared, so a machine with two interfaces has this rate on each of them; `max_network_interfaces` says how many it may have. Zero is no limit.
 
-            An elastic IP associated with the machine cannot be bought faster than this rate; asking for more is refused with `VIRTUAL_MACHINE_BANDWIDTH_CEILING`.
+            An elastic IP associated with the machine cannot be bought faster than this rate; asking for more is refused with `INSTANCE_BANDWIDTH_CEILING`.
           type: integer
           format: int64
         max_elastic_ips:
@@ -119,7 +113,7 @@ components:
           format: int64
         name:
           type: string
-        ram_mb:
+        memory_mib:
           type: integer
           format: int64
         region_id:
@@ -128,33 +122,31 @@ components:
           type: integer
           format: int64
         billing:
-          description: The line a virtual machine of this type is. The system disk and data disks bought with it are
-            lines of their disk types, and a new elastic IP the two lines of its elastic IP line.
+          description: The line an instance of this type is. The boot volume and data volumes bought with it are
+            lines of their volume types, and a new elastic IP the two lines of its elastic IP line.
           allOf:
           - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
       required:
       - id
+      - instance_family_id
       - name
       - vcpus
-      - ram_mb
+      - memory_mib
       - region_id
       - availability_zone_id
       - sale_status
-      - cpu_vendor
-      - cpu_model
-      - cpu_tier
       - max_network_interfaces
       - max_elastic_ips
       - max_bandwidth_mbps
       - billing
       additionalProperties: false
-    MachineTypeListResponseBody:
+    InstanceTypeListResponseBody:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/MachineType'
+            $ref: '#/components/schemas/InstanceType'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:

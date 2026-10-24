@@ -19,7 +19,7 @@ components:
       additionalProperties: false
     BillingChoice:
       description: The commercial terms for one newly purchased component. Licensed requires period and
-        termination_policy; metered refuses both. Components in one virtual machine purchase must use the same usage
+        termination_policy; metered refuses both. Components in one instance purchase must use the same usage
         type and period, while their termination policies may differ.
       type: object
       properties:
@@ -87,7 +87,7 @@ components:
           $ref: '#/components/schemas/BillingLineQuantity'
       additionalProperties: false
     BillingLineQuantity:
-      description: '`one` is 1 for each item bought; `size_gib` is the disk''s size in GiB; `bandwidth_mbps` is the
+      description: '`one` is 1 for each item bought; `size_gib` is the volume''s size in GiB; `bandwidth_mbps` is the
         elastic IP''s bandwidth in Mbps.'
       type: string
       enum:
@@ -101,7 +101,7 @@ components:
         meter_lookup_key:
           type: string
         quantity:
-          description: What the meter measures. `one` counts each second the item is metered; `size_gib` the disk's
+          description: What the meter measures. `one` counts each second the item is metered; `size_gib` the volume's
             size in GiB each second; `stored_gib` the GiB stored each second; `bandwidth_mbps` the bandwidth in Mbps
             each second; `egress_bytes` the bytes sent.
           type: string

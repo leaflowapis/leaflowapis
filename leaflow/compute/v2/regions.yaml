@@ -70,12 +70,12 @@ components:
           type: string
         id:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
-        disk_snapshot_billing:
+        volume_snapshot_billing:
           description: The line every snapshot in this region is, metered on the size it stores.
           allOf:
           - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
-        disk_backup_billing:
-          description: The line every disk backup in this region is, metered on the size it stores.
+        volume_backup_billing:
+          description: The line every volume backup in this region is, metered on the size it stores.
           allOf:
           - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
         private_image_billing:
@@ -87,8 +87,8 @@ components:
       - name
       - country_code
       - id
-      - disk_snapshot_billing
-      - disk_backup_billing
+      - volume_snapshot_billing
+      - volume_backup_billing
       - private_image_billing
       additionalProperties: false
     RegionListResponseBody:

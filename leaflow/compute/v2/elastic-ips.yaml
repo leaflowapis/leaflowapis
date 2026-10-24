@@ -28,7 +28,7 @@ paths:
 
         Returns the elastic IP as `pending` with its Checkout Session; `address` is null until the address is allocated after the order is accepted. A requested `address` is not held while pending; if it is no longer available then, the elastic IP ends `failed` with `provisioning_failed` and its charge is refunded.
 
-        IPv6 is not requested through this endpoint. IPv6 addresses are assigned to virtual machines by the virtual private cloud; enable IPv6 on that network instead.
+        IPv6 is not requested through this endpoint. IPv6 addresses are assigned to instances by the virtual private cloud; enable IPv6 on that network instead.
 
         Allocation does not select or create a virtual private cloud. A later association selects an assigned network-interface address; Compute then establishes the required network connectivity.
 
@@ -96,7 +96,7 @@ paths:
 
         The elastic IP shows the `update_bandwidth` operation until the change is applied or ends, so other operations and a second change are refused with `COMPUTE_RESOURCE_BUSY` meanwhile. The current limit stays in effect until the change is applied.
 
-        While the address is associated with a virtual machine, the limit must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `VIRTUAL_MACHINE_BANDWIDTH_CEILING`. The limit of an address that is not associated is checked when the address is associated with a virtual machine.
+        While the address is associated with an instance, the limit must not exceed the `max_bandwidth_mbps` of that instance's type; a higher limit is refused with `INSTANCE_BANDWIDTH_CEILING`. The limit of an address that is not associated is checked when the address is associated with an instance.
       operationId: update-elastic-ip
       tags:
       - elastic-ips
@@ -251,11 +251,11 @@ paths:
     post:
       summary: Associate an elastic IP with a target
       description: |-
-        Points the elastic IP at a target: a virtual machine, which means the primary private IPv4 address of its primary network interface, or a network interface address (`network_interface_address_id`) given directly. Exactly one of `virtual_machine_id` and `network_interface_address_id`. A network interface address must be an assigned, unreleased IPv4 address on a network interface in this project and region; IPv6 addresses are rejected.
+        Points the elastic IP at a target: an instance, which means the primary private IPv4 address of its primary network interface, or a network interface address (`network_interface_address_id`) given directly. Exactly one of `instance_id` and `network_interface_address_id`. A network interface address must be an assigned, unreleased IPv4 address on a network interface in this project and region; IPv6 addresses are rejected.
 
-        The target becomes what the elastic IP points at. Repeating the request for the target it already points at changes nothing; an elastic IP associated with another target is refused with `ELASTIC_IP_ALREADY_ASSOCIATED` (409), and is moved by disassociating it first, so that the moment traffic stops reaching the old target is one the caller chose. The elastic IP shows the `associate` operation until the association is confirmed, and with a virtual machine as the target that virtual machine shows the `associate_elastic_ip` operation as well, so the virtual machine must not have another operation in progress.
+        The target becomes what the elastic IP points at. Repeating the request for the target it already points at changes nothing; an elastic IP associated with another target is refused with `ELASTIC_IP_ALREADY_ASSOCIATED` (409), and is moved by disassociating it first, so that the moment traffic stops reaching the old target is one the caller chose. The elastic IP shows the `associate` operation until the association is confirmed, and with an instance as the target that instance shows the `associate_elastic_ip` operation as well, so the instance must not have another operation in progress.
 
-        The elastic IP must be in the same region as the target. With a virtual machine as the target, the elastic IP's `bandwidth_mbps` must not exceed the `max_bandwidth_mbps` of that virtual machine's type; a higher limit is refused with `VIRTUAL_MACHINE_BANDWIDTH_CEILING`.
+        The elastic IP must be in the same region as the target. With an instance as the target, the elastic IP's `bandwidth_mbps` must not exceed the `max_bandwidth_mbps` of that instance's type; a higher limit is refused with `INSTANCE_BANDWIDTH_CEILING`.
       operationId: associate-elastic-ip
       tags:
       - elastic-ips
@@ -290,7 +290,7 @@ paths:
     post:
       summary: Remove the association of an elastic IP
       description: The address remains held by the project and simply no longer points at any network interface.
-        The elastic IP shows the `disassociate` operation until the change is confirmed, and a virtual machine whose primary
+        The elastic IP shows the `disassociate` operation until the change is confirmed, and an instance whose primary
         interface it pointed at shows the `disassociate_elastic_ip` operation. Removing an association that does not exist is
         refused with 404 `ELASTIC_IP_NOT_ASSOCIATED`.
       operationId: disassociate-elastic-ip
@@ -343,7 +343,7 @@ components:
         `ELASTIC_IP_TRAFFIC_UNAVAILABLE` on a line whose `traffic_sale_status` is `off_sale`. Inbound traffic is never
         charged. Prices are set per currency, so a pay-as-you-go purchase whose account currency has no rate on the line
         for the chosen type is refused before any order with HTTP 403 `ELASTIC_IP_CHARGE_TYPE_NOT_OFFERED`, whether the
-        elastic IP is bought alone or with a virtual machine. A pay-as-you-go elastic IP can move between the two with
+        elastic IP is bought alone or with an instance. A pay-as-you-go elastic IP can move between the two with
         `update-elastic-ip`.
       enum:
       - bandwidth
@@ -432,13 +432,13 @@ components:
           - string
           - 'null'
           format: uuid
-        network_order_item_id:
+        internet_order_item_id:
           description: The Billing order item of the bandwidth or traffic.
           type:
           - string
           - 'null'
           format: uuid
-        network_subscription_id:
+        internet_subscription_id:
           description: The Billing subscription of the bandwidth or traffic. It may still be pending; its presence does
             not imply delivery or metering.
           type:
@@ -502,8 +502,8 @@ components:
       - order_id
       - address_order_item_id
       - address_subscription_id
-      - network_order_item_id
-      - network_subscription_id
+      - internet_order_item_id
+      - internet_subscription_id
       - release_set
       - access_state
       - failure_reason
@@ -633,17 +633,17 @@ components:
     AssociateElasticIPRequestBody:
       description: The target an elastic IP points at. Exactly one of the two forms.
       oneOf:
-      - $ref: '#/components/schemas/VirtualMachineAssociationTarget'
+      - $ref: '#/components/schemas/InstanceAssociationTarget'
       - $ref: '#/components/schemas/NetworkInterfaceAddressAssociationTarget'
-    VirtualMachineAssociationTarget:
-      description: A virtual machine; the elastic IP points at the primary private IPv4 address of its primary network
+    InstanceAssociationTarget:
+      description: An instance; the elastic IP points at the primary private IPv4 address of its primary network
         interface.
       type: object
       properties:
-        virtual_machine_id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+        instance_id:
+          $ref: ./identifiers.yaml#/components/schemas/InstanceID
       required:
-      - virtual_machine_id
+      - instance_id
       additionalProperties: false
     NetworkInterfaceAddressAssociationTarget:
       description: One private address of a network interface. One interface may hold several private addresses, each
@@ -718,9 +718,9 @@ components:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIPID
         network_interface_address_id:
           $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceAddressID
-        address:
+        public_address:
           $ref: '#/components/schemas/IPv4HostAddress'
-        fixed_ip:
+        private_address:
           $ref: '#/components/schemas/IPv4HostAddress'
         state:
           type: string
@@ -746,8 +746,8 @@ components:
       - id
       - elastic_ip_id
       - network_interface_address_id
-      - address
-      - fixed_ip
+      - public_address
+      - private_address
       - state
       - associated_at
       - disassociated_at

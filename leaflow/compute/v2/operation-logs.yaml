@@ -5,7 +5,7 @@ paths:
       description: |-
         Records every write operation in the project: who performed it, when, on what, and its outcome. Read operations are not recorded.
 
-        **Operations performed by the platform are included, but the individual operator is not disclosed** and `actor_type` is `platform`. Suspension for non-payment and bans for abuse are examples: the time at which a virtual machine was stopped by the platform is needed, whereas the operator is internal information.
+        **Operations performed by the platform are included, but the individual operator is not disclosed** and `actor_type` is `platform`. Suspension for non-payment and bans for abuse are examples: the time at which an instance was stopped by the platform is needed, whereas the operator is internal information.
 
         Fields such as passwords are replaced with a placeholder as the record is written and never appear in `payload`.
       operationId: list-operation-logs

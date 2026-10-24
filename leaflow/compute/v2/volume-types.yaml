@@ -1,16 +1,16 @@
 paths:
-  /api/v2/disk-types:
+  /api/v2/volume-types:
     get:
-      summary: List disk types on sale
-      description: Disk types on sale are listed, and sold-out ones with `sale_status` `sold_out`. Any of them boots a
-        virtual machine of its zone, holds data or takes a restore. A withdrawn one disappears from here and can no longer be bought, while the disks already on it keep
+      summary: List volume types on sale
+      description: Volume types on sale are listed, and sold-out ones with `sale_status` `sold_out`. Any of them boots an
+        instance of its zone, holds data or takes a restore. A withdrawn one disappears from here and can no longer be bought, while the volumes already on it keep
         working and can still be resized.
-      operationId: list-disk-types
+      operationId: list-volume-types
       security:
       - {}
       - scopedTokenAuth: []
       tags:
-      - disk-types
+      - volume-types
       parameters:
       - name: region_id
         in: query
@@ -33,37 +33,37 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DiskTypeListResponseBody'
+                $ref: '#/components/schemas/VolumeTypeListResponseBody'
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-  /api/v2/disk-types/{diskTypeId}:
+  /api/v2/volume-types/{volumeTypeId}:
     get:
-      summary: Get a disk type
-      description: Retrieve capacity and performance constraints for an existing disk, including types withdrawn from
+      summary: Get a volume type
+      description: Retrieve capacity and performance constraints for an existing volume, including types withdrawn from
         sale.
-      operationId: get-disk-type
+      operationId: get-volume-type
       security:
       - {}
       - scopedTokenAuth: []
       tags:
-      - disk-types
+      - volume-types
       parameters:
-      - name: diskTypeId
+      - name: volumeTypeId
         in: path
         required: true
         schema:
-          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
+          $ref: ./identifiers.yaml#/components/schemas/VolumeTypeID
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DiskTypeResource'
+                $ref: '#/components/schemas/VolumeTypeResource'
         default:
           description: Error
           content:
@@ -72,63 +72,63 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
 components:
   schemas:
-    DiskTypeResource:
+    VolumeTypeResource:
       type: object
       properties:
         availability_zone_id:
-          description: The availability zone the type belongs to, where a disk of it is created; only a virtual
-            machine of the same zone can attach it.
+          description: The availability zone the type belongs to, where a volume of it is created; only an instance
+             of the same zone can attach it.
           $ref: ./identifiers.yaml#/components/schemas/AvailabilityZoneID
         sale_status:
-          description: '`sold_out` takes no new orders for now while the type stays listed; the disks already of it keep
+          description: '`sold_out` takes no new orders for now while the type stays listed; the volumes already of it keep
             working.'
           type: string
           enum:
           - on_sale
           - sold_out
         id:
-          $ref: ./identifiers.yaml#/components/schemas/DiskTypeID
-        max_size_gb:
+          $ref: ./identifiers.yaml#/components/schemas/VolumeTypeID
+        max_size_gib:
           type: integer
           format: int64
-        media:
+        medium:
           type: string
           enum:
           - ssd
           - hdd
           - nvme
-        min_size_gb:
+        min_size_gib:
           type: integer
           format: int64
         name:
           type: string
         region_id:
           $ref: ./identifiers.yaml#/components/schemas/RegionID
-        step_gb:
+        size_step_gib:
           type: integer
           format: int64
         performance:
-          $ref: '#/components/schemas/DiskTypePerformance'
+          $ref: '#/components/schemas/VolumeTypePerformance'
         billing:
-          description: The line a disk of this type is, whether bought on its own or as the system disk or a data disk
-            of a virtual machine. A disk bought on its own is licensed only.
+          description: The line a volume of this type is, whether bought on its own or as the boot volume or a data volume
+            of an instance. A volume bought on its own is licensed only.
           allOf:
           - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
       required:
       - id
       - name
-      - media
+      - medium
       - region_id
       - availability_zone_id
       - sale_status
-      - min_size_gb
-      - max_size_gb
-      - step_gb
+      - min_size_gib
+      - max_size_gib
+      - size_step_gib
       - performance
       - billing
       additionalProperties: false
     PerformanceFormula:
-      description: One performance metric of a disk type for a disk of `size_gb`, `max(min, min(max, base + size_gb ×
+      description: One performance metric of a volume type for a volume of `size_gib`, `max(min, min(max, base + size_gib ×
         per_gib))`. A `per_gib` of zero is a fixed performance, and a `min` of zero is no floor.
       type: object
       properties:
@@ -150,11 +150,11 @@ components:
       - per_gib
       - max
       additionalProperties: false
-    DiskTypePerformance:
+    VolumeTypePerformance:
       description: |-
-        How fast a disk of this type runs for its size. Alibaba Cloud's ESSD disks have this shape: PL1 is IOPS `min(50000, 1800 + 50 × size_gb)`, and AutoPL's baseline adds a floor, `max(3000, min(50000, 1800 + 50 × size_gb))`.
+        How fast a volume of this type runs for its size. Alibaba Cloud's ESSD volumes have this shape: PL1 is IOPS `min(50000, 1800 + 50 × size_gib)`, and AutoPL's baseline adds a floor, `max(3000, min(50000, 1800 + 50 × size_gib))`.
 
-        A disk's own performance, computed from these for its size, is on the disk. Growing a disk raises it, and the new performance applies from the disk's next attachment or the next start of its stopped virtual machine.
+        A volume's own performance, computed from these for its size, is on the volume. Growing a volume raises it, and the new performance applies from the volume's next attachment or the next start of its stopped instance.
       type: object
       properties:
         iops:
@@ -165,13 +165,13 @@ components:
       - iops
       - throughput_bytes_per_second
       additionalProperties: false
-    DiskTypeListResponseBody:
+    VolumeTypeListResponseBody:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/DiskTypeResource'
+            $ref: '#/components/schemas/VolumeTypeResource'
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:

@@ -2,7 +2,7 @@ paths:
   /api/v2/availability-zones:
     get:
       summary: List availability zones
-      description: A disk and a virtual machine must reside in the same availability zone to be attached. Confirm
+      description: A volume and an instance must reside in the same availability zone to be attached. Confirm
         the zone before creating either. Without `region_id`, the zones of every region are listed.
       operationId: list-availability-zones
       security:
@@ -36,7 +36,7 @@ paths:
   /api/v2/availability-zones/{availabilityZoneId}:
     get:
       summary: Retrieve an availability zone
-      description: A disk and a virtual machine must reside in the same availability zone to be attached.
+      description: A volume and an instance must reside in the same availability zone to be attached.
       operationId: get-availability-zone
       security:
       - {}

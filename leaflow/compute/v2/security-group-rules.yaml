@@ -143,7 +143,7 @@ components:
           - integer
           - 'null'
           format: int64
-        remote_ip_prefix:
+        remote_cidr:
           description: Null for every address.
           type:
           - string
@@ -161,7 +161,7 @@ components:
       - protocol
       - port_range_min
       - port_range_max
-      - remote_ip_prefix
+      - remote_cidr
       - description
       - created_at
       additionalProperties: false
@@ -202,7 +202,7 @@ components:
           description: The last port, or the ICMP code (0–255) when the protocol is ICMP.
           type: integer
           format: int64
-        remote_ip_prefix:
+        remote_cidr:
           description: A CIDR of the rule's IP version. Every address when omitted.
           type: string
           maxLength: 64

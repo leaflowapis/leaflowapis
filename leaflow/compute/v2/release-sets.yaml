@@ -16,31 +16,31 @@ components:
     ReleaseResource:
       description: A resource a release set releases.
       oneOf:
-      - $ref: '#/components/schemas/VirtualMachineReleaseResource'
-      - $ref: '#/components/schemas/DiskReleaseResource'
+      - $ref: '#/components/schemas/InstanceReleaseResource'
+      - $ref: '#/components/schemas/VolumeReleaseResource'
       - $ref: '#/components/schemas/ElasticIPReleaseResource'
-      - $ref: '#/components/schemas/DiskSnapshotReleaseResource'
-      - $ref: '#/components/schemas/DiskBackupReleaseResource'
+      - $ref: '#/components/schemas/VolumeSnapshotReleaseResource'
+      - $ref: '#/components/schemas/VolumeBackupReleaseResource'
       - $ref: '#/components/schemas/PrivateImageReleaseResource'
       discriminator:
         propertyName: type
         mapping:
-          virtual_machine: '#/components/schemas/VirtualMachineReleaseResource'
-          disk: '#/components/schemas/DiskReleaseResource'
+          instance: '#/components/schemas/InstanceReleaseResource'
+          volume: '#/components/schemas/VolumeReleaseResource'
           elastic_ip: '#/components/schemas/ElasticIPReleaseResource'
-          snapshot: '#/components/schemas/DiskSnapshotReleaseResource'
-          disk_backup: '#/components/schemas/DiskBackupReleaseResource'
+          snapshot: '#/components/schemas/VolumeSnapshotReleaseResource'
+          volume_backup: '#/components/schemas/VolumeBackupReleaseResource'
           private_image: '#/components/schemas/PrivateImageReleaseResource'
-    VirtualMachineReleaseResource:
+    InstanceReleaseResource:
       description: A resource a release set releases.
       type: object
       properties:
         type:
           type: string
           enum:
-          - virtual_machine
+          - instance
         id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+          $ref: ./identifiers.yaml#/components/schemas/InstanceID
           description: The identifier of the resource selected by type.
         name:
           description: The current display name of the selected resource.
@@ -50,17 +50,17 @@ components:
       - id
       - name
       additionalProperties: false
-    DiskReleaseResource:
+    VolumeReleaseResource:
       description: A resource a release set releases.
       type: object
       properties:
         type:
           type: string
           enum:
-          - disk
+          - volume
         id:
           description: The identifier of the resource selected by type.
-          $ref: ./identifiers.yaml#/components/schemas/DiskID
+          $ref: ./identifiers.yaml#/components/schemas/VolumeID
         name:
           description: The current display name of the selected resource.
           type: string
@@ -88,16 +88,16 @@ components:
       - id
       - name
       additionalProperties: false
-    DiskSnapshotReleaseResource:
+    VolumeSnapshotReleaseResource:
       description: A resource a release set releases.
       type: object
       properties:
         type:
           type: string
           enum:
-          - disk_snapshot
+          - volume_snapshot
         id:
-          $ref: ./identifiers.yaml#/components/schemas/DiskSnapshotID
+          $ref: ./identifiers.yaml#/components/schemas/VolumeSnapshotID
           description: The identifier of the resource selected by type.
         name:
           description: The current display name of the selected resource.
@@ -107,16 +107,16 @@ components:
       - id
       - name
       additionalProperties: false
-    DiskBackupReleaseResource:
+    VolumeBackupReleaseResource:
       description: A resource a release set releases.
       type: object
       properties:
         type:
           type: string
           enum:
-          - disk_backup
+          - volume_backup
         id:
-          $ref: ./identifiers.yaml#/components/schemas/DiskBackupID
+          $ref: ./identifiers.yaml#/components/schemas/VolumeBackupID
           description: The identifier of the resource selected by type.
         name:
           description: The current display name of the selected resource.

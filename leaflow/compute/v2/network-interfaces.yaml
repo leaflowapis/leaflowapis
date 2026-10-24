@@ -23,8 +23,8 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     post:
       summary: Create a network interface
-      description: The new network interface is not attached to any virtual machine. Primary network interfaces
-        are not created here; they are created with the virtual machine.
+      description: The new network interface is not attached to any instance. Primary network interfaces
+        are not created here; they are created with the instance.
       operationId: create-network-interface
       tags:
       - network-interfaces
@@ -79,7 +79,7 @@ paths:
         Changes the name, or replaces the security groups. The two are never combined (422 `UPDATE_FIELDS_COMBINED`).
 
         - `name` is not an operation, is accepted at any time and answers 200.
-        - `security_group_ids` is the complete new set, one to five groups of the network interface's virtual private cloud; groups left out are removed. It applies to traffic of the running virtual machine as soon as it is in place, and answers 202 with the network interface showing the `update_security_groups` operation until then.
+        - `security_group_ids` is the complete new set, one to five groups of the network interface's virtual private cloud; groups left out are removed. It applies to traffic of the running instance as soon as it is in place, and answers 202 with the network interface showing the `update_security_groups` operation until then.
 
         Secondary IPv4 addresses are added and removed under `/network-interfaces/{networkInterfaceId}/addresses`.
       operationId: update-network-interface
@@ -118,8 +118,8 @@ paths:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
     delete:
       summary: Delete a network interface
-      description: The primary network interface cannot be deleted on its own, as it is released with the virtual
-        machine. A network interface still attached to a virtual machine cannot be deleted either.
+      description: The primary network interface cannot be deleted on its own, as it is released with the instance.
+        A network interface still attached to an instance cannot be deleted either.
       operationId: delete-network-interface
       tags:
       - network-interfaces
@@ -152,7 +152,7 @@ paths:
 
         **The operating system has to be configured to use it**: DHCP hands out only the primary address. Changing the addresses of a network interface in use may briefly interrupt its traffic.
 
-        A network interface holds at most its virtual machine's machine type's `max_ipv4_per_network_interface` IPv4 addresses while attached, and 50 otherwise (409 `NETWORK_INTERFACE_ADDRESS_CEILING`). An address already in use in the subnet is refused with 409 `NETWORK_INTERFACE_ADDRESS_ALREADY_TAKEN`, a full subnet with 409 `NETWORK_INTERFACE_SUBNET_EXHAUSTED`.
+        A network interface holds at most its instance's instance type's `max_ipv4_per_network_interface` IPv4 addresses while attached, and 50 otherwise (409 `NETWORK_INTERFACE_ADDRESS_CEILING`). An address already in use in the subnet is refused with 409 `NETWORK_INTERFACE_ADDRESS_ALREADY_TAKEN`, a full subnet with 409 `NETWORK_INTERFACE_SUBNET_EXHAUSTED`.
       operationId: create-network-interface-address
       tags:
       - network-interfaces
@@ -222,7 +222,7 @@ components:
       properties:
         id:
           $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
-        mac:
+        mac_address:
           type:
           - string
           - 'null'
@@ -268,7 +268,7 @@ components:
       - id
       - virtual_private_cloud_id
       - name
-      - mac
+      - mac_address
       - elastic_ip_addresses
       - security_group_ids
       - attachment
@@ -358,7 +358,7 @@ components:
           minLength: 1
           maxLength: 64
         role:
-          description: '`primary` is the interface''s primary private address, which is the virtual machine''s network location; every other address of the interface is `secondary`.'
+          description: '`primary` is the interface''s primary private address, which is the instance''s network location; every other address of the interface is `secondary`.'
           type: string
           enum:
           - primary
@@ -392,9 +392,9 @@ components:
       type: object
       properties:
         id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineNetworkInterfaceID
-        virtual_machine_id:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualMachineID
+          $ref: ./identifiers.yaml#/components/schemas/InstanceNetworkInterfaceID
+        instance_id:
+          $ref: ./identifiers.yaml#/components/schemas/InstanceID
         network_interface_id:
           $ref: ./identifiers.yaml#/components/schemas/NetworkInterfaceID
         role:
@@ -402,10 +402,10 @@ components:
           enum:
           - primary
           - secondary
-        on_virtual_machine_release:
-          description: What releasing the virtual machine does to this interface. `delete` deletes it together with
-            the virtual machine; `detach` detaches it and leaves it to you. The primary interface created with the
-            virtual machine is `delete`; an interface you created yourself is `detach`.
+        on_instance_release:
+          description: What releasing the instance does to this interface. `delete` deletes it together with
+            the instance; `detach` detaches it and leaves it to you. The primary interface created with the
+            instance is `delete`; an interface you created yourself is `detach`.
           type: string
           enum:
           - delete
@@ -433,10 +433,10 @@ components:
           format: date-time
       required:
       - id
-      - virtual_machine_id
+      - instance_id
       - network_interface_id
       - role
-      - on_virtual_machine_release
+      - on_instance_release
       - state
       - attached_at
       - detached_at
@@ -462,7 +462,7 @@ components:
       properties:
         type:
           description: '`associate_elastic_ip` holds the network interface while an elastic IP is associated with it
-            directly rather than through a virtual machine. `update_security_groups` replaces its security groups,
+            directly rather than through an instance. `update_security_groups` replaces its security groups,
             `add_address` and `remove_address` change its secondary IPv4 addresses.'
           type: string
           enum:
