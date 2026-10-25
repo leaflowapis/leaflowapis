@@ -188,7 +188,8 @@ components:
         status:
           description: '`pending` until the connectivity exists: while acceptance is pending, and after it is accepted
             while the link is built (`provisioning`). Then `active`. `failed` means the link could not be built;
-            `failure_reason` states why. `deleted` once deleted or rejected.'
+            `failure_reason` states why. `deleted` once deleted or rejected. `deleting` runs until the link and
+            its peer routes are gone.'
           type: string
           enum:
           - pending
@@ -196,6 +197,7 @@ components:
           - deleted
           - failed
           - provisioning
+          - deleting
         created_at:
           type: string
           format: date-time
