@@ -68,12 +68,15 @@ class SWASContract(unittest.TestCase):
    bad=copy.deepcopy(self.doc);bad['components']['schemas'][key]=value
    with self.assertRaises(AssertionError):require_contract(bad)
  def test_shared_error(self):
-  error,_=resolve(self.schemas['Error']['$ref'])
-  self.assertEqual(set(error['required']),{'status','message'});self.assertIs(error['additionalProperties'],False)
-  self.assertEqual(error['properties']['status'],{'type':'integer','format':'int64'})
+  envelope,source=resolve(self.schemas['Error']['$ref'])
+  self.assertEqual(envelope['required'],['error']);self.assertIs(envelope['additionalProperties'],False)
+  error,_=resolve(envelope['properties']['error']['$ref'],source)
+  self.assertEqual(set(error['required']),{'code','status','message'});self.assertIs(error['additionalProperties'],False)
+  self.assertEqual({k:error['properties']['code'][k] for k in ('type','format')},{'type':'integer','format':'int64'})
+  self.assertEqual(error['properties']['status']['type'],'string')
   self.assertEqual(error['properties']['message']['type'],'string')
-  self.assertEqual(error['properties']['code']['type'],'string')
-  self.assertEqual(error['properties']['meta']['type'],'object')
+  self.assertEqual(error['properties']['reason']['type'],'string')
+  self.assertEqual(error['properties']['metadata']['type'],'object')
  def test_shared_pagination(self):
   value,_=resolve(self.schemas['InstancePagination']['$ref'])
   self.assertEqual(set(value['required']),{'page','page_size'});self.assertNotIn('total',value['properties'])
