@@ -53,6 +53,42 @@ def require_contract(doc):
  assert schemas['InstancePagination']=={'$ref':'../../type/v1/pagination.yaml#/components/schemas/OffsetPagination'},'shared pagination required'
  return doc
 
+def require_multi_period_contract(doc):
+ """Check opt-in expansion without changing the default response or purchase selector."""
+ require_contract(doc)
+ schemas=doc['components']['schemas']
+ operation=doc['paths']['/api/v1/catalog/plans']['get']
+ flags=[p for p in operation['parameters'] if p.get('name')=='include_prices']
+ assert len(flags)==1,'one explicit include_prices query required'
+ flag=flags[0]
+ assert flag['in']=='query' and flag['required'] is False,'price expansion must be optional query input'
+ assert flag['schema']=={'type':'boolean','default':False},'default response cannot expand prices'
+ assert 'omits prices' in flag['description'],'default omission must be explicit'
+ plan=schemas['Plan']
+ assert set(plan['required'])=={'provider_plan_id','region_id','name','catalog_revision','buyable','price','image_ids','cpu','memory_mb','disk_gb'},'existing plan requirements changed'
+ assert set(plan['properties'])==set(plan['required'])|{'prices'},'unexpected plan field'
+ assert plan['properties']['price']['anyOf']==[{'$ref':'#/components/schemas/Price'},{'type':'null'}],'default price representation changed'
+ prices=plan['properties']['prices']
+ assert prices['type']=='array' and prices['items']=={'$ref':'#/components/schemas/PriceOption'},'price option schema required'
+ assert prices['minItems']==0 and prices['maxItems']==6 and prices['uniqueItems'] is True,'bounded unique price options required'
+ assert 'Present only when include_prices=true' in prices['description'],'response expansion must be opt-in'
+ option=schemas['PriceOption']
+ assert option['type']=='object' and option['additionalProperties'] is False,'strict option object required'
+ assert set(option['required'])==set(option['properties'])=={'billing_plan_id','billing_price_id','currency','amount','period_months'},'price option fields changed'
+ assert option['properties']['period_months']=={'type':'integer','enum':[1,3,6,12,24,36]},'verified price period cannot be unknown'
+ assert option['properties']['currency']=={'type':'string','const':'USD'},'only authoritative USD options allowed'
+ assert option['properties']['amount']=={'$ref':'#/components/schemas/DecimalAmount'},'exact decimal amounts required'
+ for key in ('billing_plan_id','billing_price_id'):
+  assert option['properties'][key]==schemas['Price']['properties'][key],'stable Billing UUID selectors required'
+ purchase=schemas['PurchaseCreate']
+ assert set(purchase['properties'])==set(purchase['required'])=={'catalog_revision','provider_plan_id','billing_price_id','image_id','quantity','expected_quote','region_id'},'no new client authority over billing terms'
+ assert 'immutable Billing terms' in purchase['properties']['billing_price_id']['description'],'server price resolution must be explicit'
+ assert 'not an authoritative amount' in purchase['properties']['expected_quote']['description'],'expected quote is only an assertion'
+ assert 'period-end cancellation without an automatic refund' in option['description'],'approved cancellation policy required'
+ assert 'Archived' in option['description'] and 'excluded' in option['description'],'archived prices cannot be purchase options'
+ assert 'disabled purchase controls' in option['description'],'catalog expansion cannot enable purchases'
+ return doc
+
 class SWASContract(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
@@ -124,5 +160,38 @@ class SWASContract(unittest.TestCase):
  def test_utc_timestamp_descriptions(self):
   fields=[x for x in walk(self.doc) if x.get('format')=='date-time'];self.assertGreater(len(fields),5)
   for field in fields:self.assertIn('UTC RFC 3339',field['description'])
+ def test_multi_period_contract(self): require_multi_period_contract(self.doc)
+ def test_multi_period_default_omission(self):
+  plan=self.schemas['Plan']
+  self.assertNotIn('prices',plan['required'])
+  self.assertNotIn('default',plan['properties']['prices'])
+  self.assertIn('unchanged',plan['properties']['price']['description'])
+ def test_legacy_price_keeps_nullable_period(self):
+  self.assertEqual(self.schemas['Price']['properties']['period_months'],{'anyOf':[{'type':'integer','enum':[1,3,6,12,24,36]},{'type':'null'}]})
+ def test_multi_period_purchase_selector_not_client_period(self):
+  value=self.schemas['PurchaseCreate']
+  for field in ('period_months','unit_amount','billing_plan_id','prices','offer_id'):
+   self.assertNotIn(field,value['properties'])
+  self.assertEqual(value['properties']['expected_quote']['$ref'],'#/components/schemas/ExpectedQuote')
+ def test_multi_period_field_uniqueness_is_explicit(self):
+  description=self.schemas['Plan']['properties']['prices']['description']
+  self.assertIn('Billing price IDs and billing periods are each unique',description)
+  self.assertIn('ordered by period_months',description)
+ def test_multi_period_opt_in_regressions_rejected(self):
+  for mutation in ('missing-flag','default-expanded','required-expansion','wrong-query-type','unbounded-array','nullable-period','currency-drift','client-period-authority'):
+   with self.subTest(mutation=mutation):
+    bad=copy.deepcopy(self.doc)
+    operation=bad['paths']['/api/v1/catalog/plans']['get']
+    flag=next(p for p in operation['parameters'] if p.get('name')=='include_prices')
+    schemas=bad['components']['schemas']
+    if mutation=='missing-flag':operation['parameters'].remove(flag)
+    elif mutation=='default-expanded':flag['schema']['default']=True
+    elif mutation=='required-expansion':schemas['Plan']['required'].append('prices')
+    elif mutation=='wrong-query-type':flag['schema']['type']='string'
+    elif mutation=='unbounded-array':schemas['Plan']['properties']['prices']['maxItems']=100
+    elif mutation=='nullable-period':schemas['PriceOption']['properties']['period_months']={'anyOf':[{'type':'integer'},{'type':'null'}]}
+    elif mutation=='currency-drift':schemas['PriceOption']['properties']['currency']['const']='CNY'
+    elif mutation=='client-period-authority':schemas['PurchaseCreate']['properties']['period_months']={'type':'integer'}
+    with self.assertRaises(AssertionError):require_multi_period_contract(bad)
 
 if __name__=='__main__':unittest.main(verbosity=2)
