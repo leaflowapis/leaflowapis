@@ -903,7 +903,6 @@ components:
       additionalProperties: false
       required:
       - currency
-      - amount
       - period_months
       properties:
         currency:
@@ -911,6 +910,8 @@ components:
           const: USD
         amount:
           $ref: '#/components/schemas/DecimalAmount'
+          deprecated: true
+          description: Historical display metadata only. Price-only purchases omit this field; use Billing for quotes.
         period_months:
           type: integer
           enum:

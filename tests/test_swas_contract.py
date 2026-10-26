@@ -176,7 +176,7 @@ class SWASContract(unittest.TestCase):
   self.assertNotIn('expected_quote',value['properties'])
   self.assertNotIn('ExpectedQuote',self.schemas)
  def test_price_only_checkout_boundary(self):
-  for name in ('Price','PriceOption'):
+  for name in ('Price','PriceOption','InstancePrice'):
    value=self.schemas[name]
    self.assertNotIn('amount',value['required'])
    self.assertTrue(value['properties']['amount']['deprecated'])
