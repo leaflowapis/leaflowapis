@@ -45,6 +45,8 @@ message Cursor {
   uint32 hotspot_x = 3;
   // The hotspot from the top of the image, in pixels.
   uint32 hotspot_y = 4;
+  // The X cursor serial (XFIXES), for diagnostics.
+  uint64 serial = 5;
 }
 
 // Where the pointer is (RFB PointerPos pseudo-encoding; Xpra pointer-position),

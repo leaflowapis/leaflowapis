@@ -68,8 +68,9 @@ message Display {
 // or the device pixel ratio changes, debounced (Xpra configure-display;
 // MS-RDPEDISP DISPLAYCONTROL_MONITOR_LAYOUT_PDU). The session remembers the
 // latest of every viewer and applies the driver's: the canvas follows one
-// viewer at a time. Read-only viewers, and viewers that never send
-// DisplayConfigure, never drive.
+// viewer at a time (see the window channel). Read-only viewers never drive,
+// and the DisplayConfigure of a viewer that shows native windows is
+// ignored.
 message DisplayConfigure {
   // The viewport size in CSS pixels. The session clamps it to
   // Display.max_size. Even sizes avoid encoder padding.

@@ -2,162 +2,293 @@ syntax = "proto3";
 
 package leaflow.virtualdesktop.application.v1;
 
-import "google/protobuf/timestamp.proto";
+import "leaflow/virtualdesktop/display/v1/display.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/application/v1;applicationv1";
 
-// The applications installed for the session's user and the processes that
-// run in the session.
+// The applications of the session's user, the icons of their desktop, and
+// launching. The session serves them from the freedesktop standards itself,
+// without a desktop environment: the applications menu from the installed
+// desktop entries and menu definitions (Desktop Menu Specification 1.1, with
+// XDG_MENU_PREFIX choosing the menu), and the desktop from Home, File System,
+// Trash and the entries of XDG_DESKTOP_DIR.
 //
-// Channel type "leaflow.virtualdesktop.application.v1.ApplicationService",
-// lane "interactive": opened by the viewer.
+// Channel types:
+//   - "leaflow.virtualdesktop.application.v1", lane "metadata": opened by the
+//     viewer, one per connection. It starts with a snapshot: ApplicationMenu,
+//     one DesktopIcon per icon, then SnapshotEnd. Read-only viewers may open
+//     it, so that they see what the person sees.
+//   - "leaflow.virtualdesktop.application.v1.ApplicationService", lane
+//     "interactive": opened by the viewer to list, launch and open.
 //
-// Applications are the user's desktop entries (freedesktop Desktop Entry
-// Specification), named by their desktop file ID, such as
-// "org.gnome.TextEditor.desktop". Names are localized for the language of the
-// session channel's ClientHello. LaunchApplication and TerminateProcess act on
-// the session, so they need what input needs: a viewer that is not read-only,
-// holding the input lease.
+// Viewers send only desktop file IDs and URIs, never command lines: the
+// session builds every command from the Exec key itself (Desktop Entry
+// Specification, "The Exec key"), so that a viewer cannot inject commands.
+// Names are localized for the language of the session channel's ClientHello
+// and are plain text. Icons are rendered at the viewer's device pixel ratio:
+// 16 or 24 pixels in menus, 48 to 64 on the desktop.
 
-// Lists, launches and ends applications.
-service ApplicationService {
-  // Lists the applications the user can launch.
-  rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
+// A message from the session on the application channel.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // The applications menu, in full.
+    ApplicationMenu application_menu = 1;
+    // A desktop icon as it is now, in full: new when the viewer does not know
+    // its uri, otherwise replacing what the viewer had.
+    DesktopIcon desktop_icon = 2;
+    // A desktop icon is gone.
+    DesktopIconRemoved desktop_icon_removed = 3;
+    // Ends the snapshot.
+    SnapshotEnd snapshot_end = 4;
   }
-  // Launches an application as its desktop entry says.
-  rpc LaunchApplication(LaunchApplicationRequest) returns (LaunchApplicationResponse);
-  // Lists the processes of the session that belong to an application.
-  rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
-  // Ends a process of the session.
-  rpc TerminateProcess(TerminateProcessRequest) returns (TerminateProcessResponse);
 }
 
-// An application (a desktop entry of type Application).
+// The applications menu, sent in full whenever it changes. The session
+// watches the applications, menus and desktop-directories directories and
+// sends at most one menu per 500 milliseconds. Applications appear by desktop
+// file ID; their details come from ListApplications.
+message ApplicationMenu {
+  // Grows with every change of the menu or of any application.
+  uint64 revision = 1;
+  // The root menu.
+  Menu root = 2;
+}
+
+// A menu after merging, rule evaluation and layout (Desktop Menu
+// Specification <Menu>; inline submenus already inlined).
+message Menu {
+  // Its menu path, such as "Settings/Screensavers"; empty for the root.
+  // Stable across revisions.
+  string menu_path = 1;
+  // The Name of its directory entry.
+  string display_name = 2;
+  // The Comment of its directory entry. May be empty.
+  string comment = 3;
+  // The Icon of its directory entry. Unset when none.
+  leaflow.virtualdesktop.display.v1.Icon icon = 4;
+  // Its children in display order (the resolved <Layout>).
+  repeated MenuElement elements = 5;
+}
+
+// One element of a menu.
+message MenuElement {
+  // The element.
+  oneof element {
+    // A submenu (<Menuname>).
+    Menu menu = 1;
+    // An application (<Filename>), by desktop file ID.
+    string desktop_file_id = 2;
+    // A separator (<Separator>). Leading, trailing and doubled separators
+    // are already removed.
+    Separator separator = 3;
+  }
+}
+
+// A separator.
+message Separator {}
+
+// An application: a desktop entry of type Application, named by its desktop
+// file ID. Entries that are Hidden, fail TryExec, or are excluded by OnlyShowIn
+// or NotShowIn are not listed.
 message Application {
-  // Its desktop file ID.
+  // Its desktop file ID, such as "org.gnome.TextEditor.desktop".
   string desktop_file_id = 1;
-  // Its name (Name).
-  string name = 2;
-  // What kind of application it is, such as "Web Browser" (GenericName).
+  // Its Name.
+  string display_name = 2;
+  // Its GenericName, such as "Text Editor". May be empty.
   string generic_name = 3;
-  // A tooltip-like description (Comment).
+  // Its Comment, used as the tooltip. May be empty.
   string comment = 4;
-  // Its icon in the freedesktop icon theme (Icon). Empty when none.
-  string icon_name = 5;
-  // Its categories, such as "Network" (Categories).
+  // Its Icon in the icon theme, else "applications-other".
+  leaflow.virtualdesktop.display.v1.Icon icon = 5;
+  // Its Categories, such as ["Utility", "TextEditor"].
   repeated string categories = 6;
-  // Further search words (Keywords).
+  // Its Keywords, for search.
   repeated string keywords = 7;
-  // The media types it opens (MimeType).
-  repeated string mime_types = 8;
-  // Additional ways to launch it, such as opening a new window (Actions).
+  // It runs in a terminal (Terminal); the session wraps it in its terminal
+  // emulator.
+  bool terminal = 8;
+  // Its additional actions (Actions), in order.
   repeated ApplicationAction actions = 9;
-  // It runs in a terminal (Terminal).
-  bool terminal = 10;
-  // Menus do not show it (NoDisplay). Listed only when asked for.
+  // The media types it opens (MimeType), for "Open With".
+  repeated string mime_types = 10;
+  // Menus do not show it (NoDisplay); it still opens files and names windows.
   bool no_display = 11;
 }
 
-// An additional way to launch an application (a Desktop Action).
+// An additional action of an application (a Desktop Action group).
 message ApplicationAction {
-  // Its identifier in the desktop entry, such as "new-window".
+  // Its action identifier, such as "new-window".
   string action_id = 1;
-  // Its name.
-  string name = 2;
+  // Its Name.
+  string display_name = 2;
+  // Its Icon. Unset when none.
+  leaflow.virtualdesktop.display.v1.Icon icon = 3;
+}
+
+// An icon on the desktop. Hidden files are not shown. Viewers keep icon
+// positions themselves, keyed by uri.
+message DesktopIcon {
+  // Identifies the icon: file:///home/<user>, file:///, trash:/// or the
+  // file URI of the entry (RFC 8089), percent-encoded. A rename removes the
+  // icon and adds another.
+  string uri = 1;
+  // What it shows. Never changes for a uri.
+  DesktopIconType type = 2;
+  // Its label: the localized name of Home, File System or Trash, the Name of
+  // a launcher, or the file name.
+  string display_name = 3;
+  // Its icon: "user-home", "drive-harddisk", "user-trash" or
+  // "user-trash-full", a launcher's Icon, or the icon of the file's media
+  // type with its generic fallback (Shared MIME-info).
+  leaflow.virtualdesktop.display.v1.Icon icon = 4;
+  // REGULAR_FILE only: its media type, such as "inode/directory" or
+  // "application/x-desktop" for launchers.
+  string mime_type = 5;
+  // The entry is a symbolic link.
+  bool symbolic_link = 6;
+  // Launchers only: it is trusted, so opening it runs it without asking. A
+  // launcher outside XDG_DATA_DIRS needs the executable bit and, where
+  // recorded, a matching SHA-256 checksum (as Thunar and xfdesktop decide).
+  bool trusted = 7;
+  // TRASH only: the number of items in the trash; 0 selects "user-trash".
+  optional uint32 trash_item_count = 8;
+}
+
+// What a desktop icon shows (after xfdesktop's icon types).
+enum DesktopIconType {
+  DESKTOP_ICON_TYPE_UNSPECIFIED = 0;
+  // The home folder.
+  DESKTOP_ICON_TYPE_HOME = 1;
+  // The root of the file system.
+  DESKTOP_ICON_TYPE_FILESYSTEM = 2;
+  // The trash (freedesktop Trash Specification).
+  DESKTOP_ICON_TYPE_TRASH = 3;
+  // A removable volume. Not used yet.
+  DESKTOP_ICON_TYPE_VOLUME = 4;
+  // An entry of XDG_DESKTOP_DIR: a directory, a launcher or another file.
+  DESKTOP_ICON_TYPE_REGULAR_FILE = 5;
+}
+
+// A desktop icon is gone.
+message DesktopIconRemoved {
+  // DesktopIcon.uri.
+  string uri = 1;
+}
+
+// Ends the snapshot.
+message SnapshotEnd {}
+
+// Lists applications and launches them. Launching and opening need an
+// ApplicationPolicy and a viewer that is not read-only; otherwise they fail
+// with PERMISSION_DENIED.
+service ApplicationService {
+  // Lists the applications, NoDisplay ones included, a page at a time.
+  rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Starts an application, or one of its actions, possibly with files or
+  // URLs to open ("Open With"). It returns when the startup sequence ends
+  // (freedesktop Startup Notification Protocol): a window of the launch
+  // appeared, the program failed, or the wait ended. Windows are matched by
+  // their startup notification ID, then by StartupWMClass against WM_CLASS,
+  // then by the process belonging to the launch.
+  rpc LaunchApplication(LaunchApplicationRequest) returns (LaunchApplicationResponse);
+  // Opens a desktop icon, or any file or folder, as a double click on the
+  // desktop does: folders in the file manager, trusted launchers are run,
+  // other files open in the default application of their media type
+  // (freedesktop mime-apps). Other executable files are opened, not run. It
+  // returns as LaunchApplication does.
+  rpc OpenUri(OpenUriRequest) returns (OpenUriResponse);
 }
 
 // The request of ListApplications.
 message ListApplicationsRequest {
-  // At most 1000. 0: 200.
+  // At most 500. 0: the session chooses.
   uint32 page_size = 1;
-  // From the previous response. Empty for the first page.
+  // From the previous response. Empty for the first page. A token of an
+  // older revision fails with INVALID_ARGUMENT.
   string page_token = 2;
-  // Also lists applications menus do not show.
-  bool include_no_display = 3;
 }
 
 // The response of ListApplications.
 message ListApplicationsResponse {
-  // The applications, ordered by name.
+  // The applications of this page, by desktop file ID.
   repeated Application applications = 1;
   // Empty on the last page.
   string next_page_token = 2;
+  // ApplicationMenu.revision the page belongs to. When it changes between
+  // pages, the viewer starts again from the first page.
+  uint64 revision = 3;
 }
 
 // The request of LaunchApplication.
 message LaunchApplicationRequest {
-  // The application. Unknown ones fail with NOT_FOUND and reason
-  // APPLICATION_NOT_FOUND.
+  // The application. An unknown one, or one whose TryExec fails, fails with
+  // NOT_FOUND.
   string desktop_file_id = 1;
-  // URIs to open, such as "file:///home/user/report.pdf" (the %u and %U
-  // field codes).
-  repeated string uris = 2;
-  // An action of Application.actions to launch instead of the application.
-  // Empty: the application.
-  string action_id = 3;
+  // An ApplicationAction.action_id to run instead of the application. Empty:
+  // the application.
+  string action_id = 2;
+  // Files or URLs to open (the %f, %F, %u and %U field codes). A URI that is
+  // not acceptable, such as a URL for an application that opens only local
+  // files, fails with INVALID_ARGUMENT.
+  repeated string uris = 3;
 }
 
-// The response of LaunchApplication.
+// The response of LaunchApplication. When the program exits with a failure
+// before showing a window the call fails with ABORTED; when no window appears
+// within 30 seconds (StartupNotify) or 5 seconds (otherwise) it fails with
+// DEADLINE_EXCEEDED, though the program may still be running.
 message LaunchApplicationResponse {
-  // The process started. An application that hands the request to an
-  // instance already running may exit soon.
-  uint32 pid = 1;
-  // The startup notification ID given to the application (freedesktop Startup
-  // Notification Protocol). The windows it opens for this launch carry it as
-  // Window.startup_id.
-  string startup_id = 2;
-  // The session revision at which the process started.
+  // The startup notification ID given to the program (DESKTOP_STARTUP_ID).
+  string startup_id = 1;
+  // The first window of the launch. Unset when none was matched, such as when
+  // the program handed the request to an instance already running.
+  optional uint64 window_id = 2;
+  // The session revision at which the startup sequence ended.
   uint64 revision = 3;
 }
 
-// A process of the session.
-message Process {
-  // Its process ID.
-  uint32 pid = 1;
-  // Its executable name, such as "firefox" (Linux /proc/[pid]/comm).
-  string name = 2;
-  // The desktop file ID of its application. Empty when unknown.
-  string desktop_file_id = 3;
-  // The windows it owns, in the ids of the window channel.
-  repeated uint64 window_ids = 4;
-  // When it started.
-  google.protobuf.Timestamp started_at = 5;
+// The request of OpenUri.
+message OpenUriRequest {
+  // DesktopIcon.uri, or another file URI or trash:///. An unsupported scheme
+  // fails with INVALID_ARGUMENT; a missing file, or one no application
+  // opens, with NOT_FOUND.
+  string uri = 1;
+  // How the person answered for an untrusted launcher. A launcher that is not
+  // trusted fails with FAILED_PRECONDITION and reason UNTRUSTED_LAUNCHER,
+  // naming the launcher but not its Exec line; the viewer asks its person
+  // and, if they agree, calls again with their answer.
+  LauncherConfirmation launcher_confirmation = 2;
 }
 
-// The request of ListProcesses.
-message ListProcessesRequest {
-  // At most 1000. 0: 200.
-  uint32 page_size = 1;
-  // From the previous response. Empty for the first page.
-  string page_token = 2;
-  // Lists every process of the session, not only those that own a window or
-  // belong to an application, such as one running only in the tray.
-  bool include_all = 3;
+// What a person answered when asked about an untrusted launcher (the choices
+// of the Thunar and xfdesktop dialog besides cancelling).
+enum LauncherConfirmation {
+  LAUNCHER_CONFIRMATION_UNSPECIFIED = 0;
+  // Nobody was asked; an untrusted launcher is not run.
+  LAUNCHER_CONFIRMATION_NONE = 1;
+  // Run it this once and leave it untrusted ("Launch Anyway").
+  LAUNCHER_CONFIRMATION_LAUNCH_ANYWAY = 2;
+  // Mark it trusted, by setting the executable bit and recording its SHA-256
+  // checksum, then run it ("Mark As Trusted And Launch").
+  LAUNCHER_CONFIRMATION_MARK_TRUSTED = 3;
 }
 
-// The response of ListProcesses.
-message ListProcessesResponse {
-  // The processes, by pid.
-  repeated Process processes = 1;
-  // Empty on the last page.
-  string next_page_token = 2;
+// The response of OpenUri. It fails as LaunchApplication does.
+message OpenUriResponse {
+  // The startup notification ID of the program started to open it. Empty
+  // when none was started, such as when the file manager was asked over
+  // D-Bus.
+  string startup_id = 1;
+  // The first window of the launch. Unset when none.
+  optional uint64 window_id = 2;
+  // The session revision at which the startup sequence ended.
+  uint64 revision = 3;
 }
 
-// The request of TerminateProcess.
-message TerminateProcessRequest {
-  // A process of the session. Other processes fail with NOT_FOUND and reason
-  // PROCESS_NOT_FOUND.
-  uint32 pid = 1;
-  // Kills it at once (SIGKILL) instead of asking it to end (SIGTERM).
-  bool force = 2;
-}
-
-// The response of TerminateProcess. The process may take a while to end; its
-// windows disappear from the window channel when it does.
-message TerminateProcessResponse {
-  // The session revision at which the signal was sent.
-  uint64 revision = 1;
-}
+// Allows a viewer to launch applications and open URIs. Carried in the
+// viewer's signed authorization; without it the viewer can only look.
+message ApplicationPolicy {}

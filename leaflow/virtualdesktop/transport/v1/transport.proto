@@ -42,6 +42,13 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/tr
 // varint length-delimited messages of its channel type as a byte stream, cut
 // into data envelopes of any size. The viewer allocates even channel ids from
 // 2, the session odd ids from 1; ids are never reused on a connection.
+//
+// Messages. Each channel type names the message type each of its ends sends.
+// Where an end sends several kinds of message, that type has a oneof, and a
+// receiver ignores a message whose case it does not know, so that later
+// versions can add cases. Any other message it cannot decode closes the
+// channel with PROTOCOL_VIOLATION. A channel type that changes incompatibly
+// gets a new name.
 
 // Exactly one message of a data channel.
 message Packet {

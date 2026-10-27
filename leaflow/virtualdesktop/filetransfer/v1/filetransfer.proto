@@ -13,65 +13,52 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/fi
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.filetransfer.v1", lane "interactive": opened by
-//     the viewer, one per connection. It carries offers, cancellations and
-//     results in both directions.
+//     the viewer, one per connection. Both ends send FileTransferMessage.
 //   - "leaflow.virtualdesktop.filetransfer.v1.content", lane "bulk": opened by
 //     the receiver of a file, one per file and at most four at a time per
-//     connection. The receiver sends FileContentRequest; the source answers
-//     with FileContentData messages and one FileContentEnd. The receiver
-//     closes the channel with NO_ERROR once it has verified and stored the
-//     file. Flow control is the channel's credit, which the receiver returns
-//     as it writes.
+//     connection. The opener sends one FileContentRequest; the source answers
+//     with FileContent messages, the last of them the end. The receiver
+//     closes the channel with NO_ERROR once it has verified, flushed and
+//     stored the file, or with CANCELLED to stop. Flow control is the
+//     channel's credit, which the receiver returns as it writes.
 //   - "leaflow.virtualdesktop.filetransfer.v1.FileSystemService", lane
 //     "interactive": opened by the viewer to browse and change files.
 //
+// Transfers. The sender of files offers them with FileTransferOffer. The
+// receiver chooses with FileTransferRequest and the sender confirms with
+// FileTransferResponse before any content is requested; a content request
+// that arrives first waits up to five seconds for its confirmation, then
+// fails. The receiver fetches each regular file over a content channel and
+// reports with FileTransferResult. Bytes nobody asked for are never written.
+//
 // An offer names files by opaque ids and plain names, never by paths of the
 // source. A name is one path component of at most 255 bytes: not empty, not
-// "." or "..", without "/" or NUL. Symbolic links are never transferred. An
-// offer lasts as long as the connection; nothing resumes on another one.
-// Read-only viewers open none of these channels.
+// "." or "..", without "/" or NUL. Symbolic links are never transferred.
+// Offers belong to the connection: when it ends, its offers and unfinished
+// files are discarded and nothing resumes; the originals and files already
+// stored remain. File sizes and counts are not limited beyond
+// FileTransferPolicy; a failed file ends with google.rpc.Status and never
+// ends the session. Read-only viewers open none of these channels.
 
-// A message from the viewer.
-message ClientMessage {
+// A message on the filetransfer channel, from either end.
+message FileTransferMessage {
   // The message.
   oneof message {
-    // On the filetransfer channel: files the viewer offers.
+    // Files the sender offers.
     FileTransferOffer offer = 1;
-    // On the filetransfer channel: stops a transfer.
-    FileTransferCancel cancel = 2;
-    // On the filetransfer channel: what the viewer received.
-    FileTransferResult result = 3;
-    // On a content channel the viewer opened.
-    FileContentRequest content_request = 4;
-    // On a content channel the session opened.
-    FileContentData content_data = 5;
-    // On a content channel the session opened.
-    FileContentEnd content_end = 6;
+    // The receiver chooses files of an offer.
+    FileTransferRequest request = 2;
+    // The sender confirms the files chosen.
+    FileTransferResponse response = 3;
+    // Stops a transfer.
+    FileTransferCancel cancel = 4;
+    // What the receiver stored.
+    FileTransferResult result = 5;
   }
 }
 
-// A message from the session.
-message ServerMessage {
-  // The message.
-  oneof message {
-    // On the filetransfer channel: files the session offers.
-    FileTransferOffer offer = 1;
-    // On the filetransfer channel: stops a transfer.
-    FileTransferCancel cancel = 2;
-    // On the filetransfer channel: what the session received.
-    FileTransferResult result = 3;
-    // On a content channel the session opened.
-    FileContentRequest content_request = 4;
-    // On a content channel the viewer opened.
-    FileContentData content_data = 5;
-    // On a content channel the viewer opened.
-    FileContentEnd content_end = 6;
-  }
-}
-
-// Files the sender offers. The receiver fetches the ones it wants over content
-// channels and reports with FileTransferResult. At most 1024 entries and 512
-// KiB.
+// Files the sender offers. At most FileTransferPolicy.max_entries entries and
+// 512 KiB.
 message FileTransferOffer {
   // Chosen by the sender, unique on the connection.
   string transfer_id = 1;
@@ -80,8 +67,8 @@ message FileTransferOffer {
   // The sum of the regular files' sizes.
   uint64 total_size_bytes = 3;
   // From the viewer only: the directory of the session user to store the
-  // files in, which needs file system access. Empty: the user's transfer
-  // directory. Existing files are never overwritten.
+  // files in, which needs FileTransferPolicy.file_system_allowed. Empty: the
+  // user's private transfer directory. Existing files are never overwritten.
   string destination_directory = 4;
 }
 
@@ -112,7 +99,32 @@ enum FileType {
   FILE_TYPE_SYMBOLIC_LINK = 3;
 }
 
-// Stops a transfer. Either side; open content channels of it close with
+// The receiver chooses files of an offer.
+message FileTransferRequest {
+  // Chosen by the receiver, unique among its requests on the connection.
+  uint64 request_id = 1;
+  // The offer.
+  string transfer_id = 2;
+  // The regular files, and the directories whose whole contents, it wants.
+  repeated string file_ids = 3;
+  // The files go to the receiver's clipboard once stored. Needs the matching
+  // direction of the viewer's ClipboardPolicy as well.
+  bool clipboard = 4;
+}
+
+// The sender confirms the files chosen.
+message FileTransferResponse {
+  // FileTransferRequest.request_id.
+  uint64 request_id = 1;
+  // The offer.
+  string transfer_id = 2;
+  // The files the receiver may fetch.
+  repeated string file_ids = 3;
+  // Why the sender refused. Unset on success.
+  google.rpc.Status error = 4;
+}
+
+// Stops a transfer. Either end; open content channels of it close with
 // CANCELLED.
 message FileTransferCancel {
   // The transfer.
@@ -120,7 +132,7 @@ message FileTransferCancel {
 }
 
 // What the receiver stored of an offer. Sent once, when it has fetched
-// everything it wanted, or on failure.
+// everything it chose, or on failure.
 message FileTransferResult {
   // The transfer.
   string transfer_id = 1;
@@ -130,8 +142,8 @@ message FileTransferResult {
   google.rpc.Status error = 3;
 }
 
-// Asks for the content of one regular file of an offer. The first message of
-// a content channel.
+// Asks for the content of one regular file the sender confirmed. The only
+// message the opener of a content channel sends.
 message FileContentRequest {
   // The transfer.
   string transfer_id = 1;
@@ -139,13 +151,18 @@ message FileContentRequest {
   string file_id = 2;
 }
 
-// The next bytes of the file, in order.
-message FileContentData {
-  // At most 256 KiB.
-  bytes data = 1;
+// Part of a file's content, from the source.
+message FileContent {
+  // The part.
+  oneof part {
+    // The next bytes, in order, at most 256 KiB.
+    bytes data = 1;
+    // The end of the file. The last message of the channel.
+    FileContentEnd end = 2;
+  }
 }
 
-// The end of the file. The receiver checks the size and the digest before
+// The end of a file. The receiver checks the size and the digest before
 // storing it.
 message FileContentEnd {
   // SHA-256 of the whole content, 32 bytes. Empty with error.
@@ -157,11 +174,12 @@ message FileContentEnd {
 
 // The files of the session's user, by absolute path. Paths are resolved as
 // that user; an empty path is the user's home directory. Nothing is removed
-// recursively and nothing is overwritten implicitly. Needs file system access
-// in the viewer's authorization.
+// recursively and nothing is overwritten implicitly. Needs
+// FileTransferPolicy.file_system_allowed.
 service FileSystemService {
-  // Lists a directory, a page at a time. A page token becomes invalid when
-  // the directory changes, and is then refused with ABORTED.
+  // Lists a directory of at most 4096 entries and 512 KiB, a page at a time.
+  // A page token becomes invalid when the directory changes, and is then
+  // refused with ABORTED.
   rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -171,8 +189,8 @@ service FileSystemService {
   rpc RenameFile(RenameFileRequest) returns (RenameFileResponse);
   // Removes a file or an empty directory.
   rpc RemoveFile(RemoveFileRequest) returns (RemoveFileResponse);
-  // Offers files of the user to the viewer, which fetches them over content
-  // channels as for any offer.
+  // Offers files of the user to the viewer, which fetches them as for any
+  // offer.
   rpc CreateFileOffer(CreateFileOfferRequest) returns (CreateFileOfferResponse);
 }
 
@@ -260,4 +278,6 @@ message FileTransferPolicy {
   bool download_allowed = 2;
   // The viewer may use FileSystemService and choose where uploads go.
   bool file_system_allowed = 3;
+  // The most entries, directories included, of one offer. 0: 1024.
+  uint32 max_entries = 4;
 }
