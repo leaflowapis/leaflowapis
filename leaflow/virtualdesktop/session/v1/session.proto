@@ -21,6 +21,14 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/se
 // treats the desktop as complete once every such channel it opened has ended
 // its snapshot. Channels are independent streams: nothing may depend on the
 // order in which different channels deliver.
+//
+// Revisions. The session numbers what it observes changing in its windows,
+// pixels and accessibility trees with one logical clock, the revision, which
+// starts at 1 and only grows (after the etcd revision). Automation calls that
+// act on the session return the revision at which their action took effect,
+// and calls that read state return the revision the state belongs to; every
+// change observed later has a larger revision. Revisions order observations
+// across channels, which the channels themselves do not.
 
 // A message from the viewer.
 message ClientMessage {

@@ -6,13 +6,13 @@ import "leaflow/virtualdesktop/display/v1/display.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/cursor/v1;cursorv1";
 
-// The shape of the mouse cursor. X shows one cursor at a time, chosen by the
-// window under the pointer, so the viewer shows it over every window of the
-// session and its own cursors over its own interface.
+// The shape and position of the mouse cursor. X shows one cursor at a time,
+// chosen by the window under the pointer, so the viewer shows it over every
+// window of the session and its own cursors over its own interface.
 //
 // Channel type "leaflow.virtualdesktop.cursor.v1", lane "metadata". The
 // viewer opens one per connection. It starts with a snapshot: the current
-// Cursor, then SnapshotEnd.
+// Cursor and PointerPosition, then SnapshotEnd.
 
 // A message from the session.
 message ServerMessage {
@@ -22,6 +22,8 @@ message ServerMessage {
     Cursor cursor = 1;
     // Ends the snapshot.
     SnapshotEnd snapshot_end = 2;
+    // The pointer moved, other than by this viewer.
+    PointerPosition pointer_position = 3;
   }
 }
 
@@ -40,6 +42,23 @@ message Cursor {
   uint32 hotspot_x = 3;
   // The hotspot from the top of the image, in pixels.
   uint32 hotspot_y = 4;
+}
+
+// Where the pointer is (RFB PointerPos pseudo-encoding; Xpra pointer-position),
+// so that a viewer can show the pointer of whoever else moves it, such as an
+// automation client holding the input lease. Sent when the pointer was moved
+// by another viewer or by an application, at most once per 16 milliseconds
+// with the latest position; never for this viewer's own input.
+message PointerPosition {
+  // The window the point is relative to. 0: canvas coordinates.
+  uint64 window_id = 1;
+  // The point.
+  sint32 x = 2;
+  // See x.
+  sint32 y = 3;
+  // The connection whose input moved it, as in ViewerList. 0: an application
+  // moved it.
+  uint64 connection_id = 4;
 }
 
 // Ends the snapshot.

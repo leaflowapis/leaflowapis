@@ -234,11 +234,11 @@ message InputError {
   google.rpc.Status error = 2;
 }
 
-// Input for automation clients, in canvas coordinates, after the Chrome
-// DevTools Protocol Input domain. A call returns once the input was injected.
-// It fails with FAILED_PRECONDITION and reason INPUT_LEASE_HELD while another
-// viewer holds the input lease, and with PERMISSION_DENIED for a read-only
-// viewer.
+// Input for automation clients, after the Chrome DevTools Protocol Input
+// domain. A call returns once the input was injected; whether it had the
+// intended effect is for the caller to observe. Calls that inject input fail
+// with FAILED_PRECONDITION and reason INPUT_LEASE_HELD while another viewer
+// holds the input lease, and with PERMISSION_DENIED for a read-only viewer.
 service InputService {
   // Presses, releases or moves the pointer, or scrolls.
   rpc DispatchPointerEvent(DispatchPointerEventRequest) returns (DispatchPointerEventResponse);
@@ -246,6 +246,10 @@ service InputService {
   rpc DispatchKeyEvent(DispatchKeyEventRequest) returns (DispatchKeyEventResponse);
   // Inserts text into the focused text field without typing keys.
   rpc InsertText(InsertTextRequest) returns (InsertTextResponse);
+  // Returns where the pointer is (X11 QueryPointer).
+  rpc GetPointerPosition(GetPointerPositionRequest) returns (GetPointerPositionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
 }
 
 // What a pointer event does.
@@ -265,7 +269,7 @@ enum PointerEventType {
 message DispatchPointerEventRequest {
   // What the event does.
   PointerEventType type = 1;
-  // Where, in canvas coordinates. The pointer moves there first.
+  // Where. The pointer moves there first.
   sint32 x = 2;
   // See x.
   sint32 y = 3;
@@ -275,12 +279,18 @@ message DispatchPointerEventRequest {
   sint32 delta_x = 5;
   // WHEEL: the vertical scroll in value120 units.
   sint32 delta_y = 6;
+  // The window x and y are relative to. 0: they are canvas coordinates. Fails
+  // with NOT_FOUND and reason WINDOW_GONE when the window no longer exists,
+  // before anything is injected.
+  uint64 window_id = 7;
 }
 
 // The response of DispatchPointerEvent.
 message DispatchPointerEventResponse {
   // The window under the point that received the event. 0: none.
   uint64 window_id = 1;
+  // The session revision at which the event was injected.
+  uint64 revision = 2;
 }
 
 // What a key event does.
@@ -306,6 +316,8 @@ message DispatchKeyEventRequest {
 message DispatchKeyEventResponse {
   // The window with the X focus that received the key. 0: none.
   uint64 window_id = 1;
+  // The session revision at which the key was injected.
+  uint64 revision = 2;
 }
 
 // The request of InsertText.
@@ -318,4 +330,19 @@ message InsertTextRequest {
 message InsertTextResponse {
   // The window of the text field that received it.
   uint64 window_id = 1;
+  // The session revision at which the text was inserted.
+  uint64 revision = 2;
+}
+
+// The request of GetPointerPosition.
+message GetPointerPositionRequest {}
+
+// The response of GetPointerPosition.
+message GetPointerPositionResponse {
+  // The pointer, in canvas coordinates.
+  sint32 x = 1;
+  // See x.
+  sint32 y = 2;
+  // The window under the pointer. 0: none.
+  uint64 window_id = 3;
 }

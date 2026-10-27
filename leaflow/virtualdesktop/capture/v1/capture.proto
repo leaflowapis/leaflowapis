@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.capture.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+import "leaflow/virtualdesktop/display/v1/display.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/capture/v1;capturev1";
+
+// Still images of the session for clients that read the screen, such as
+// automation clients that look at it.
+//
+// Channel type "leaflow.virtualdesktop.capture.v1.CaptureService", lane
+// "bulk": opened by the viewer. Read-only viewers may capture.
+
+// Captures what the session shows, after the Chrome DevTools Protocol
+// Page.captureScreenshot.
+service CaptureService {
+  // Captures the canvas or one window as a still image.
+  rpc CaptureScreenshot(CaptureScreenshotRequest) returns (CaptureScreenshotResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// The request of CaptureScreenshot.
+message CaptureScreenshotRequest {
+  // The window to capture: its client area with its own content only, even
+  // where other windows cover it. 0: the canvas, every window composited in
+  // stacking order as a driver shows them, with black where no window is.
+  // Fails with NOT_FOUND and reason WINDOW_GONE for a window that no longer
+  // exists.
+  uint64 window_id = 1;
+  // The part to capture, in the coordinates of the window or of the canvas.
+  // It is clipped to the window or the canvas. Unset: all of it.
+  leaflow.virtualdesktop.display.v1.Rectangle clip = 2;
+  // The image format: "image/png" (W3C PNG), "image/jpeg" (ISO/IEC 10918-1)
+  // or "image/webp" (RFC 9649). Empty: "image/png".
+  string mime_type = 3;
+  // The quality of a lossy format, 1 to 100. 0: 90.
+  uint32 quality = 4;
+  // The longest edge of the image in pixels; a larger capture is scaled down
+  // preserving its aspect ratio. 0: no scaling.
+  uint32 max_dimension = 5;
+  // Draws the pointer into the image where it is.
+  bool include_pointer = 6;
+  // Waits until the captured area has not changed for this long, so that the
+  // image does not show an animation or a repaint halfway. Unset: capture
+  // now.
+  google.protobuf.Duration quiet_period = 7;
+  // The longest wait for quiet_period, at most 10 seconds. When it passes the
+  // session captures anyway. Unset: 3 seconds.
+  google.protobuf.Duration timeout = 8;
+}
+
+// The response of CaptureScreenshot.
+message CaptureScreenshotResponse {
+  // The encoded image.
+  bytes data = 1;
+  // The format of data.
+  string mime_type = 2;
+  // The size of the image in pixels.
+  leaflow.virtualdesktop.display.v1.Size size = 3;
+  // The area the image shows, in canvas coordinates. A pixel (x, y) of the
+  // image shows the canvas point (area.x + x * area.width / size.width,
+  // area.y + y * area.height / size.height), the point input goes to.
+  leaflow.virtualdesktop.display.v1.Rectangle area = 4;
+  // Window.resize_counter of the captured window. 0 for the canvas.
+  uint64 resize_counter = 5;
+  // When the image was taken.
+  google.protobuf.Timestamp captured_at = 6;
+  // The area had been unchanged for quiet_period when it was captured. False
+  // when the timeout passed first.
+  bool quiet = 7;
+  // The session revision the image shows.
+  uint64 revision = 8;
+}

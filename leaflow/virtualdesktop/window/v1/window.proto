@@ -24,9 +24,12 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/wi
 //
 // The driver. The canvas and the managed windows follow one viewer at a time,
 // the driver named in the session channel's ViewerList. A viewer that is not
-// read-only becomes the driver when it sends WindowStacking, WindowActivate,
-// WindowConfigure, WindowClose, WindowMinimize or WindowStateChange, or input
-// other than pointer motion; the session applies the operation. Requests of
+// read-only and has sent DisplayConfigure becomes the driver when it sends
+// WindowStacking, WindowActivate, WindowConfigure, WindowClose,
+// WindowMinimize or WindowStateChange, or input other than pointer motion;
+// the session applies the operation. A viewer without a viewport, such as an
+// automation client, never becomes the driver: its operations are applied
+// and the driver sees their result like any change. Requests of
 // applications that only the driver may grant (WindowActivate and
 // WindowRestack from the session) go to the driver; while there is none the
 // session decides itself. Override-redirect windows, such as menus, are
