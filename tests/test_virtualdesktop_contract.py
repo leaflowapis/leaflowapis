@@ -41,10 +41,9 @@ ALLOWED_IMPORTS: dict[str, set[str]] = {
     "accessibility": DISPLAY,
     # What changed across the desktop domains.
     "change": {"display", "window", "accessibility", "tray", "notification"},
-    # Files, and the domains that move files.
+    # Files, and copy and paste and drag and drop, which move files too.
     "filetransfer": set(),
-    "clipboard": {"filetransfer"},
-    "dragdrop": {"filetransfer"},
+    "datatransfer": {"filetransfer"},
     # Device redirection, and the devices built on it.
     "device": set(),
     "audio": {"device"},
