@@ -1,0 +1,76 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.device.v1;
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/device/v1;devicev1";
+
+// Devices of the viewer that feed the session: its microphone, camera and
+// gamepads. The session presents them to its applications as virtual devices
+// and tells viewers when an application uses the microphone or the camera,
+// so that a viewer captures only while something consumes it.
+//
+// Channel type "leaflow.virtualdesktop.device.v1", lane "metadata": opened by
+// the viewer, one per connection. It starts with a snapshot: one DeviceDemand
+// per device type the session supports, then SnapshotEnd.
+//
+// A viewer provides a device by opening the channel type of its package
+// (audio input, camera, gamepad) after its person agreed. One viewer at a
+// time provides the microphone and one the camera; while one does, opening
+// another fails with RESOURCE_SHORTAGE. Read-only viewers provide nothing.
+
+// A message from the session.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // The use of a device type changed.
+    DeviceDemand demand = 1;
+    // Ends the snapshot.
+    SnapshotEnd snapshot_end = 2;
+  }
+}
+
+// A type of device a viewer can provide.
+enum DeviceType {
+  DEVICE_TYPE_UNSPECIFIED = 0;
+  // A microphone, as the session's audio source.
+  DEVICE_TYPE_MICROPHONE = 1;
+  // A camera, as the session's video capture device.
+  DEVICE_TYPE_CAMERA = 2;
+  // A gamepad, as an input device of the session.
+  DEVICE_TYPE_GAMEPAD = 3;
+}
+
+// Whether applications use a device type, and who provides it.
+message DeviceDemand {
+  // The device type.
+  DeviceType type = 1;
+  // An application records from the device, such as an uncorked recording
+  // stream of the audio source or a streaming video capture. Opening or
+  // probing the device does not count. Always false for gamepads.
+  bool active = 2;
+  // The applications using it, as far as the session can tell, at most 32.
+  // Empty does not mean that nothing uses it.
+  repeated DeviceConsumer consumers = 3;
+  // The connection that provides the device, as in ViewerList. 0: none.
+  uint64 provider_connection_id = 4;
+}
+
+// An application using a device.
+message DeviceConsumer {
+  // Its process. 0 when unknown.
+  uint32 pid = 1;
+  // Its name, as it reports it. Plain text.
+  string application_name = 2;
+  // The desktop file ID of the application. Empty when unknown.
+  string desktop_file_id = 3;
+}
+
+// Ends the snapshot.
+message SnapshotEnd {}
+
+// What devices a viewer may provide. Carried in the viewer's signed
+// authorization; without it the viewer provides none.
+message DevicePolicy {
+  // The device types the viewer may provide.
+  repeated DeviceType allowed_types = 1;
+}

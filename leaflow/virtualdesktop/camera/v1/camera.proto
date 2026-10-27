@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.camera.v1;
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/camera/v1;camerav1";
+
+// The viewer's camera as the session's video capture device (after
+// MS-RDPECAM). The session decodes the frames and feeds them to its virtual
+// capture device.
+//
+// Channel types:
+//   - "leaflow.virtualdesktop.camera.v1", lane "metadata": opened by the
+//     viewer that provides the camera (see the device package). The viewer
+//     sends ClientHello, the session ServerHello. The session closes the
+//     channel with NO_ERROR when no application captures anymore.
+//   - "leaflow.virtualdesktop.camera.v1.frame", lane "media": opened by the
+//     viewer, one per frame. It carries one CameraFrame, then closes. The
+//     viewer may abandon a frame that a newer one has overtaken by closing
+//     its channel with CANCELLED.
+
+// A message from the viewer.
+message ClientMessage {
+  // The message.
+  oneof message {
+    // The formats the viewer can produce. The first message of the camera
+    // channel.
+    ClientHello client_hello = 1;
+    // On a frame channel: the frame.
+    CameraFrame frame = 2;
+  }
+}
+
+// A message from the session on the camera channel.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // The format to send. The first message of the session.
+    ServerHello server_hello = 1;
+    // Asks for a key frame.
+    KeyFrameRequest key_frame_request = 2;
+  }
+}
+
+// The formats the viewer can produce.
+message ClientHello {
+  // Most preferred first, at most 8.
+  repeated CameraFormat formats = 1;
+}
+
+// The format to send, fixed until the channel closes.
+message ServerHello {
+  // One of ClientHello.formats, possibly with a lower size or frame rate.
+  CameraFormat format = 1;
+  // The largest CameraFrame.data the session accepts.
+  uint32 max_frame_size_bytes = 2;
+}
+
+// A format of camera frames.
+message CameraFormat {
+  // How frames are encoded.
+  CameraEncoding encoding = 1;
+  // The frame width in pixels.
+  uint32 width = 2;
+  // The frame height in pixels.
+  uint32 height = 3;
+  // The most frames per second.
+  double frame_rate = 4;
+  // H264 only: the WebCodecs codec string, such as "avc1.42E01F".
+  string codec = 5;
+  // H264 only: the WebCodecs VideoDecoderConfig.description (an
+  // AVCDecoderConfigurationRecord).
+  bytes description = 6;
+}
+
+// How camera frames are encoded.
+enum CameraEncoding {
+  CAMERA_ENCODING_UNSPECIFIED = 0;
+  // Every frame is a JPEG (ISO/IEC 10918-1).
+  CAMERA_ENCODING_JPEG = 1;
+  // H.264 access units in AVC format, one per frame.
+  CAMERA_ENCODING_H264 = 2;
+}
+
+// One frame.
+message CameraFrame {
+  // Grows by one with every frame of the camera channel, starting at 1. The
+  // session drops a frame older than one it has shown.
+  uint64 sequence = 1;
+  // The capture time in microseconds, on the viewer's media clock.
+  int64 timestamp_us = 2;
+  // The frame decodes on its own. Always true for JPEG.
+  bool key_frame = 3;
+  // The encoded frame.
+  bytes data = 4;
+}
+
+// Asks for a key frame, after a frame could not be decoded or was lost. The
+// session drops H264 frames until the next key frame.
+message KeyFrameRequest {}

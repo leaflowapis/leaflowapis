@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.audio.v1;
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/audio/v1;audiov1";
+
+// Sound between the session and the viewer, as Opus packets (RFC 6716) that
+// viewers encode and decode with WebCodecs (after MS-RDPEA and MS-RDPEAI).
+//
+// Channel types:
+//   - "leaflow.virtualdesktop.audio.v1.output", lane "media": opened by a
+//     viewer to play the session's sound; read-only viewers may. The viewer
+//     sends ClientHello, the session ServerHello, then AudioData as Datagrams
+//     of the channel. Closing the channel stops it.
+//   - "leaflow.virtualdesktop.audio.v1.input", lane "media": opened by the
+//     viewer that provides the microphone (see the device package). The
+//     viewer sends ClientHello, the session ServerHello, then the viewer
+//     AudioData as Datagrams. The session closes the channel with NO_ERROR
+//     when no application records anymore.
+//
+// Datagrams may be lost or reordered: the receiver plays packets by
+// timestamp, conceals gaps and drops packets older than one it played.
+
+// A message from the viewer.
+message ClientMessage {
+  // The message.
+  oneof message {
+    // The codecs the viewer handles. The first message of the channel.
+    ClientHello client_hello = 1;
+    // On the input channel: a packet of the microphone.
+    AudioData audio_data = 2;
+  }
+}
+
+// A message from the session.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // The format of the stream. The first message of the session.
+    ServerHello server_hello = 1;
+    // On the output channel: a packet of the session's sound.
+    AudioData audio_data = 2;
+  }
+}
+
+// The codecs the viewer handles.
+message ClientHello {
+  // WebCodecs codec strings, most preferred first, such as "opus": those the
+  // viewer decodes for output, those it encodes for input.
+  repeated string codecs = 1;
+}
+
+// The format of the stream, fixed until the channel closes.
+message ServerHello {
+  // One of ClientHello.codecs.
+  string codec = 1;
+  // The sample rate, 8000 to 48000 Hz.
+  uint32 sample_rate_hz = 2;
+  // The number of channels, 1 or 2.
+  uint32 channel_count = 3;
+  // WebCodecs AudioDecoderConfig.description, such as an OpusHead (RFC 7845
+  // §5.1). May be empty.
+  bytes description = 4;
+}
+
+// One encoded packet (WebCodecs EncodedAudioChunk).
+message AudioData {
+  // Grows by one with every packet of the channel, starting at 1.
+  uint64 sequence = 1;
+  // The time of its first sample in microseconds, on the sender's media
+  // clock.
+  int64 timestamp_us = 2;
+  // Its duration in microseconds, such as 20000.
+  uint32 duration_us = 3;
+  // Exactly one codec packet.
+  bytes data = 4;
+}
+
+// What a viewer may do with sound. Carried in the viewer's signed
+// authorization. Providing the microphone needs DevicePolicy instead.
+message AudioPolicy {
+  // The viewer may play the session's sound.
+  bool output_allowed = 1;
+}
