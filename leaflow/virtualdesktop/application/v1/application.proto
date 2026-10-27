@@ -1,0 +1,163 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.application.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/application/v1;applicationv1";
+
+// The applications installed for the session's user and the processes that
+// run in the session.
+//
+// Channel type "leaflow.virtualdesktop.application.v1.ApplicationService",
+// lane "interactive": opened by the viewer.
+//
+// Applications are the user's desktop entries (freedesktop Desktop Entry
+// Specification), named by their desktop file ID, such as
+// "org.gnome.TextEditor.desktop". Names are localized for the language of the
+// session channel's ClientHello. LaunchApplication and TerminateProcess act on
+// the session, so they need what input needs: a viewer that is not read-only,
+// holding the input lease.
+
+// Lists, launches and ends applications.
+service ApplicationService {
+  // Lists the applications the user can launch.
+  rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Launches an application as its desktop entry says.
+  rpc LaunchApplication(LaunchApplicationRequest) returns (LaunchApplicationResponse);
+  // Lists the processes of the session that belong to an application.
+  rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Ends a process of the session.
+  rpc TerminateProcess(TerminateProcessRequest) returns (TerminateProcessResponse);
+}
+
+// An application (a desktop entry of type Application).
+message Application {
+  // Its desktop file ID.
+  string desktop_file_id = 1;
+  // Its name (Name).
+  string name = 2;
+  // What kind of application it is, such as "Web Browser" (GenericName).
+  string generic_name = 3;
+  // A tooltip-like description (Comment).
+  string comment = 4;
+  // Its icon in the freedesktop icon theme (Icon). Empty when none.
+  string icon_name = 5;
+  // Its categories, such as "Network" (Categories).
+  repeated string categories = 6;
+  // Further search words (Keywords).
+  repeated string keywords = 7;
+  // The media types it opens (MimeType).
+  repeated string mime_types = 8;
+  // Additional ways to launch it, such as opening a new window (Actions).
+  repeated ApplicationAction actions = 9;
+  // It runs in a terminal (Terminal).
+  bool terminal = 10;
+  // Menus do not show it (NoDisplay). Listed only when asked for.
+  bool no_display = 11;
+}
+
+// An additional way to launch an application (a Desktop Action).
+message ApplicationAction {
+  // Its identifier in the desktop entry, such as "new-window".
+  string action_id = 1;
+  // Its name.
+  string name = 2;
+}
+
+// The request of ListApplications.
+message ListApplicationsRequest {
+  // At most 1000. 0: 200.
+  uint32 page_size = 1;
+  // From the previous response. Empty for the first page.
+  string page_token = 2;
+  // Also lists applications menus do not show.
+  bool include_no_display = 3;
+}
+
+// The response of ListApplications.
+message ListApplicationsResponse {
+  // The applications, ordered by name.
+  repeated Application applications = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+// The request of LaunchApplication.
+message LaunchApplicationRequest {
+  // The application. Unknown ones fail with NOT_FOUND and reason
+  // APPLICATION_NOT_FOUND.
+  string desktop_file_id = 1;
+  // URIs to open, such as "file:///home/user/report.pdf" (the %u and %U
+  // field codes).
+  repeated string uris = 2;
+  // An action of Application.actions to launch instead of the application.
+  // Empty: the application.
+  string action_id = 3;
+}
+
+// The response of LaunchApplication.
+message LaunchApplicationResponse {
+  // The process started. An application that hands the request to an
+  // instance already running may exit soon.
+  uint32 pid = 1;
+  // The startup notification ID given to the application (freedesktop Startup
+  // Notification Protocol). The windows it opens for this launch carry it as
+  // Window.startup_id.
+  string startup_id = 2;
+  // The session revision at which the process started.
+  uint64 revision = 3;
+}
+
+// A process of the session.
+message Process {
+  // Its process ID.
+  uint32 pid = 1;
+  // Its executable name, such as "firefox" (Linux /proc/[pid]/comm).
+  string name = 2;
+  // The desktop file ID of its application. Empty when unknown.
+  string desktop_file_id = 3;
+  // The windows it owns, in the ids of the window channel.
+  repeated uint64 window_ids = 4;
+  // When it started.
+  google.protobuf.Timestamp started_at = 5;
+}
+
+// The request of ListProcesses.
+message ListProcessesRequest {
+  // At most 1000. 0: 200.
+  uint32 page_size = 1;
+  // From the previous response. Empty for the first page.
+  string page_token = 2;
+  // Lists every process of the session, not only those that own a window or
+  // belong to an application, such as one running only in the tray.
+  bool include_all = 3;
+}
+
+// The response of ListProcesses.
+message ListProcessesResponse {
+  // The processes, by pid.
+  repeated Process processes = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+// The request of TerminateProcess.
+message TerminateProcessRequest {
+  // A process of the session. Other processes fail with NOT_FOUND and reason
+  // PROCESS_NOT_FOUND.
+  uint32 pid = 1;
+  // Kills it at once (SIGKILL) instead of asking it to end (SIGTERM).
+  bool force = 2;
+}
+
+// The response of TerminateProcess. The process may take a while to end; its
+// windows disappear from the window channel when it does.
+message TerminateProcessResponse {
+  // The session revision at which the signal was sent.
+  uint64 revision = 1;
+}
