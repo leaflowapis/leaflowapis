@@ -92,8 +92,13 @@ message Window {
   // put it.
   leaflow.virtualdesktop.display.v1.Rectangle geometry = 2;
   // Counts the size changes of the window; see WindowConfigure. It never
-  // decreases and stays the same on a pure move. Frames drawn after a size
-  // change carry the new value.
+  // decreases and stays the same on a pure move. A size change that applies
+  // a WindowConfigure takes that request's value; any other size change adds
+  // one. Frames drawn after a size change carry the new value, and the first
+  // of them for this window depends on nothing. A value smaller than the
+  // largest the viewer has sent in a WindowConfigure confirms an older
+  // request: the viewer keeps its newer layout but records the size for this
+  // value, because frames drawn for it use it.
   uint64 resize_counter = 3;
   // The window bypasses the window manager, such as a menu, a tooltip or the
   // popup of a combo box (ICCCM override_redirect). Never changes.
@@ -397,10 +402,11 @@ enum VisibilityState {
 
 // An application started an interactive move or resize, usually because the
 // user dragged the title bar the window draws itself (EWMH
-// _NET_WM_MOVERESIZE). Sent only to the viewer whose pointer button started
-// it. The viewer runs the drag with its own pointer until the button is
-// released and ends it with WindowConfigure; with CANCEL it stops the drag in
-// progress.
+// _NET_WM_MOVERESIZE). A pointer operation is sent only to the viewer whose
+// press the session applied and can bind the request to; one it cannot bind
+// to such a press is dropped. A keyboard operation is sent to the driver. The
+// viewer runs the drag with its own pointer until the button is released and
+// ends it with WindowConfigure; with CANCEL it stops the drag in progress.
 message WindowInitiateMoveResize {
   // The window.
   uint64 window_id = 1;
@@ -413,6 +419,12 @@ message WindowInitiateMoveResize {
   MoveResizeDirection direction = 4;
   // The X button that started it, from 1. Unused for keyboard operations.
   uint32 button = 5;
+  // PointerButton.input_seq of the viewer's press that the application's
+  // request was bound to. The viewer ignores the request when that press has
+  // already been released. 0 for keyboard operations.
+  uint64 press_input_seq = 6;
+  // Window.resize_counter at that press.
+  uint64 resize_counter = 7;
 }
 
 // What an interactive move or resize changes (EWMH _NET_WM_MOVERESIZE

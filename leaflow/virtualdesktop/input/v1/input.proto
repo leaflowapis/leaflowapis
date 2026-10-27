@@ -30,6 +30,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/in
 // other input the viewer sends one motion with the current position in the
 // next animation frame, so that hover effects catch up.
 //
+// Driver. A press of a key or button, a wheel turn or inserted text from a
+// viewer that has a viewport makes it the driver (see the window channel).
+// Releases belong to the press they end and never change the driver; neither
+// does pointer motion.
+//
 // Coordinates. A pointer position is a window and a point relative to it, so
 // that the viewer may lay windows out differently from the session. In a
 // desktop session the window is the one carrying the whole canvas. Points
@@ -37,14 +42,26 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/in
 //
 // Clipboard before paste. The clipboard travels on its own channel, so a
 // paste could overtake its content. KeyEvent and PointerButton therefore name
-// the clipboard content they need, and the session holds them until that
-// content is in place. When it fails or takes more than 2 seconds the input
-// is dropped with InputError; older content is never pasted.
+// the clipboard content they need, and the session holds them until the
+// session owns the selection with that content. Later input waits behind
+// them in order. When it fails, is replaced or takes more than 2 seconds the
+// dependent input is dropped with InputError and older content is never
+// pasted; releases of keys and buttons pressed before are still applied.
 //
-// Text input. The session reports the focused text field of the applications
-// (as Wayland text-input-v3 reports it to an input method) and the viewer,
-// acting as the input method, answers with preedit and committed text (as
-// Wayland input-method-v2 does).
+// Text input. The viewer's own input method composes text, as its person
+// knows it, and the session hands the result to the native input context of
+// the focused editor in the session (IBus or another input method
+// framework). The session reports the focused editor with TextInputState.
+// Plain text goes as InsertText. A composition in progress goes as
+// Composition messages, so that the application shows the preedit text, and
+// the real keys the input method consumes while composing go along as its
+// KEY phases. An editor is identified by window_id, input_context_id and
+// focus_serial; text bound to an editor that has since changed is cancelled,
+// never redirected to another one.
+//
+// Keys. A KeyEvent is a physical key the person pressed. Applications and the
+// native input method interpret it; missing caret geometry or an uncertain
+// text delivery never suppresses it.
 
 // A message from the viewer on the input channel.
 message ClientMessage {
@@ -58,8 +75,10 @@ message ClientMessage {
     PointerButton pointer_button = 3;
     // The wheel or touchpad scrolled.
     PointerWheel pointer_wheel = 4;
-    // Preedit and committed text of the viewer's input method.
-    TextInputCommit text_input_commit = 5;
+    // Text to insert.
+    InsertText insert_text = 5;
+    // A step of a composition of the viewer's input method.
+    Composition composition = 6;
   }
 }
 
@@ -69,14 +88,16 @@ message ServerMessage {
   oneof message {
     // The focused text field changed.
     TextInputState text_input_state = 1;
-    // Input was dropped.
+    // Key, pointer or wheel input was dropped.
     InputError input_error = 2;
+    // Inserted or composed text was dropped.
+    TextInputError text_input_error = 3;
   }
 }
 
-// A key was pressed or released (RFC 6143 KeyEvent). The session turns off X
-// auto-repeat; the viewer sends its repeated key presses as further presses,
-// and releases every pressed key when it loses focus.
+// A physical key was pressed or released (RFC 6143 KeyEvent). The session
+// turns off X auto-repeat; the viewer sends its repeated key presses as
+// further presses, and releases every pressed key when it loses focus.
 message KeyEvent {
   // The position in the input order.
   uint64 input_seq = 1;
@@ -90,8 +111,9 @@ message KeyEvent {
   // "KeyA". Empty when unknown.
   string code = 4;
   // The lock keys after the event, so a Caps Lock press carries the new
-  // state. The session sets its lock keys to match before typing the key and
-  // never types a lock key itself. Unset: every lock is off.
+  // state. The session sets its lock modifiers to match before typing the key,
+  // compensating Shift for the letters Caps Lock inverts, and applies a lock
+  // key press as state instead of typing it. Unset: every lock is off.
   LockKeyState lock_key_state = 5;
   // The window the viewer shows focused. When another window has the X focus
   // the session activates this one first, because a WindowActivate sent on
@@ -171,67 +193,188 @@ message PointerWheel {
   sint32 delta_y = 6;
 }
 
-// The focused text field, as an input method sees it (Wayland text-input-v3).
-// Sent when the input channel opens and whenever focus, the caret or the
-// field changes.
+// The focused editor of the session, as its native input method context
+// reports it. Sent when the input channel opens and whenever the focus, the
+// caret or the editor changes.
 message TextInputState {
-  // Grows by one with every TextInputState of the connection.
-  // TextInputCommit names the state it answers.
-  uint64 serial = 1;
-  // A text field has focus and accepts text. The viewer keeps a local text
-  // field focused so that its own input method can start.
+  // The window of the focused editor. 0 when no window has focus.
+  uint64 window_id = 1;
+  // An editable control or a terminal has focus and accepts text, whether
+  // or not its caret is known. The viewer keeps a local text field focused
+  // while it is set, so that its own input method can start.
   bool enabled = 2;
-  // The window of the text field. 0 when none has focus.
-  uint64 window_id = 3;
   // The caret, relative to the window, for placing the input method's
-  // candidate window. Unset when the application does not report it; text
-  // input still works.
-  leaflow.virtualdesktop.display.v1.Rectangle cursor_rectangle = 4;
-  // Window.resize_counter cursor_rectangle belongs to. The viewer does not
-  // place the candidate window with a rectangle of an earlier window size.
-  uint64 resize_counter = 5;
-  // The application shows preedit text inside the field. Otherwise the
-  // viewer shows it at the caret itself.
-  bool inline_preedit = 6;
+  // candidate window. Unset when the application does not report it
+  // reliably; text input still works.
+  leaflow.virtualdesktop.display.v1.Rectangle cursor_rectangle = 3;
+  // Window.resize_counter the rectangles belong to. The viewer does not apply
+  // rectangles of an earlier window size.
+  uint64 resize_counter = 4;
+  // Where cursor_rectangle came from. UNSPECIFIED when it is unset.
+  CursorSource cursor_source = 5;
+  // Identifies the focused editor within the session, opaque. Different
+  // editors of one window differ; moving the caret or resizing does not change
+  // it. Empty when nothing editable has focus or it cannot be verified.
+  string input_context_id = 6;
+  // Grows whenever editing focus moves, is lost or comes back; not when the
+  // caret moves. Compositions and composed text are bound to it.
+  uint64 focus_serial = 7;
+  // The bounds of the focused control, relative to the window (AT-SPI2
+  // Component.GetExtents; EditContext controlBounds). The viewer may anchor
+  // its candidate window there when cursor_rectangle is unset; it never
+  // treats it as the caret.
+  leaflow.virtualdesktop.display.v1.Rectangle control_rectangle = 8;
+  // The editor's native input context takes Composition messages: preedit
+  // text and the real keys consumed while composing. Otherwise the viewer
+  // sends only InsertText.
+  bool composition_supported = 9;
 }
 
-// The viewer's input method changed the preedit text, committed text, or
-// both, applied at once (Wayland input-method-v2 commit). The session first
-// inserts commit_text, then shows preedit. A commit whose serial names a
-// field that has since lost focus is dropped with InputError; it never goes
-// to another field.
-message TextInputCommit {
+// Where a caret rectangle came from.
+enum CursorSource {
+  CURSOR_SOURCE_UNSPECIFIED = 0;
+  // The native input context reported it, such as by IBus
+  // SetCursorLocation.
+  CURSOR_SOURCE_INPUT_CONTEXT = 1;
+  // An empty accessibility text range at the insertion point.
+  CURSOR_SOURCE_TEXT_RANGE = 2;
+  // The bounds of the character boundary at the accessibility caret offset.
+  // The extent of the preceding character never stands in for it.
+  CURSOR_SOURCE_CHARACTER_BOUNDARY = 3;
+}
+
+// Text to insert (W3C Input Events inputType).
+message InsertText {
   // The position in the input order.
   uint64 input_seq = 1;
-  // TextInputState.serial this commit answers.
-  uint64 serial = 2;
-  // Text to insert. Empty: none.
-  string commit_text = 3;
-  // The preedit text to show now. Unset: no preedit.
-  Preedit preedit = 4;
+  // The text, UTF-8. Not empty.
+  string text = 2;
+  // The window of the editor, from TextInputState. A window that is gone or
+  // no longer focused cancels the insertion; it is never activated for it.
+  uint64 window_id = 3;
+  // TextInputState.input_context_id of the editor.
+  string input_context_id = 4;
+  // TextInputState.focus_serial when the composition began. Checked for
+  // INSERT_FROM_COMPOSITION only.
+  uint64 focus_serial = 5;
+  // What the insertion is.
+  InputType input_type = 6;
 }
 
-// Text an input method is still composing (Wayland input-method-v2
-// set_preedit_string).
-message Preedit {
-  // The text.
-  string text = 1;
-  // The start of the highlighted part, as a byte offset into text in UTF-8.
-  uint32 cursor_begin = 2;
-  // Its end. Equal to cursor_begin for a plain caret.
-  uint32 cursor_end = 3;
+// What an insertion is (W3C Input Events inputType).
+enum InputType {
+  INPUT_TYPE_UNSPECIFIED = 0;
+  // Ordinary text ("insertText"), such as from a virtual keyboard. It goes to
+  // the editor focused once the input before it has been applied.
+  INPUT_TYPE_INSERT_TEXT = 1;
+  // The result of a composition ("insertFromComposition"). It goes only to
+  // the editor the composition began in, and is cancelled when that editor
+  // lost focus since.
+  INPUT_TYPE_INSERT_FROM_COMPOSITION = 2;
 }
 
-// The session dropped input. Its google.rpc.ErrorInfo reason is one of:
-//   CLIPBOARD_NOT_READY  the clipboard content it named did not arrive in time;
-//   TEXT_FIELD_CHANGED   the text field of the commit lost focus;
-//   WINDOW_GONE          its window no longer exists;
-//   INPUT_LEASE_HELD     another viewer holds the input lease.
+// A step of a composition of the viewer's input method (W3C UI Events
+// CompositionEvent; EditContext). Sent only while
+// TextInputState.composition_supported is set.
+message Composition {
+  // The position in the input order.
+  uint64 input_seq = 1;
+  // The window of the editor.
+  uint64 window_id = 2;
+  // TextInputState.input_context_id of the editor.
+  string input_context_id = 3;
+  // TextInputState.focus_serial when the composition began.
+  uint64 focus_serial = 4;
+  // Window.resize_counter when the composition began.
+  uint64 resize_counter = 5;
+  // Chosen by the viewer at BEGIN, unique on the connection; the later
+  // phases repeat it.
+  uint64 composition_id = 6;
+  // The step.
+  CompositionPhase phase = 7;
+  // UPDATE and COMMIT: the preedit or committed text, UTF-8, at most 64 KiB.
+  // May be empty to end an empty composition. Empty for the other phases.
+  string text = 8;
+  // UPDATE and COMMIT: the start of the preedit selection, in UTF-16 code
+  // units as EditContext counts them, on a code point boundary. 0 for the
+  // other phases.
+  uint32 selection_start = 9;
+  // The end of the preedit selection, not before selection_start.
+  uint32 selection_end = 10;
+  // KEY only: the key.
+  CompositionKey key = 11;
+}
+
+// A step of a composition.
+enum CompositionPhase {
+  COMPOSITION_PHASE_UNSPECIFIED = 0;
+  // A composition begins ("compositionstart").
+  COMPOSITION_PHASE_BEGIN = 1;
+  // The preedit text changed ("compositionupdate").
+  COMPOSITION_PHASE_UPDATE = 2;
+  // A real key the input method consumed while composing. The session hands
+  // it to the editor's native input context and waits until that context
+  // consumed it.
+  COMPOSITION_PHASE_KEY = 3;
+  // The composition ended with text ("compositionend").
+  COMPOSITION_PHASE_COMMIT = 4;
+  // The composition was abandoned.
+  COMPOSITION_PHASE_CANCEL = 5;
+}
+
+// A real key consumed while composing. Never made up from text.
+message CompositionKey {
+  // A press or a release.
+  bool pressed = 1;
+  // The W3C UI Events KeyboardEvent code value of the actual event, at most
+  // 64 bytes. A key without a code is not sent.
+  string code = 2;
+  // The lock keys, as in KeyEvent.
+  LockKeyState lock_key_state = 3;
+}
+
+// The session dropped a KeyEvent, PointerButton or PointerWheel. Its
+// google.rpc.ErrorInfo reason is one of:
+//   CLIPBOARD_INPUT_DEPENDENCY_FAILED  the clipboard content it named was not
+//                                      in place in time;
+//   INPUT_LEASE_HELD                   another viewer holds the input lease.
 message InputError {
   // input_seq of the dropped input.
   uint64 input_seq = 1;
+  // Its window.
+  uint64 window_id = 2;
   // Why.
-  google.rpc.Status error = 2;
+  google.rpc.Status error = 3;
+}
+
+// The session dropped an InsertText or a Composition. Its
+// google.rpc.ErrorInfo reason is one of:
+//   TEXT_INPUT_CONTEXT_CHANGED    the editor of the text changed;
+//   TEXT_INPUT_NOT_DELIVERED      the text could not be handed over;
+//   TEXT_INPUT_UNCONFIRMED        the application did not confirm the text
+//                                 (see paused);
+//   NATIVE_COMPOSITION_CANCELLED  the native input context ended the
+//                                 composition;
+//   INPUT_LEASE_HELD              another viewer holds the input lease.
+message TextInputError {
+  // input_seq of the dropped input.
+  uint64 input_seq = 1;
+  // Its window.
+  uint64 window_id = 2;
+  // The editor it was bound to, as when it was sent.
+  string input_context_id = 3;
+  // Its focus_serial, as when it was sent.
+  uint64 focus_serial = 4;
+  // The composition cancelled with it. 0: none. The viewer ends only this
+  // composition; new ones may begin in the same editor.
+  uint64 composition_id = 5;
+  // Text input of this viewer is paused: the session dropped text whose
+  // delivery the application did not confirm, without replaying it. Pointer,
+  // key and window input go on. Text is accepted again once a TextInputState
+  // names an editor with a larger focus_serial.
+  bool paused = 6;
+  // Why.
+  google.rpc.Status error = 7;
 }
 
 // Input for automation clients, after the Chrome DevTools Protocol Input
