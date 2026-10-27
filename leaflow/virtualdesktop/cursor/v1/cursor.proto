@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.cursor.v1;
+
+import "leaflow/virtualdesktop/display/v1/display.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/cursor/v1;cursorv1";
+
+// The shape of the mouse cursor. X shows one cursor at a time, chosen by the
+// window under the pointer, so the viewer shows it over every window of the
+// session and its own cursors over its own interface.
+//
+// Channel type "leaflow.virtualdesktop.cursor.v1", lane "metadata". The
+// viewer opens one per connection. It starts with a snapshot: the current
+// Cursor, then SnapshotEnd.
+
+// A message from the session.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // The cursor now shown.
+    Cursor cursor = 1;
+    // Ends the snapshot.
+    SnapshotEnd snapshot_end = 2;
+  }
+}
+
+// A cursor shape (X11 XFIXES CursorNotify; Xpra cursor-data). Shapes repeat
+// cheaply: the image is cached by its content hash.
+message Cursor {
+  // The CSS cursor keyword that matches the shape, such as "default", "text"
+  // or "ew-resize" (CSS Basic User Interface Module Level 4); "none" hides
+  // the cursor. When the viewer supports the keyword it uses it instead of
+  // the image. Empty: use the image.
+  string name = 1;
+  // The shape as a PNG with straight alpha, one pixel per canvas pixel.
+  // Unset when name is "none".
+  leaflow.virtualdesktop.display.v1.Image image = 2;
+  // The hotspot from the left of the image, in pixels.
+  uint32 hotspot_x = 3;
+  // The hotspot from the top of the image, in pixels.
+  uint32 hotspot_y = 4;
+}
+
+// Ends the snapshot.
+message SnapshotEnd {}
