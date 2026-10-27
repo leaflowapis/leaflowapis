@@ -7,16 +7,19 @@ import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
 import "leaflow/virtualdesktop/accessibility/v1/accessibility.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
+import "leaflow/virtualdesktop/notification/v1/notification.proto";
+import "leaflow/virtualdesktop/tray/v1/tray.proto";
 import "leaflow/virtualdesktop/window/v1/window.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/change/v1;changev1";
 
 // What changed in the session, for clients that act on it and need to learn
 // what each action did. The session observes its windows through X11 events,
-// its pixels through the X11 DAMAGE extension and, where applications expose
-// them, its accessibility trees through AT-SPI2 events, and reports what
-// changed once the session has become quiet (after XCTest quiescence). Window
-// and pixel changes are always observed; accessibility changes only for
+// its pixels through the X11 DAMAGE extension, its tray icons and
+// notifications and, where applications expose them, its accessibility trees
+// through AT-SPI2 events, and reports what changed once the session has
+// become quiet (after XCTest quiescence). All but accessibility changes are
+// observed for every application; accessibility changes only for
 // applications that expose a tree.
 //
 // Channel type "leaflow.virtualdesktop.change.v1.ChangeService", lane
@@ -126,6 +129,16 @@ message Change {
     FocusChanged focus_changed = 11;
     // An application announced a message (object:announcement; aria-live).
     Announcement announcement = 12;
+    // A tray icon appeared.
+    TrayIconAdded tray_icon_added = 13;
+    // A tray icon changed, such as its status turning to NEEDS_ATTENTION.
+    TrayIconUpdated tray_icon_updated = 14;
+    // A tray icon is gone.
+    TrayIconRemoved tray_icon_removed = 15;
+    // A notification appeared or was replaced in place.
+    NotificationShown notification_shown = 16;
+    // A notification closed.
+    NotificationClosed notification_closed = 17;
   }
 }
 
@@ -205,6 +218,41 @@ message Announcement {
   uint64 node_id = 3;
   // Its window. 0 when unknown.
   uint64 window_id = 4;
+}
+
+// A tray icon appeared.
+message TrayIconAdded {
+  // The icon as the tray channel describes it, without its images.
+  leaflow.virtualdesktop.tray.v1.TrayIcon tray_icon = 1;
+}
+
+// A tray icon changed.
+message TrayIconUpdated {
+  // The icon now, without its images.
+  leaflow.virtualdesktop.tray.v1.TrayIcon tray_icon = 1;
+  // The fields of tray_icon that changed, such as "status" or "tooltip".
+  google.protobuf.FieldMask changed_fields = 2;
+}
+
+// A tray icon is gone.
+message TrayIconRemoved {
+  // The icon as it was last, without its images.
+  leaflow.virtualdesktop.tray.v1.TrayIcon tray_icon = 1;
+}
+
+// A notification appeared or was replaced in place.
+message NotificationShown {
+  // The notification as the notification channel describes it, without its
+  // images.
+  leaflow.virtualdesktop.notification.v1.Notification notification = 1;
+}
+
+// A notification closed.
+message NotificationClosed {
+  // The notification as it was last, without its images.
+  leaflow.virtualdesktop.notification.v1.Notification notification = 1;
+  // Why it closed.
+  leaflow.virtualdesktop.notification.v1.NotificationCloseReason reason = 2;
 }
 
 // How urgently a message is announced (WAI-ARIA 1.2 aria-live).
