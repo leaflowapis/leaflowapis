@@ -1,0 +1,263 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.filetransfer.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/filetransfer/v1;filetransferv1";
+
+// Files moving between the viewer and the session, and the session user's
+// files. File operations run as the session's user; nothing here runs as
+// root.
+//
+// Channel types:
+//   - "leaflow.virtualdesktop.filetransfer.v1", lane "interactive": opened by
+//     the viewer, one per connection. It carries offers, cancellations and
+//     results in both directions.
+//   - "leaflow.virtualdesktop.filetransfer.v1.content", lane "bulk": opened by
+//     the receiver of a file, one per file and at most four at a time per
+//     connection. The receiver sends FileContentRequest; the source answers
+//     with FileContentData messages and one FileContentEnd. The receiver
+//     closes the channel with NO_ERROR once it has verified and stored the
+//     file. Flow control is the channel's credit, which the receiver returns
+//     as it writes.
+//   - "leaflow.virtualdesktop.filetransfer.v1.FileSystemService", lane
+//     "interactive": opened by the viewer to browse and change files.
+//
+// An offer names files by opaque ids and plain names, never by paths of the
+// source. A name is one path component of at most 255 bytes: not empty, not
+// "." or "..", without "/" or NUL. Symbolic links are never transferred. An
+// offer lasts as long as the connection; nothing resumes on another one.
+// Read-only viewers open none of these channels.
+
+// A message from the viewer.
+message ClientMessage {
+  // The message.
+  oneof message {
+    // On the filetransfer channel: files the viewer offers.
+    FileTransferOffer offer = 1;
+    // On the filetransfer channel: stops a transfer.
+    FileTransferCancel cancel = 2;
+    // On the filetransfer channel: what the viewer received.
+    FileTransferResult result = 3;
+    // On a content channel the viewer opened.
+    FileContentRequest content_request = 4;
+    // On a content channel the session opened.
+    FileContentData content_data = 5;
+    // On a content channel the session opened.
+    FileContentEnd content_end = 6;
+  }
+}
+
+// A message from the session.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // On the filetransfer channel: files the session offers.
+    FileTransferOffer offer = 1;
+    // On the filetransfer channel: stops a transfer.
+    FileTransferCancel cancel = 2;
+    // On the filetransfer channel: what the session received.
+    FileTransferResult result = 3;
+    // On a content channel the session opened.
+    FileContentRequest content_request = 4;
+    // On a content channel the viewer opened.
+    FileContentData content_data = 5;
+    // On a content channel the viewer opened.
+    FileContentEnd content_end = 6;
+  }
+}
+
+// Files the sender offers. The receiver fetches the ones it wants over content
+// channels and reports with FileTransferResult. At most 1024 entries and 512
+// KiB.
+message FileTransferOffer {
+  // Chosen by the sender, unique on the connection.
+  string transfer_id = 1;
+  // The files and directories. A directory comes before its contents.
+  repeated FileEntry entries = 2;
+  // The sum of the regular files' sizes.
+  uint64 total_size_bytes = 3;
+  // From the viewer only: the directory of the session user to store the
+  // files in, which needs file system access. Empty: the user's transfer
+  // directory. Existing files are never overwritten.
+  string destination_directory = 4;
+}
+
+// One file or directory of an offer.
+message FileEntry {
+  // Chosen by the sender, unique in the offer. Not a path.
+  string file_id = 1;
+  // The directory it is in. Empty for a top-level entry.
+  string parent_id = 2;
+  // Its name.
+  string name = 3;
+  // A regular file or a directory.
+  FileType type = 4;
+  // The exact size of a regular file; 0 for a directory.
+  uint64 size_bytes = 5;
+  // Its media type, such as "text/plain". Empty when unknown.
+  string mime_type = 6;
+}
+
+// The type of a file.
+enum FileType {
+  FILE_TYPE_UNSPECIFIED = 0;
+  // A regular file.
+  FILE_TYPE_REGULAR = 1;
+  // A directory.
+  FILE_TYPE_DIRECTORY = 2;
+  // A symbolic link, listed by ListDirectory but never transferred.
+  FILE_TYPE_SYMBOLIC_LINK = 3;
+}
+
+// Stops a transfer. Either side; open content channels of it close with
+// CANCELLED.
+message FileTransferCancel {
+  // The transfer.
+  string transfer_id = 1;
+}
+
+// What the receiver stored of an offer. Sent once, when it has fetched
+// everything it wanted, or on failure.
+message FileTransferResult {
+  // The transfer.
+  string transfer_id = 1;
+  // The files verified and stored.
+  repeated string file_ids = 2;
+  // Why the rest failed. Unset when nothing failed.
+  google.rpc.Status error = 3;
+}
+
+// Asks for the content of one regular file of an offer. The first message of
+// a content channel.
+message FileContentRequest {
+  // The transfer.
+  string transfer_id = 1;
+  // The file.
+  string file_id = 2;
+}
+
+// The next bytes of the file, in order.
+message FileContentData {
+  // At most 256 KiB.
+  bytes data = 1;
+}
+
+// The end of the file. The receiver checks the size and the digest before
+// storing it.
+message FileContentEnd {
+  // SHA-256 of the whole content, 32 bytes. Empty with error.
+  bytes sha256 = 1;
+  // Why the source could not send the file, such as because it changed or
+  // vanished. Unset on success.
+  google.rpc.Status error = 2;
+}
+
+// The files of the session's user, by absolute path. Paths are resolved as
+// that user; an empty path is the user's home directory. Nothing is removed
+// recursively and nothing is overwritten implicitly. Needs file system access
+// in the viewer's authorization.
+service FileSystemService {
+  // Lists a directory, a page at a time. A page token becomes invalid when
+  // the directory changes, and is then refused with ABORTED.
+  rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Creates a directory.
+  rpc CreateDirectory(CreateDirectoryRequest) returns (CreateDirectoryResponse);
+  // Renames or moves a file or directory.
+  rpc RenameFile(RenameFileRequest) returns (RenameFileResponse);
+  // Removes a file or an empty directory.
+  rpc RemoveFile(RemoveFileRequest) returns (RemoveFileResponse);
+  // Offers files of the user to the viewer, which fetches them over content
+  // channels as for any offer.
+  rpc CreateFileOffer(CreateFileOfferRequest) returns (CreateFileOfferResponse);
+}
+
+// The request of ListDirectory.
+message ListDirectoryRequest {
+  // The directory.
+  string path = 1;
+  // At most 256; 0 means 256.
+  uint32 page_size = 2;
+  // From the previous response. Empty for the first page.
+  string page_token = 3;
+}
+
+// The response of ListDirectory.
+message ListDirectoryResponse {
+  // The absolute path that was listed.
+  string path = 1;
+  // The entries of this page.
+  repeated DirectoryEntry entries = 2;
+  // Empty on the last page.
+  string next_page_token = 3;
+}
+
+// One entry of a directory.
+message DirectoryEntry {
+  // Its name.
+  string name = 1;
+  // Its type.
+  FileType type = 2;
+  // The size of a regular file.
+  uint64 size_bytes = 3;
+  // When its content last changed.
+  google.protobuf.Timestamp modified_at = 4;
+  // The POSIX permission bits. Informational only.
+  uint32 mode = 5;
+}
+
+// The request of CreateDirectory.
+message CreateDirectoryRequest {
+  // The directory to create. Its parent must exist.
+  string path = 1;
+}
+
+// The response of CreateDirectory.
+message CreateDirectoryResponse {}
+
+// The request of RenameFile.
+message RenameFileRequest {
+  // The file or directory.
+  string source_path = 1;
+  // Its new path. Fails with ALREADY_EXISTS when something is there.
+  string destination_path = 2;
+}
+
+// The response of RenameFile.
+message RenameFileResponse {}
+
+// The request of RemoveFile.
+message RemoveFileRequest {
+  // The file, or the empty directory.
+  string path = 1;
+}
+
+// The response of RemoveFile.
+message RemoveFileResponse {}
+
+// The request of CreateFileOffer.
+message CreateFileOfferRequest {
+  // The files and directories to offer, with their contents.
+  repeated string paths = 1;
+}
+
+// The response of CreateFileOffer.
+message CreateFileOfferResponse {
+  // The offer, also valid on the filetransfer channel.
+  FileTransferOffer offer = 1;
+}
+
+// What a viewer may do with files. Carried in the viewer's signed
+// authorization; without it the viewer may do none of this.
+message FileTransferPolicy {
+  // The viewer may send files to the session.
+  bool upload_allowed = 1;
+  // The viewer may receive files from the session.
+  bool download_allowed = 2;
+  // The viewer may use FileSystemService and choose where uploads go.
+  bool file_system_allowed = 3;
+}
