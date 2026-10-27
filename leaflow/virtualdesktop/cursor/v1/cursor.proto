@@ -6,9 +6,10 @@ import "leaflow/virtualdesktop/display/v1/display.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/cursor/v1;cursorv1";
 
-// The shape and position of the mouse cursor. X shows one cursor at a time,
-// chosen by the window under the pointer, so the viewer shows it over every
-// window of the session and its own cursors over its own interface.
+// The shape and position of the mouse cursor, and what other viewers act on.
+// X shows one cursor at a time, chosen by the window under the pointer, so
+// the viewer shows it over every window of the session and its own cursors
+// over its own interface.
 //
 // Channel type "leaflow.virtualdesktop.cursor.v1", lane "metadata". The
 // viewer opens one per connection. It starts with a snapshot: the current
@@ -24,6 +25,8 @@ message ServerMessage {
     SnapshotEnd snapshot_end = 2;
     // The pointer moved, other than by this viewer.
     PointerPosition pointer_position = 3;
+    // Another viewer's automation acted on an area.
+    Highlight highlight = 4;
   }
 }
 
@@ -59,6 +62,24 @@ message PointerPosition {
   // The connection whose input moved it, as in ViewerList. 0: an application
   // moved it.
   uint64 connection_id = 4;
+}
+
+// The area an automation client acted on, so that people watching see what it
+// does (after the Chrome DevTools Protocol Overlay highlights). Sent to the
+// other viewers for every call of an automation service that acts on a
+// place, such as an injected click or an action on an accessibility node.
+// The viewer draws it briefly.
+message Highlight {
+  // The connection that acted, as in ViewerList.
+  uint64 connection_id = 1;
+  // The window the area is relative to. 0: canvas coordinates.
+  uint64 window_id = 2;
+  // The area: the bounds of the node acted on, or a small square around the
+  // point of injected pointer input.
+  leaflow.virtualdesktop.display.v1.Rectangle area = 3;
+  // The accessible name of the node acted on, plain text. Empty when the
+  // action had no node.
+  string label = 4;
 }
 
 // Ends the snapshot.
