@@ -1,0 +1,217 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.change.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/timestamp.proto";
+import "leaflow/virtualdesktop/accessibility/v1/accessibility.proto";
+import "leaflow/virtualdesktop/display/v1/display.proto";
+import "leaflow/virtualdesktop/window/v1/window.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/change/v1;changev1";
+
+// What changed in the session, for clients that act on it and need to learn
+// what each action did. The session observes its windows through X11 events,
+// its pixels through the X11 DAMAGE extension and, where applications expose
+// them, its accessibility trees through AT-SPI2 events, and reports what
+// changed once the session has become quiet (after XCTest quiescence). Window
+// and pixel changes are always observed; accessibility changes only for
+// applications that expose a tree.
+//
+// Channel type "leaflow.virtualdesktop.change.v1.ChangeService", lane
+// "interactive": opened by the viewer. Read-only viewers may use it. The
+// session records changes while at least one viewer has the channel open and
+// keeps them for at least 60 seconds.
+//
+// Revisions. Every change carries the session revision at which it was
+// observed. A client passes the revision its action returned, such as
+// DispatchPointerEventResponse.revision, as after_revision and learns what was
+// observed after the action took effect. That includes changes the action did
+// not cause, such as a message arriving meanwhile.
+
+// Reports what changed in the session.
+service ChangeService {
+  // Waits for changes after a revision and for the session to become quiet
+  // after them, then returns them. An after_revision whose changes are no
+  // longer kept fails with OUT_OF_RANGE and reason REVISION_COMPACTED; the
+  // client then reads the state anew.
+  rpc WaitForChanges(WaitForChangesRequest) returns (WaitForChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// The request of WaitForChanges. The call returns once something in scope has
+// changed after after_revision and the session has then been quiet for
+// quiet_period, or when the timeout passes, whichever comes first. Changes
+// observed before the call count, so a call made late returns at once.
+//
+// Quiet. The session is quiet once nothing in scope has changed for
+// quiet_period and no node in scope is busy (aria-busy). Repaints of at most
+// 256 pixels of a window within 100 milliseconds, such as a blinking caret,
+// neither break the quiet nor are reported.
+message WaitForChangesRequest {
+  // Returns the changes with a larger revision. 0: the revision when the call
+  // arrives, so that only changes from then on count.
+  uint64 after_revision = 1;
+  // The scope: this window, the windows transient for it or in its group, and
+  // the override-redirect windows of its process, such as its menus. 0: every
+  // window.
+  uint64 window_id = 2;
+  // How long nothing may change for the session to be quiet. Unset: 300
+  // milliseconds.
+  google.protobuf.Duration quiet_period = 3;
+  // The longest wait, at most 10 seconds. 0 seconds: return what changed so
+  // far without waiting. Unset: 3 seconds.
+  google.protobuf.Duration timeout = 4;
+  // The most changes to return, at most 4096. 0: 256.
+  uint32 max_changes = 5;
+}
+
+// The response of WaitForChanges. Changes are coalesced: something that
+// appeared and vanished within the range is not reported, and several
+// updates of one window or node are reported once, as its latest state with
+// all changed fields, at the revision of the last update.
+message WaitForChangesResponse {
+  // The changes in revision order.
+  repeated Change changes = 1;
+  // The revision up to which changes were observed, to pass as after_revision
+  // next time.
+  uint64 revision = 2;
+  // How the wait ended.
+  WaitOutcome outcome = 3;
+  // Changes beyond max_changes were left out. revision covers them, so a
+  // client that needs them reads the state anew.
+  bool truncated = 4;
+}
+
+// How a wait for changes ended.
+enum WaitOutcome {
+  WAIT_OUTCOME_UNSPECIFIED = 0;
+  // Nothing in scope changed before the timeout. changes is empty.
+  WAIT_OUTCOME_UNCHANGED = 1;
+  // Things changed and the session then became quiet.
+  WAIT_OUTCOME_SETTLED = 2;
+  // The timeout passed while things were still changing, such as during an
+  // animation or a video.
+  WAIT_OUTCOME_CHANGING = 3;
+}
+
+// One change.
+message Change {
+  // The session revision at which it was observed.
+  uint64 revision = 1;
+  // When it was observed.
+  google.protobuf.Timestamp observed_at = 2;
+  // What changed. Names follow AT-SPI2 events.
+  oneof change {
+    // A window appeared (window:create).
+    WindowCreated window_created = 3;
+    // A window changed.
+    WindowUpdated window_updated = 4;
+    // A window is gone (window:destroy).
+    WindowDestroyed window_destroyed = 5;
+    // A window became the active one (window:activate).
+    WindowActivated window_activated = 6;
+    // Pixels of a window changed (X11 DamageNotify).
+    WindowRepainted window_repainted = 7;
+    // A node was added to a tree (object:children-changed:add).
+    NodeAdded node_added = 8;
+    // A node changed (object:property-change, object:state-changed,
+    // object:text-changed).
+    NodeUpdated node_updated = 9;
+    // A node was removed from a tree (object:children-changed:remove).
+    NodeRemoved node_removed = 10;
+    // The keyboard focus moved (focus:).
+    FocusChanged focus_changed = 11;
+    // An application announced a message (object:announcement; aria-live).
+    Announcement announcement = 12;
+  }
+}
+
+// A window appeared.
+message WindowCreated {
+  // The window as the window channel describes it, without its icon.
+  leaflow.virtualdesktop.window.v1.Window window = 1;
+}
+
+// A window changed.
+message WindowUpdated {
+  // The window now, without its icon.
+  leaflow.virtualdesktop.window.v1.Window window = 1;
+  // The fields of window that changed, such as "title" or "geometry".
+  google.protobuf.FieldMask changed_fields = 2;
+}
+
+// A window is gone.
+message WindowDestroyed {
+  // The window as it was last, without its icon.
+  leaflow.virtualdesktop.window.v1.Window window = 1;
+}
+
+// A window became the active one.
+message WindowActivated {
+  // The window.
+  uint64 window_id = 1;
+}
+
+// Pixels of a window changed.
+message WindowRepainted {
+  // The window.
+  uint64 window_id = 1;
+  // Rectangles covering every changed pixel, in window coordinates, at most
+  // 16. A client captures them with CaptureScreenshot to see what changed.
+  repeated leaflow.virtualdesktop.display.v1.Rectangle areas = 2;
+  // Window.resize_counter the areas belong to.
+  uint64 resize_counter = 3;
+}
+
+// A node was added to a tree.
+message NodeAdded {
+  // The node, without its subtree.
+  leaflow.virtualdesktop.accessibility.v1.Node node = 1;
+}
+
+// A node changed.
+message NodeUpdated {
+  // The node now, without its subtree.
+  leaflow.virtualdesktop.accessibility.v1.Node node = 1;
+  // The fields of node that changed, such as "name", "value" or "states".
+  google.protobuf.FieldMask changed_fields = 2;
+}
+
+// A node was removed from a tree.
+message NodeRemoved {
+  // The node as it was last, without its subtree.
+  leaflow.virtualdesktop.accessibility.v1.Node node = 1;
+}
+
+// The keyboard focus moved.
+message FocusChanged {
+  // The window with the focus. 0: none.
+  uint64 window_id = 1;
+  // The focused node. Unset when its application exposes no tree.
+  leaflow.virtualdesktop.accessibility.v1.Node node = 2;
+}
+
+// An application announced a message for assistive technologies, such as
+// "Message sent".
+message Announcement {
+  // The message.
+  string text = 1;
+  // How urgently it was announced.
+  Politeness politeness = 2;
+  // The node that announced it. 0 when unknown.
+  uint64 node_id = 3;
+  // Its window. 0 when unknown.
+  uint64 window_id = 4;
+}
+
+// How urgently a message is announced (WAI-ARIA 1.2 aria-live).
+enum Politeness {
+  POLITENESS_UNSPECIFIED = 0;
+  // When the user is idle (aria-live="polite").
+  POLITENESS_POLITE = 1;
+  // At once (aria-live="assertive").
+  POLITENESS_ASSERTIVE = 2;
+}

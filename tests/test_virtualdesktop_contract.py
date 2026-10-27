@@ -39,6 +39,8 @@ ALLOWED_IMPORTS: dict[str, set[str]] = {
     "notification": DISPLAY,
     "capture": DISPLAY,
     "accessibility": DISPLAY,
+    # What changed across the desktop domains.
+    "change": {"display", "window", "accessibility"},
     # Files, and the domains that move files.
     "filetransfer": set(),
     "clipboard": {"filetransfer"},
