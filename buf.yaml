@@ -1,0 +1,14 @@
+# Protobuf contracts in this repository: the VirtualDesktop protocol spoken by
+# the Agent, viewers and the VirtualDesktop service. The OpenAPI contracts are
+# not part of this module.
+version: v2
+modules:
+  - path: .
+deps:
+  - buf.build/googleapis/googleapis
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

@@ -1,0 +1,416 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.transport.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/transport/v1;transportv1";
+
+// The end-to-end connection between a viewer and a session, carried by a
+// WebRTC PeerConnection (W3C WebRTC; RFC 8831 data channels). The
+// VirtualDesktop service relays the signaling below over its control
+// connections and signs a PeerAuthorization for every attempt; it never
+// carries or sees the data that flows here.
+//
+// Paths. One logical connection, named by connection_id, lives on one
+// PeerConnection at a time. Each PeerConnection is a path with its own epoch,
+// 1 for the first. When a path fails the viewer creates a new PeerConnection
+// and migrates the connection to it under the next epoch (Migration); only
+// envelopes the receiver had not admitted are sent again.
+//
+// Data channels. The viewer creates every data channel of a PeerConnection,
+// with protocol "leaflow.virtualdesktop.transport.v1" and these labels:
+//   binding              ordered, reliable    Hello, Checkpoint receipts, Close
+//   input                ordered, reliable
+//   metadata             ordered, reliable
+//   interactive.0 .. .1  ordered, reliable
+//   bulk.0 .. .3         ordered, reliable
+//   media.0 .. .3        ordered, reliable
+//   realtime             unordered, maxRetransmits 0: datagrams only
+// Each message of a data channel is exactly one Packet, no larger than the
+// peer's SDP max-message-size (RFC 8841). Each logical channel stays on the
+// lane its channel type names; where a lane has several data channels, the
+// channel uses the one at index (channel_id / 2) modulo their count.
+//
+// Opening. Both ends send Hello on "binding" as soon as it opens and answer
+// the other's challenge with a second Hello. Nothing else is sent until both
+// answers have verified.
+//
+// Channels. Logical channels follow the SSH connection protocol (RFC 4254 §5)
+// with absolute credit as in QUIC (RFC 9000 §4.1). A channel carries the
+// varint length-delimited messages of its channel type as a byte stream, cut
+// into data envelopes of any size. The viewer allocates even channel ids from
+// 2, the session odd ids from 1; ids are never reused on a connection.
+
+// Exactly one message of a data channel.
+message Packet {
+  // The packet.
+  oneof packet {
+    // Proof of identity and the limits of the sender. On "binding" only.
+    Hello hello = 1;
+    // One step of a logical channel. On the lane of that channel.
+    Envelope envelope = 2;
+    // One unreliable message. On "realtime" only.
+    Datagram datagram = 3;
+    // What the sender has admitted so far. On "binding" only, after both
+    // Hellos verified.
+    Checkpoint receipt = 4;
+    // Why the sender is about to close the PeerConnection. On "binding".
+    Close close = 5;
+  }
+}
+
+// Each end sends Hello twice: first with its own challenge and an empty
+// response, then, once the peer's Hello arrived, again with response set to
+// the peer's challenge. A Hello that names another attempt, another
+// connection, an unexpected epoch or another PeerAuthorization than the one
+// the receiver holds ends the attempt.
+message Hello {
+  // The attempt this PeerConnection belongs to (Signal.attempt_id).
+  bytes attempt_id = 1;
+  // The logical connection.
+  uint64 connection_id = 2;
+  // The epoch of this path: 1 when the connection is new, one more than the
+  // committed epoch when it migrates.
+  uint64 epoch = 3;
+  // 32 unpredictable bytes.
+  bytes challenge = 4;
+  // The peer's challenge. Empty in the first Hello.
+  bytes response = 5;
+  // SHA-256 of the PeerAuthorization bytes signed for this attempt.
+  bytes authorization_sha256 = 6;
+  // The Ed25519 public key (RFC 8032) that vouches for the sender's DTLS
+  // certificate: the machine key of the Agent, the device key of the viewer.
+  // The viewer refuses an Agent key other than the one it pinned for the
+  // machine; the session refuses a viewer key other than the one in the
+  // viewer's authorization.
+  bytes public_key = 7;
+  // Ed25519 signature by public_key over the UTF-8 string
+  // "leaflow.virtualdesktop.transport.v1.Hello", one zero byte, attempt_id,
+  // connection_id as 8 big-endian bytes, one byte for the role of the sender
+  // (1 viewer, 2 Agent) and the SHA-256 fingerprint of the sender's own DTLS
+  // certificate (RFC 8122).
+  bytes dtls_attestation = 8;
+  // The largest message, in bytes, the sender accepts in the byte stream of
+  // one channel.
+  uint32 max_message_size = 9;
+  // The credit, in bytes of channel data, the sender grants each new channel
+  // toward itself unless ChannelOpen or ChannelOpenConfirmation state another.
+  uint64 initial_max_data = 10;
+  // The largest Datagram.data, in bytes, the sender accepts. 0: none.
+  uint32 max_datagram_size = 11;
+  // 16 bytes that identify the process holding this end of the connection.
+  // It stays the same across migrations; a migration that reaches another
+  // owner ends the connection.
+  bytes owner_id = 12;
+}
+
+// One step of a logical channel. The sender numbers the envelopes of each
+// channel from 1 and keeps those not yet admitted, so that it can send them
+// again on the next path.
+message Envelope {
+  // The logical channel.
+  uint64 channel_id = 1;
+  // 1 for the first envelope of the channel, then one more each time.
+  uint64 sequence = 2;
+  // The epoch in which the envelope was first sent. A channel type that
+  // cannot resume, such as a video frame, discards envelopes whose origin
+  // epoch is older than the current one.
+  uint64 origin_epoch = 3;
+  // The step.
+  oneof body {
+    // Opens the channel. Always the first envelope.
+    ChannelOpen open = 4;
+    // Accepts the channel.
+    ChannelOpenConfirmation open_confirmation = 5;
+    // Refuses the channel.
+    ChannelOpenFailure open_failure = 6;
+    // The next bytes of the channel's stream. They count against the credit.
+    bytes data = 7;
+    // Raises the peer's credit (RFC 9000 §19.10 MAX_STREAM_DATA): the total
+    // bytes of data the peer may send on the channel. A value not larger than
+    // the current credit is ignored.
+    uint64 max_data = 8;
+    // Closes the channel.
+    ChannelClose close = 9;
+  }
+}
+
+// Opens a logical channel (RFC 4254 §5.1). The opener may send data at once,
+// within the receiver's initial_max_data.
+message ChannelOpen {
+  // What the channel carries. One of:
+  //   - the full name of a package, such as "leaflow.virtualdesktop.window.v1";
+  //   - a package name and a channel role that package defines, such as
+  //     "leaflow.virtualdesktop.draw.v1.frame";
+  //   - the full name of a service, such as
+  //     "leaflow.virtualdesktop.capture.v1.CaptureService"; the channel then
+  //     carries leaflow.virtualdesktop.rpc.v1 messages and its opener calls.
+  string channel_type = 1;
+  // The credit the opener grants the receiver on this channel. 0: the
+  // opener's initial_max_data.
+  uint64 max_data = 2;
+}
+
+// Accepts a channel. Optional: the opener also counts the channel as accepted
+// on the receiver's first envelope.
+message ChannelOpenConfirmation {
+  // The credit the receiver grants the opener. 0: the receiver's
+  // initial_max_data.
+  uint64 max_data = 1;
+}
+
+// Refuses a channel (RFC 4254 §5.1). Data already received on it is
+// discarded.
+message ChannelOpenFailure {
+  // Why the channel was refused.
+  ChannelOpenFailureReason reason = 1;
+  // Plain text for logs, at most 1024 bytes.
+  string description = 2;
+}
+
+// Why a channel was refused. Values follow RFC 4254 §5.1.
+enum ChannelOpenFailureReason {
+  CHANNEL_OPEN_FAILURE_REASON_UNSPECIFIED = 0;
+  // The viewer's authorization or the session's policy does not allow it, or
+  // the channel type allows one channel and one is open.
+  CHANNEL_OPEN_FAILURE_REASON_ADMINISTRATIVELY_PROHIBITED = 1;
+  // What the channel leads to cannot be reached, such as a TCP endpoint.
+  CHANNEL_OPEN_FAILURE_REASON_CONNECT_FAILED = 2;
+  // The receiver does not know the channel type.
+  CHANNEL_OPEN_FAILURE_REASON_UNKNOWN_CHANNEL_TYPE = 3;
+  // Too many channels, or no memory.
+  CHANNEL_OPEN_FAILURE_REASON_RESOURCE_SHORTAGE = 4;
+}
+
+// Closes a channel. Each end sends one, and the channel is gone once both
+// have (RFC 4254 §5.3). The sender sends nothing more on it. A receiver that
+// sends it with CANCELLED asks the sender to stop (RFC 9000 §19.5
+// STOP_SENDING).
+message ChannelClose {
+  // NO_ERROR for an orderly close.
+  ChannelErrorCode error_code = 1;
+}
+
+// Why a channel was closed. Values follow RFC 9000 §20.1.
+enum ChannelErrorCode {
+  CHANNEL_ERROR_CODE_UNSPECIFIED = 0;
+  // An orderly close.
+  CHANNEL_ERROR_CODE_NO_ERROR = 1;
+  // The channel is no longer wanted, such as a frame overtaken by a newer
+  // one. An incomplete message of the channel is discarded.
+  CHANNEL_ERROR_CODE_CANCELLED = 2;
+  // The peer sent more than its credit allowed.
+  CHANNEL_ERROR_CODE_FLOW_CONTROL_ERROR = 3;
+  // The channel carried a malformed or unexpected message, or one larger than
+  // max_message_size.
+  CHANNEL_ERROR_CODE_PROTOCOL_VIOLATION = 4;
+  // The sender failed.
+  CHANNEL_ERROR_CODE_INTERNAL_ERROR = 5;
+}
+
+// One message of a channel that does not need reliable delivery, such as an
+// audio packet: the channel's message itself, without a length prefix.
+message Datagram {
+  // The channel the message belongs to.
+  uint64 channel_id = 1;
+  // The message, at most the receiver's max_datagram_size bytes.
+  bytes data = 2;
+}
+
+// What one end has admitted on a connection, and the channels both ends have
+// finished with. As a receipt it lets the peer drop what it kept for sending
+// again; in a Migration it fixes the state the new path starts from.
+// Admission means the envelope reached the receiving process, not that its
+// effect happened.
+message Checkpoint {
+  // The epoch the checkpoint belongs to.
+  uint64 epoch = 1;
+  // Hello.owner_id of the end that took it.
+  bytes owner_id = 2;
+  // The last admitted envelope of every live channel, at most 4096.
+  repeated ChannelCursor cursors = 3;
+  // Channels both ends have closed, compacted into ranges. Envelopes of these
+  // channels are dropped.
+  repeated RetiredRange retired_ranges = 4;
+}
+
+// The last envelope admitted on a channel.
+message ChannelCursor {
+  // The channel.
+  uint64 channel_id = 1;
+  // Envelope.sequence of the last admitted envelope.
+  uint64 sequence = 2;
+}
+
+// The channel ids from first_channel_id to last_channel_id, both included and
+// of the same opener.
+message RetiredRange {
+  // The first id.
+  uint64 first_channel_id = 1;
+  // The last id.
+  uint64 last_channel_id = 2;
+}
+
+// A two-phase migration of a connection to a new path; RFC 9000 §9 calls the
+// same move connection migration. It travels over the control connections,
+// which stay up while paths fail. The viewer coordinates: it sends prepare,
+// the session answers prepared, the viewer sends commit and the session
+// answers committed. Both ends stop admitting envelopes of the old epoch at
+// prepare. A repeated step is answered again and never applied twice.
+message Migration {
+  // The logical connection.
+  uint64 connection_id = 1;
+  // The step.
+  oneof step {
+    // The viewer's checkpoint for the next epoch.
+    Checkpoint prepare = 2;
+    // The session's checkpoint for the same epoch.
+    Checkpoint prepared = 3;
+    // The viewer commits the epoch.
+    Checkpoint commit = 4;
+    // The session committed it.
+    Checkpoint committed = 5;
+    // The session asks the viewer to migrate, such as after its side of the
+    // path failed. Only the viewer starts a migration.
+    bool request = 6;
+  }
+}
+
+// Why the sender closes the PeerConnection.
+message Close {
+  // The reason. Its details may carry a google.rpc.ErrorInfo.
+  google.rpc.Status status = 1;
+}
+
+// Signaling for one PeerConnection attempt (RFC 9429 JSEP; RFC 8838 trickle
+// ICE). It travels over the control connections of the viewer and the
+// session; the service derives the sender from the connection it came on and
+// passes it to the other end of the same connection_id.
+message Signal {
+  // 16 random bytes the viewer chose for the attempt.
+  bytes attempt_id = 1;
+  // The logical connection.
+  uint64 connection_id = 2;
+  // Increases with every signal of one sender in the attempt.
+  uint64 sequence = 3;
+  // The configuration the viewer was given for this attempt. Set by the
+  // service on the offer it passes to the session; never sent by a viewer.
+  RtcConfiguration configuration = 4;
+  // The signal.
+  oneof signal {
+    // An offer from the viewer or an answer from the session.
+    SessionDescription description = 5;
+    // A trickled ICE candidate.
+    IceCandidate candidate = 6;
+    // No more candidates from the sender (RFC 8838).
+    bool end_of_candidates = 7;
+    // The sender gave up the attempt. The viewer starts another one at once.
+    bool abort = 8;
+    // The service's authorization of the attempt, sent to both ends before
+    // either may send application data.
+    SignedPeerAuthorization authorization = 9;
+    // The viewer asks for a new lease of the same attempt.
+    bool renew_lease = 10;
+  }
+}
+
+// An SDP offer or answer (RFC 8866), as in W3C RTCSessionDescriptionInit.
+message SessionDescription {
+  // Offer or answer.
+  SdpType type = 1;
+  // The SDP, at most 65536 bytes. It contains ICE credentials and is never
+  // logged.
+  string sdp = 2;
+}
+
+// The type of a SessionDescription (W3C RTCSdpType).
+enum SdpType {
+  SDP_TYPE_UNSPECIFIED = 0;
+  SDP_TYPE_OFFER = 1;
+  SDP_TYPE_ANSWER = 2;
+}
+
+// An ICE candidate (RFC 8445), as in W3C RTCIceCandidateInit.
+message IceCandidate {
+  // The candidate attribute, at most 4096 bytes. At most 64 per end and
+  // attempt.
+  string candidate = 1;
+  // The media stream identification tag of the candidate (RFC 5888).
+  string sdp_mid = 2;
+}
+
+// The ICE servers a PeerConnection may use, as in W3C RTCConfiguration.
+message RtcConfiguration {
+  // At most 8.
+  repeated IceServer ice_servers = 1;
+  // Which candidates ICE may use.
+  IceTransportPolicy ice_transport_policy = 2;
+  // After this time no PeerConnection starts with these servers. The TURN
+  // credentials themselves last longer, so a relayed path outlives it.
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// A STUN or TURN server (RFC 8489, RFC 8656), as in W3C RTCIceServer.
+message IceServer {
+  // stun:, turn: or turns: URIs (RFC 7064, RFC 7065).
+  repeated string urls = 1;
+  // The TURN username. Empty for STUN.
+  string username = 2;
+  // The TURN password. Empty for STUN. Never logged.
+  string credential = 3;
+}
+
+// Which ICE candidates may be used (W3C RTCIceTransportPolicy).
+enum IceTransportPolicy {
+  ICE_TRANSPORT_POLICY_UNSPECIFIED = 0;
+  // All candidates.
+  ICE_TRANSPORT_POLICY_ALL = 1;
+  // Only TURN relay candidates.
+  ICE_TRANSPORT_POLICY_RELAY = 2;
+}
+
+// A PeerAuthorization signed by the service.
+message SignedPeerAuthorization {
+  // The service key that signed it.
+  string key_id = 1;
+  // A serialized PeerAuthorization.
+  bytes authorization = 2;
+  // Ed25519 signature over the UTF-8 string
+  // "leaflow.virtualdesktop.transport.v1.PeerAuthorization", one zero byte
+  // and authorization.
+  bytes signature = 3;
+}
+
+// The service's statement that one attempt joins this viewer to this session
+// with these two DTLS certificates. Both ends check the signature, every
+// field and the lifetime before sending application data; DTLS alone does not
+// authorize.
+message PeerAuthorization {
+  // The HTTPS origin of the service that signed it.
+  string issuer = 1;
+  // The machine of the session.
+  string machine_id = 2;
+  // The session.
+  string session_id = 3;
+  // The logical connection of the viewer.
+  uint64 connection_id = 4;
+  // The attempt.
+  bytes attempt_id = 5;
+  // SHA-256 fingerprint of the viewer's DTLS certificate, from its offer.
+  bytes viewer_fingerprint_sha256 = 6;
+  // SHA-256 fingerprint of the Agent's DTLS certificate, from its answer.
+  bytes agent_fingerprint_sha256 = 7;
+  // SHA-256 of the signed viewer authorization both ends hold for the
+  // connection.
+  bytes viewer_authorization_sha256 = 8;
+  // When the service signed it.
+  google.protobuf.Timestamp issued_at = 9;
+  // The end of the attempt's authorization, no later than the viewer's.
+  google.protobuf.Timestamp expires_at = 10;
+  // The end of the current lease, at most 30 seconds after issued_at and no
+  // later than expires_at. A renewal moves only this time. Each end stops
+  // sending application data when the lease runs out.
+  google.protobuf.Timestamp lease_expires_at = 11;
+}

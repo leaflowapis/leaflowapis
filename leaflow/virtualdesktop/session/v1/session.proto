@@ -1,0 +1,205 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.session.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/session/v1;sessionv1";
+
+// The session layer between one viewer and the session it connected to: the
+// handshake, the viewers sharing the session, who drives it, liveness and the
+// end of the connection. A viewer is anything that connects through a
+// PeerConnection, such as a browser, the desktop app or an automation client.
+//
+// Channel type "leaflow.virtualdesktop.session.v1", lane "metadata". The
+// viewer opens it first, right after the transport Hello, and opens no other
+// channel before ServerHello arrives. One per connection.
+//
+// Snapshots. Some channel types, this one included, start with the full
+// state of what they describe, end it with their own SnapshotEnd and then
+// send changes; each package says whether its channel type does. The viewer
+// treats the desktop as complete once every such channel it opened has ended
+// its snapshot. Channels are independent streams: nothing may depend on the
+// order in which different channels deliver.
+
+// A message from the viewer.
+message ClientMessage {
+  // The message.
+  oneof message {
+    // The first message of the viewer.
+    ClientHello client_hello = 1;
+    // Measures the round trip.
+    Ping ping = 2;
+    // Answers a Ping of the session.
+    Pong pong = 3;
+    // Stops or resumes frames to this viewer.
+    SuppressOutput suppress_output = 4;
+    // The viewer leaves.
+    Close close = 5;
+  }
+}
+
+// A message from the session.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // The answer to ClientHello, always the first message of the session.
+    ServerHello server_hello = 1;
+    // Measures the round trip.
+    Ping ping = 2;
+    // Answers a Ping of the viewer.
+    Pong pong = 3;
+    // The viewers of the session, in full.
+    ViewerList viewer_list = 4;
+    // Who holds the input lease.
+    InputLease input_lease = 5;
+    // Ends the snapshot.
+    SnapshotEnd snapshot_end = 6;
+    // The session closes this connection.
+    Close close = 7;
+  }
+}
+
+// The viewer's side of the handshake.
+message ClientHello {
+  // The channel types the viewer can open or accept, such as
+  // "leaflow.virtualdesktop.window.v1" or
+  // "leaflow.virtualdesktop.capture.v1.CaptureService". A channel type
+  // missing on either side is not used on this connection.
+  repeated string channel_types = 1;
+  // The viewer's language as a BCP 47 tag, such as "zh-CN". The session uses
+  // it for the names of applications and menus it sends from now on. Empty:
+  // the session's own language.
+  string language_code = 2;
+  // What the viewer is.
+  ViewerType viewer_type = 3;
+  // The viewer software, such as "leaflow-desktop/1.2.0" or the browser's
+  // User-Agent (RFC 9110 §10.1.5). For display and diagnostics only.
+  string user_agent = 4;
+}
+
+// The session's side of the handshake.
+message ServerHello {
+  // The channel types the session offers this viewer: those of
+  // ClientHello.channel_types the session supports and the viewer's
+  // authorization allows.
+  repeated string channel_types = 1;
+  // The viewer may only watch. The session refuses or ignores everything
+  // that would change the desktop.
+  bool read_only = 2;
+  // This viewer's connection, as it appears in ViewerList.
+  uint64 connection_id = 3;
+}
+
+// What kind of viewer a connection is.
+enum ViewerType {
+  VIEWER_TYPE_UNSPECIFIED = 0;
+  // A person in a browser or the desktop app.
+  VIEWER_TYPE_HUMAN = 1;
+  // An automation client, such as an AI agent operating applications.
+  VIEWER_TYPE_AUTOMATION = 2;
+}
+
+// One viewer attached to the session.
+message Viewer {
+  // The viewer's connection.
+  uint64 connection_id = 1;
+  // The platform user the viewer acts for.
+  string user_id = 2;
+  // The user's name, plain text.
+  string display_name = 3;
+  // The viewer may only watch.
+  bool read_only = 4;
+  // The registered client the viewer runs on. One client can hold several
+  // connections.
+  string client_id = 5;
+  // The client's name when it attached, plain text.
+  string client_name = 6;
+  // What kind of viewer it is.
+  ViewerType viewer_type = 7;
+}
+
+// Every viewer attached to the session, this one included. Sent in the
+// snapshot and again whenever a viewer attaches or leaves or the driver
+// changes.
+message ViewerList {
+  // The viewers.
+  repeated Viewer viewers = 1;
+  // The viewer whose display settings the session follows. 0 before any
+  // viewer has driven.
+  uint64 driver_connection_id = 2;
+}
+
+// Who may send input now. A viewer that is not read-only takes the lease with
+// its input while nobody else holds it; the lease ends after its holder has
+// been idle until expires_at. Sent in the snapshot and whenever it changes,
+// so that people see when an automation client operates the session.
+message InputLease {
+  // The connection that holds the lease. 0: nobody.
+  uint64 holder_connection_id = 1;
+  // What kind of viewer holds it.
+  ViewerType holder_type = 2;
+  // When the lease ends if its holder sends no more input, on the session's
+  // clock. Unset when nobody holds it.
+  google.protobuf.Timestamp expires_at = 3;
+}
+
+// Ends the snapshot of this channel: ViewerList and InputLease have been
+// sent.
+message SnapshotEnd {}
+
+// Asks the peer to answer with a Pong at once (RFC 6455 §5.5.2).
+message Ping {
+  // A value of the sender's monotonic clock, in milliseconds, such as
+  // performance.now(). Only the sender interprets it.
+  uint64 monotonic_ms = 1;
+}
+
+// Answers a Ping (RFC 6455 §5.5.3).
+message Pong {
+  // Ping.monotonic_ms, unchanged.
+  uint64 monotonic_ms = 1;
+}
+
+// Stops or resumes the frames sent to this viewer, such as while its window
+// is hidden (MS-RDPBCGR §2.2.11.3 Suppress Output PDU). While stopped the
+// session keeps the damage and sends one update covering it when frames
+// resume. Nothing but frames is affected. Frames are allowed when the
+// connection starts.
+message SuppressOutput {
+  // false stops frames, true resumes them.
+  bool allow_display_updates = 1;
+}
+
+// Ends the connection in order. The sender closes the PeerConnection after
+// it; the session itself goes on unless reason says it ended.
+message Close {
+  // Why the connection ends.
+  CloseReason reason = 1;
+  // Plain text for logs, at most 1024 bytes.
+  string reason_phrase = 2;
+}
+
+// Why a viewer connection ends.
+enum CloseReason {
+  CLOSE_REASON_UNSPECIFIED = 0;
+  // An ordinary close. Either side.
+  CLOSE_REASON_DONE = 1;
+  // The viewer goes away, such as a closed tab. Viewer only.
+  CLOSE_REASON_CLIENT_EXIT = 2;
+  // The session ends. Session only, just before it ends.
+  CLOSE_REASON_SESSION_EXIT = 3;
+  // The session process restarts and the session survives; connect again.
+  // Session only.
+  CLOSE_REASON_SESSION_RESTARTING = 4;
+  // ClientHello did not arrive in time. Session only.
+  CLOSE_REASON_HELLO_TIMEOUT = 5;
+  // Pings went unanswered. Either side.
+  CLOSE_REASON_PING_TIMEOUT = 6;
+  // The viewer's authorization did not verify or has expired. Session only.
+  CLOSE_REASON_PERMISSION_DENIED = 7;
+  // A malformed or unexpected message, or one that is too large. Either side.
+  CLOSE_REASON_PROTOCOL_ERROR = 8;
+  // The sender failed. Either side.
+  CLOSE_REASON_INTERNAL_ERROR = 9;
+}
