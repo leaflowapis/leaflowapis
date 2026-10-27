@@ -9,11 +9,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/no
 
 // The desktop notifications of the session's applications (freedesktop
 // Desktop Notifications Specification 1.3; message names after Xpra's
-// notification packets). In a seamless session the session is the
-// notification server; in a desktop session it observes the desktop's own
-// server. Expiry runs in the session, so applications learn that their
-// notifications closed even when no viewer is connected. Notifications
-// travel only between the session and its viewers.
+// notification packets). The session is the notification server of its
+// applications and draws nothing itself: viewers show the notifications.
+// Expiry runs in the session, so applications learn that their notifications
+// closed even when no viewer is connected. Notifications travel only between
+// the session and its viewers.
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.notification.v1", lane "metadata": opened by

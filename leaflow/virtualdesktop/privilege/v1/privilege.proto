@@ -1,0 +1,186 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.privilege.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/privilege/v1;privilegev1";
+
+// Approval of privileged operations by a person on a viewer device instead of
+// a password: privilege elevation through sudo or polkit, and access to the
+// user's keyring. The PAM stacks of sudo and polkit and the session's Secret
+// Service prompter ask the Agent's privileged daemon, which serializes a
+// PrivilegeRequest and has the session show it to its viewers. A viewer whose
+// authorization allows approving shows it to its person and returns their
+// decision signed with its device key, the key named in its authorization.
+// The daemon accepts a decision only for the exact bytes it produced, once,
+// before its own deadline, and checks the signature and the authorization
+// itself; the session only carries both. Automation clients may cause
+// requests but never approve them.
+//
+// Channel type "leaflow.virtualdesktop.privilege.v1", lane "interactive":
+// opened by the viewer, one per connection. ServerHello first, then a snapshot
+// of one PrivilegePrompt per pending request, then SnapshotEnd, then prompts
+// and closings as they happen.
+//
+// A request carries claims of the program that asked, such as its command
+// line. They may contain secrets: viewers show them to the person and never
+// store or log them.
+
+// A message from the viewer.
+message ClientMessage {
+  // The message.
+  oneof message {
+    // A person decided on a request.
+    SignedPrivilegeDecision decision = 1;
+  }
+}
+
+// A message from the session.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // What this viewer may do. The first message.
+    ServerHello server_hello = 1;
+    // A request is pending.
+    PrivilegePrompt prompt = 2;
+    // A request is no longer pending.
+    PrivilegeRequestClosed request_closed = 3;
+    // Ends the snapshot.
+    SnapshotEnd snapshot_end = 4;
+  }
+}
+
+// What this viewer may do.
+message ServerHello {
+  // The viewer's authorization allows it to approve requests. Without it the
+  // viewer sees requests and cannot decide them.
+  bool approve_allowed = 1;
+}
+
+// A pending request to show.
+message PrivilegePrompt {
+  // A serialized PrivilegeRequest, exactly as the daemon produced it. The
+  // viewer shows the request decoded from these bytes and signs their
+  // SHA-256.
+  bytes request = 1;
+}
+
+// A request for a privileged operation, serialized by the Agent's privileged
+// daemon.
+message PrivilegeRequest {
+  // A UUID chosen by the daemon (RFC 9562).
+  string request_id = 1;
+  // 32 random bytes chosen by the daemon.
+  bytes nonce = 2;
+  // The machine.
+  string machine_id = 3;
+  // The session the asking process belongs to.
+  string session_id = 4;
+  // When the request was made.
+  google.protobuf.Timestamp created_at = 5;
+  // When the daemon stops waiting and the asking program fails or goes on
+  // to its next way of authenticating. Informational: the daemon times
+  // requests on its own monotonic clock.
+  google.protobuf.Timestamp expires_at = 6;
+  // Claim: the asking process, such as the sudo process, the subject of a
+  // polkit check or the application asking for the keyring. 0 when unknown.
+  uint32 pid = 7;
+  // Claim: the command line of pid, such as "sudo apt install foo".
+  string command_line = 8;
+  // What is to be approved.
+  oneof operation {
+    // Authentication by a PAM stack, for sudo or polkit.
+    PamAuthentication pam_authentication = 9;
+    // Access to a collection of the user's keyring.
+    KeyringAccess keyring_access = 10;
+  }
+}
+
+// Authentication by a PAM stack (pam_start(3)), as sudo and polkit ask for
+// it.
+message PamAuthentication {
+  // The PAM service that asks, such as "sudo" or "polkit-1".
+  string service = 1;
+  // The account to authenticate as (PAM_USER).
+  string username = 2;
+  // Claim: the polkit action, such as "org.freedesktop.policykit.exec".
+  // Empty for sudo.
+  string polkit_action_id = 3;
+  // Claim: the localized message polkit asked to show. Empty for sudo.
+  string message = 4;
+  // Claim: the localized polkit details, such as "program" and
+  // "command_line".
+  map<string, string> details = 5;
+}
+
+// Access to a collection of the user's keyring (freedesktop Secret Service
+// API), which an application asked for and which the Secret Service would
+// otherwise prompt for with a password.
+message KeyringAccess {
+  // What the application asked for.
+  KeyringOperation operation = 1;
+  // Claim: the label of the collection, such as "Login".
+  string collection_label = 2;
+}
+
+// An operation on the keyring that needs approval.
+enum KeyringOperation {
+  KEYRING_OPERATION_UNSPECIFIED = 0;
+  // Unlocking a collection (Service.Unlock).
+  KEYRING_OPERATION_UNLOCK_COLLECTION = 1;
+  // Creating a collection (Service.CreateCollection).
+  KEYRING_OPERATION_CREATE_COLLECTION = 2;
+}
+
+// A person's decision, signed by the viewer.
+message SignedPrivilegeDecision {
+  // A serialized PrivilegeDecision.
+  bytes decision = 1;
+  // The Ed25519 signature (RFC 8032) over the ASCII bytes
+  // "leaflow.virtualdesktop.privilege.v1.PrivilegeDecision", one zero byte
+  // and decision, by the viewer key of the connection's authorization.
+  bytes signature = 2;
+}
+
+// A person's decision on one request.
+message PrivilegeDecision {
+  // SHA-256 of PrivilegePrompt.request, 32 bytes.
+  bytes request_sha256 = 1;
+  // The person approved the request. False: denied.
+  bool approved = 2;
+  // When the person decided. Informational.
+  google.protobuf.Timestamp decided_at = 3;
+}
+
+// A request is no longer pending.
+message PrivilegeRequestClosed {
+  // PrivilegeRequest.request_id.
+  string request_id = 1;
+  // How it ended.
+  PrivilegeOutcome outcome = 2;
+}
+
+// How a request ended.
+enum PrivilegeOutcome {
+  PRIVILEGE_OUTCOME_UNSPECIFIED = 0;
+  // A person approved it.
+  PRIVILEGE_OUTCOME_APPROVED = 1;
+  // A person denied it.
+  PRIVILEGE_OUTCOME_DENIED = 2;
+  // Nobody decided before the deadline.
+  PRIVILEGE_OUTCOME_EXPIRED = 3;
+  // The asking program gave up, such as when sudo was interrupted.
+  PRIVILEGE_OUTCOME_CANCELLED = 4;
+}
+
+// Ends the snapshot.
+message SnapshotEnd {}
+
+// What a viewer may do with privilege requests. Carried in the viewer's
+// signed authorization; the service grants approve_allowed only to the
+// devices of the session's person.
+message PrivilegePolicy {
+  // The viewer may approve or deny requests.
+  bool approve_allowed = 1;
+}
