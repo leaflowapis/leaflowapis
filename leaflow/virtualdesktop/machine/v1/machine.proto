@@ -132,7 +132,8 @@ service MachineRegistryService {
 
 // A desktop session on a machine.
 message Session {
-  // Chosen by the service: 1 to 64 characters of [a-z0-9-].
+  // Chosen by the service: 1 to 40 characters of [a-z0-9-], such as a UUID.
+  // The machine names files and sockets after it.
   string session_id = 1;
   // The platform user who owns the session, which logind records as its
   // RemoteUser.
