@@ -61,8 +61,8 @@ ALLOWED_IMPORTS: dict[str, set[str]] = {
     "logs": set(),
     "privilege": set(),
     # The control plane: the control connection, authorization and signaling,
-    # and the machines with their sessions and users.
-    "control": {"rpc", "transport", "session"},
+    # and the machines with their sessions and directory.
+    "control": {"rpc", "transport"},
     "machine": {"display"},
 }
 

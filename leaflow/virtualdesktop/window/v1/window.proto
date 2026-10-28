@@ -19,7 +19,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/window/v1;
 //     progress, then SnapshotEnd. Operations on it are sent and forgotten,
 //     as a person's window manager does.
 //   - "leaflow.virtualdesktop.window.v1.WindowService", lane "interactive":
-//     opened by an automation client to operate windows and learn the
+//     opened by a viewer to operate windows through calls and learn the
 //     outcome. It learns about windows from the window channel.
 //
 // Native windows. In SESSION_MODE_SEAMLESS a viewer may show every window as
@@ -42,11 +42,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/window/v1;
 // becomes the driver when it sends WindowStacking, WindowActivate,
 // WindowConfigure, WindowClose, WindowMinimize or WindowStateChange, or input
 // that the input channel says makes it the driver; the session applies the
-// operation. A person's viewer with neither never becomes the driver: its
-// operations are applied and the driver sees their result like any change.
-// Automation clients never drive either: they learn about windows here and
-// operate them through WindowService, which follows the automation rules;
-// the session ignores their operations on this channel. Requests of
+// operation. A viewer with neither never becomes the driver: its operations
+// are applied and the driver sees their result like any change. Calls of
+// WindowService never make the caller the driver either. Requests of
 // applications that only the driver may grant (WindowActivate and
 // WindowRestack from the session) go to the driver; while there is none the
 // session decides itself. Override-redirect windows, such as menus, are
@@ -501,10 +499,10 @@ message WindowUngrab {
 // Ends the snapshot.
 message SnapshotEnd {}
 
-// Operates windows for automation clients. Every call follows the automation
-// rules of the session channel, never makes the caller the driver, and
-// returns the session revision at which it took effect. Besides the
-// automation rules, calls fail before anything happens with:
+// Operates windows through calls. Every call follows the rules for operation
+// calls of the session channel, never makes the caller the driver, and
+// returns the session revision at which it took effect. Besides those
+// rules, calls fail before anything happens with:
 //   - NOT_FOUND and reason WINDOW_NOT_FOUND for a window that is gone;
 //   - FAILED_PRECONDITION and reason WINDOW_NOT_MANAGED for a window the
 //     session does not place: an override-redirect window, which its

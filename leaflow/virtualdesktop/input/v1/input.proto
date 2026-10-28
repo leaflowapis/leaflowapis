@@ -12,15 +12,17 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/input/v1;i
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.input.v1", lane "input": opened by the viewer,
-//     one per connection. The viewer sends ClientMessage, the input of a
-//     person; PointerMotion travels as a Datagram of the channel. The session
+//     one per connection. The viewer sends ClientMessage, input as a
+//     keyboard, pointer or touch screen gives it; PointerMotion travels as a
+//     Datagram of the channel. The session
 //     sends ServerMessage: the state of the focused editor and dropped input.
 //   - "leaflow.virtualdesktop.input.v1.InputService", lane "input": opened by
-//     an automation client to inject input and learn where it went.
+//     a viewer that operates the session through calls, to inject input and
+//     learn where it went.
 //
 // The session ignores input from read-only viewers. Input on the input
-// channel is a person's and always takes the input lease of the session
-// channel, from whoever held it.
+// channel always takes the input lease of the session channel, from whoever
+// held it.
 //
 // Order. Every message of the viewer on the input channel carries input_seq
 // from one counter of the connection, starting at 1. Everything but
@@ -377,14 +379,14 @@ message TextInputError {
   google.rpc.Status error = 7;
 }
 
-// Input for automation clients. Gestures run in the session as a whole, with
-// the timing of a person, so that double clicks, drags and key chords work
+// Input through calls. Gestures run in the session as a whole, with the
+// timing of a person, so that double clicks, drags and key chords work
 // whatever the network delay (after the Chrome DevTools Protocol Input
 // domain). Keys are named as X keysym names (XStringToKeysym), such as
 // "Return", "Control_L", "F13" or "U20AC", or given as a single character,
 // such as "/"; an unknown name fails with INVALID_ARGUMENT and reason
-// UNKNOWN_KEYSYM (metadata "keysym"). Every call follows the automation rules
-// of the session channel and returns the session revision at which it took
+// UNKNOWN_KEYSYM (metadata "keysym"). Every call follows the rules for
+// operation calls of the session channel and returns the session revision at which it took
 // effect.
 //
 // What a gesture presses is released when its call ends, however it ends.
@@ -393,7 +395,7 @@ message TextInputError {
 // the input lease. A press of a pointer button brings the window it goes to
 // to the front, as a person's click does.
 //
-// Besides the refusals of the automation rules, calls fail with:
+// Besides the refusals of the session channel, calls fail with:
 //   - NOT_FOUND and reason WINDOW_NOT_FOUND for a window that is gone
 //     (metadata "windowId");
 //   - FAILED_PRECONDITION and reason WINDOW_HIDDEN for a minimized window;
@@ -434,7 +436,7 @@ service InputService {
   }
 }
 
-// A point for automation input.
+// A point for input through calls.
 message Point {
   // The window the point is relative to. 0: canvas coordinates; the input
   // goes to the window shown there.

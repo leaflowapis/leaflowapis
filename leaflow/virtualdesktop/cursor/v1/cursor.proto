@@ -25,7 +25,7 @@ message ServerMessage {
     SnapshotEnd snapshot_end = 2;
     // The pointer moved, other than by this viewer.
     PointerPosition pointer_position = 3;
-    // Another viewer's automation acted on an area.
+    // Another viewer's operation call acted on an area.
     Highlight highlight = 4;
   }
 }
@@ -50,8 +50,8 @@ message Cursor {
 }
 
 // Where the pointer is (RFB PointerPos pseudo-encoding; Xpra pointer-position),
-// so that a viewer can show the pointer of whoever else moves it, such as an
-// automation client holding the input lease. Sent when the pointer was moved
+// so that a viewer can show the pointer of whoever else moves it, such as
+// another viewer holding the input lease. Sent when the pointer was moved
 // by another viewer or by an application, at most once per 16 milliseconds
 // with the latest position; never for this viewer's own input.
 message PointerPosition {
@@ -66,9 +66,9 @@ message PointerPosition {
   uint64 connection_id = 4;
 }
 
-// The area an automation client acted on, so that people watching see what it
+// The area an operation call acted on, so that the other viewers see what it
 // does (after the Chrome DevTools Protocol Overlay highlights). Sent to the
-// other viewers for every call of an automation service that acts on a
+// other viewers for every operation call that acts on a
 // place, such as an injected click or an action on an accessibility node.
 // The viewer draws it briefly.
 message Highlight {

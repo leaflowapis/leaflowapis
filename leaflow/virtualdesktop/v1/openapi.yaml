@@ -65,21 +65,23 @@ info:
 
     Machines resolve directory accounts and groups themselves and never write them into their local
     account files. A local account or group that already uses a name or id of the directory keeps
-    it, and the machine reports the conflict in `directory_conflicts`.
+    it, and the machine records the conflict among its events.
 
     ## Viewing a session
 
-    1. Register the client's device key once: `POST /api/v1/client-challenges`, sign the
-       challenge, then `POST /api/v1/clients`. The private key must never leave the client; in a
-       browser, use a non-extractable WebCrypto key.
-    2. For each connection, create a ticket with
+    1. Have an Ed25519 key, for as long as the client wants: one per connection or one kept by the
+       client. The private key must never leave the client; in a browser, use a non-extractable
+       WebCrypto key.
+    2. For each connection, create a ticket for the public key with
        `POST /api/v1/sessions/{sessionId}/viewer-tickets`. It is valid for 60 seconds and once.
     3. Open a WebSocket to the returned `url` with the subprotocol
        `leaflow.virtualdesktop.control.v1` and follow `leaflow/virtualdesktop/control/v1/control.proto`.
        The ticket travels inside the protocol and never in a URL.
 
     What a viewer may do in a session is decided when its ticket is created, from the caller's
-    permissions, and does not change during the connection.
+    permissions and what the ticket asks for, and does not change during the connection. Viewers
+    are not told apart by kind: a person in a browser and a program that operates the session are
+    both viewers, named by the `client_id` label they choose, and either can be disconnected.
 servers:
   - url: https://virtualdesktop.leaflow.cloud
     description: Machines, users, sessions and viewers
@@ -92,7 +94,6 @@ tags:
   - name: Group
   - name: Session
   - name: Viewer
-  - name: Client
 paths:
   /api/v1/machines:
     get:
@@ -189,6 +190,38 @@ paths:
       responses:
         "204":
           description: Removed
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/events:
+    get:
+      summary: List the events of a machine
+      description: |-
+        Returns what the machine reported about itself, newest first, such as a directory account
+        it does not serve because a local account uses its name. Events are kept for 30 days.
+      operationId: list-machine-events
+      tags:
+        - Machine
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: type
+          in: query
+          description: Return only events of this type
+          explode: false
+          schema:
+            $ref: "#/components/schemas/MachineEventType"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineEventList"
         default:
           description: Error
           content:
@@ -806,8 +839,8 @@ paths:
     post:
       summary: Create a viewer ticket
       description: |-
-        Issues a single-use ticket that admits one viewer connection of the given client to the
-        session. It is valid for 60 seconds.
+        Issues a single-use ticket that admits one viewer connection with the given public key to
+        the session. It is valid for 60 seconds.
 
         The owner of a session may operate it. Viewing another member's session requires
         `virtualdesktop:sessions.view`, which admits watching only, or
@@ -815,15 +848,14 @@ paths:
         of the session — file transfer, the clipboard, terminals and commands, port forwarding,
         devices and audio, printing, SSH agent forwarding, approving privilege requests and
         reading logs — is granted only with its permission; a viewer that may only watch gets
-        none of them.
+        none of them. A ticket may ask for less: to watch only, or for some of the capabilities.
 
         A request made by a browser binds the ticket to its `Origin`, which the WebSocket
         connection must carry too.
 
         Fails with:
         - `SESSION_CLOSED` when the session has ended;
-        - `SESSION_ACCESS_DENIED` when the caller may not view the session;
-        - `CLIENT_NOT_FOUND` when the client is not one of the caller's registered clients.
+        - `SESSION_ACCESS_DENIED` when the caller may not view the session.
       operationId: create-viewer-ticket
       tags:
         - Viewer
@@ -842,115 +874,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ViewerTicketResource"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/client-challenges:
-    post:
-      summary: Create a client challenge
-      description: |-
-        Returns a random challenge for registering a device key. It is valid for 5 minutes and
-        once, and only for the caller.
-      operationId: create-client-challenge
-      tags:
-        - Client
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ClientChallengeResource"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/clients:
-    get:
-      summary: List clients
-      description: |-
-        Returns the caller's registered clients, newest first. Clients belong to the caller and
-        are the same in every project.
-      operationId: list-clients
-      tags:
-        - Client
-      parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ClientList"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-    post:
-      summary: Register a client
-      description: |-
-        Registers a device key for the caller. `signature` proves that the client holds the
-        private key: it is the Ed25519 signature (RFC 8032) by the key over the ASCII bytes
-        `leaflow.virtualdesktop.v1.ClientChallenge`, one zero byte and the challenge's 32 bytes.
-
-        A client that acts on its own, such as an assistant, must be registered as `automation`:
-        sessions apply their automation rules to it.
-
-        Fails with:
-        - `CLIENT_CHALLENGE_INVALID` when the challenge is unknown, used, expired or issued to
-          someone else;
-        - `CLIENT_SIGNATURE_INVALID` when the signature does not verify;
-        - `CLIENT_KEY_REGISTERED` when the key is already registered.
-      operationId: create-client
-      tags:
-        - Client
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateClientRequest"
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ClientResource"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/clients/{clientId}:
-    delete:
-      summary: Revoke a client
-      description: |-
-        Revokes one of the caller's clients. Its tickets are refused from then on and its viewers
-        are disconnected at once. The key cannot be registered again.
-      operationId: delete-client
-      tags:
-        - Client
-      parameters:
-        - name: clientId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Revoked
         default:
           description: Error
           content:
@@ -1041,7 +964,6 @@ components:
         - session_desktops
         - agent_version
         - directory_synced
-        - directory_conflicts
         - created_at
         - updated_at
       properties:
@@ -1086,11 +1008,6 @@ components:
         directory_synced:
           description: The machine serves the project's current directory
           type: boolean
-        directory_conflicts:
-          description: The accounts and groups of the directory the machine does not serve, because a local account or group uses their name or id
-          type: array
-          items:
-            $ref: "#/components/schemas/DirectoryConflict"
         created_at:
           description: When the machine was added to the project
           type: string
@@ -1098,20 +1015,6 @@ components:
         updated_at:
           type: string
           format: date-time
-      additionalProperties: false
-    DirectoryConflict:
-      type: object
-      required:
-        - type
-        - name
-      properties:
-        type:
-          type: string
-          enum:
-            - account
-            - group
-        name:
-          type: string
       additionalProperties: false
     MachineList:
       type: object
@@ -1125,6 +1028,69 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MachineResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    MachineEventType:
+      description: |-
+        `directory_account_conflict`: a directory account is not served because a local account
+        uses its name or uid; metadata `username`, and `conflict` `name` or `uid`.
+        `directory_group_conflict`: a directory group is not served because a local group uses its
+        name or gid; metadata `groupName`, and `conflict` `name` or `gid`.
+      type: string
+      enum:
+        - directory_account_conflict
+        - directory_group_conflict
+    MachineEventResource:
+      type: object
+      required:
+        - id
+        - type
+        - metadata
+        - occurred_at
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/MachineEventType"
+        metadata:
+          description: The values of the event, with the keys its type names
+          type: object
+          additionalProperties:
+            type: string
+        occurred_at:
+          description: When it happened, on the machine's clock
+          type: string
+          format: date-time
+        created_at:
+          description: When the service recorded it
+          type: string
+          format: date-time
+      additionalProperties: false
+    MachineEventList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MachineEventResource"
         total_count:
           type: integer
           format: int64
@@ -1551,35 +1517,12 @@ components:
           type: string
           maxLength: 128
       additionalProperties: false
-    ViewerType:
-      description: |-
-        `human` is a person on a browser or the desktop app. `automation` is a client that acts on
-        its own, to which sessions apply their automation rules.
-      type: string
-      enum:
-        - human
-        - automation
-    ClientSummary:
-      type: object
-      required:
-        - id
-        - name
-        - type
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        type:
-          $ref: "#/components/schemas/ViewerType"
-      additionalProperties: false
     ViewerResource:
       type: object
       required:
         - connection_id
         - user
-        - client
+        - client_id
         - read_only
         - policies
         - remote_address
@@ -1591,8 +1534,9 @@ components:
           format: int64
         user:
           $ref: "#/components/schemas/NamedIdentity"
-        client:
-          $ref: "#/components/schemas/ClientSummary"
+        client_id:
+          description: The label the viewer's client chose, such as `console` or `assistant`; neither unique nor verified
+          type: string
         read_only:
           description: The viewer may only watch
           type: boolean
@@ -1624,12 +1568,36 @@ components:
     CreateViewerTicketRequest:
       type: object
       required:
-        - client_id
+        - public_key
       properties:
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
         client_id:
-          description: The caller's registered client that will connect
+          description: A label for the client that connects, such as `console` or `assistant`, shown to the other viewers. It is neither unique nor verified.
           type: string
-          format: uuid
+          maxLength: 64
+        read_only:
+          description: The viewer only watches, even if the caller may operate the session
+          type: boolean
+        permissions:
+          description: |-
+            The capabilities the viewer may use, as permission names such as
+            `virtualdesktop:files.transfer`; when omitted, every capability the caller holds. A
+            capability the caller does not hold is not granted.
+          type: array
+          maxItems: 16
+          items:
+            type: string
+            enum:
+              - virtualdesktop:files.transfer
+              - virtualdesktop:clipboard.use
+              - virtualdesktop:terminal.use
+              - virtualdesktop:ports.forward
+              - virtualdesktop:devices.use
+              - virtualdesktop:printing.use
+              - virtualdesktop:ssh_agent.use
+              - virtualdesktop:privilege.approve
+              - virtualdesktop:logs.read
       additionalProperties: false
     ViewerTicketResource:
       type: object
@@ -1648,102 +1616,4 @@ components:
         expires_at:
           type: string
           format: date-time
-      additionalProperties: false
-    ClientChallengeResource:
-      type: object
-      required:
-        - id
-        - challenge
-        - expires_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        challenge:
-          description: 32 random bytes in standard Base64
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-      additionalProperties: false
-    ClientResource:
-      type: object
-      required:
-        - id
-        - type
-        - name
-        - public_key
-        - created_at
-        - last_used_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        type:
-          $ref: "#/components/schemas/ViewerType"
-        name:
-          type: string
-          maxLength: 128
-        public_key:
-          $ref: "#/components/schemas/PublicKey"
-        created_at:
-          type: string
-          format: date-time
-        last_used_at:
-          description: When a viewer of the client last connected; null if never
-          type:
-            - string
-            - "null"
-          format: date-time
-      additionalProperties: false
-    ClientList:
-      type: object
-      required:
-        - items
-        - total_count
-        - page
-        - page_size
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/ClientResource"
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-      additionalProperties: false
-    CreateClientRequest:
-      type: object
-      required:
-        - type
-        - name
-        - public_key
-        - challenge_id
-        - signature
-      properties:
-        type:
-          $ref: "#/components/schemas/ViewerType"
-        name:
-          description: A name the caller recognizes, such as the browser and computer
-          type: string
-          minLength: 1
-          maxLength: 128
-        public_key:
-          $ref: "#/components/schemas/PublicKey"
-        challenge_id:
-          type: string
-          format: uuid
-        signature:
-          description: The Ed25519 signature, 64 bytes in standard Base64
-          type: string
-          pattern: "^[A-Za-z0-9+/]{86}==$"
       additionalProperties: false

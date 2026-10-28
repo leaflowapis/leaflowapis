@@ -6,7 +6,6 @@ import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "leaflow/virtualdesktop/rpc/v1/rpc.proto";
-import "leaflow/virtualdesktop/session/v1/session.proto";
 import "leaflow/virtualdesktop/transport/v1/transport.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/control/v1;controlv1";
@@ -21,8 +20,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/control/v1
 //   - the Agent's daemon, one per machine, with the machine key;
 //   - the session process, one per session, with a key the machine key
 //     delegated to it;
-//   - a viewer, one connection per session it views, with the device key of
-//     the client it runs on.
+//   - a viewer, one connection per session it views, with a key of its own,
+//     which may live as long as the client or only for the connection.
 // Every credential proves possession of an Ed25519 key (RFC 8032) by signing
 // the service's challenge; none is a bearer secret.
 //
@@ -65,7 +64,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/control/v1
 // Resumption. When the control connection of a viewer or a session process
 // drops, the service keeps that endpoint's attachments for
 // Welcome.resume_grace. A viewer that connects again within it, with
-// resume_connection_id, the same device key and a fresh ticket for the same
+// resume_connection_id, the same viewer key and a fresh ticket for the same
 // user and session, keeps its connection_id and its PeerConnections; a
 // session process that connects again with the same session key keeps its
 // viewers. Nothing sent before is replayed: a PeerConnection attempt whose
@@ -228,16 +227,16 @@ message SessionDelegation {
   google.protobuf.Timestamp expires_at = 5;
 }
 
-// A viewer, with the device key of its client.
+// A viewer, with its own key.
 message ViewerCredential {
   // A single-use ticket the service issued to a signed-in user for one
-  // session, this device key and, for a browser, the Origin it asked from
+  // session, this viewer key and, for a browser, the Origin it asked from
   // (RFC 6454), which the WebSocket handshake must carry. Valid for at most
   // 60 seconds. It authenticates nothing by itself. Never put into a URL.
   string ticket = 1;
   // Resumes the viewer connection with this id. 0: a new connection.
   uint64 resume_connection_id = 2;
-  // The Ed25519 signature by the device key the ticket names over the ASCII
+  // The Ed25519 signature by the viewer key the ticket names over the ASCII
   // bytes "leaflow.virtualdesktop.control.v1.ViewerCredential", one zero byte
   // and ServerHello.challenge. The private key never leaves the client, such
   // as a non-extractable WebCrypto key.
@@ -301,18 +300,14 @@ message Authorization {
   string user_id = 5;
   // The user's name, plain text.
   string display_name = 6;
-  // The registered client the viewer runs on. It stays the same across
-  // connections and grants nothing by itself.
+  // The label the client gave itself when the ticket was issued, such as
+  // "console" or "assistant", at most 64 bytes. Neither unique nor verified:
+  // it lets people tell connections apart and grants nothing.
   string client_id = 7;
-  // The client's name when the authorization was issued, plain text.
-  string client_name = 8;
-  // The Ed25519 device key of the client, 32 bytes. The viewer proved it
-  // with its credential, and the session accepts only a PeerConnection whose
-  // viewer Hello is signed with it.
+  // The viewer's Ed25519 public key, 32 bytes. The viewer proved it with its
+  // credential, and the session accepts only a PeerConnection whose viewer
+  // Hello is signed with it.
   bytes viewer_public_key = 9;
-  // A person or an automation client. The automation rules of the session
-  // apply to automation clients.
-  leaflow.virtualdesktop.session.v1.ViewerType viewer_type = 10;
   // The viewer may only watch, whatever policies say.
   bool read_only = 11;
   // The policies of the domains the viewer may use, at most one of each
@@ -420,7 +415,7 @@ enum CloseReason {
 service AuthorizationService {
   // Renews the viewer's authorization before it expires, keeping its
   // PeerConnections. The ticket must be a fresh one for the same session and
-  // device key. The new authorization differs from the current one only in
+  // viewer key. The new authorization differs from the current one only in
   // later issued_at and expires_at. The service hands it to the session with
   // UpdateViewerAuthorization before it answers, and starts no PeerConnection
   // attempt of the viewer until the viewer has it. One call at a time.

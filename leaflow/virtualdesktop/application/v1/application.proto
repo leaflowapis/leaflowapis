@@ -212,7 +212,7 @@ service ApplicationService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // Ends a process of the session. It acts on the session and follows the
-  // automation rules of the session channel for automation clients.
+  // rules for operation calls of the session channel.
   rpc TerminateProcess(TerminateProcessRequest) returns (TerminateProcessResponse);
 }
 
