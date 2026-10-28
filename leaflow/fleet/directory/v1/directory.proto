@@ -22,7 +22,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/directory/v1;direct
 // groups never appear in /etc/passwd or /etc/group, and the local accounts
 // and groups of the machine are left as they are. Directory accounts have no
 // password: a person on a viewer of one of the account's sessions approves
-// elevation through sudo (leaflow.fleet.privilege.v1).
+// elevation through sudo (leaflow.fleet.privilege.v1), and inside a command
+// the platform runs for the account, its request does
+// (leaflow.fleet.command.v1).
 //
 // Feature "leaflow.fleet.directory.v1" (leaflow.fleet.machine.v1 Feature):
 // AVAILABLE while the Agent's NSS module serves passwd and group and its PAM

@@ -81,7 +81,9 @@ info:
     of the project's roles: `fleet:machines.login` and `fleet:machines.admin`, each for all
     machines or for chosen ones. Changes reach the machines within about a minute, and every login
     and elevation is checked against the current permissions while the machine is connected. To
-    keep a member out of some machines, deny them `fleet:machines.login` on those machines. Elevation through sudo is approved on a viewer, never by a password.
+    keep a member out of some machines, deny them `fleet:machines.login` on those machines.
+    Elevation through sudo is approved on a viewer, or by the request of a command run through this
+    API, never by a password.
 
     Members log in over SSH with the keys they own among the project's SSH keys, while they may
     log in to the machine.
@@ -92,11 +94,11 @@ info:
 
     ## Running commands
 
-    `POST /api/v1/machines/{machineId}:runCommand` runs one command line on the machine as one of
-    its accounts, as `ssh machine 'command'` would, but without SSH: the machine needs no open
-    port, no distributed key and no address the caller can reach. It requires
-    `fleet:commands.run` for the machine. A command may run as any account of the machine, root
-    included, so grant the permission as you would root access.
+    `POST /api/v1/machines/{machineId}:runCommand` runs one command line on the machine as the
+    caller's account, as `ssh machine 'command'` would, but without SSH: the machine needs no open
+    port, no distributed key and no address the caller can reach. Like logging in, it requires
+    `fleet:machines.login` on the machine. Inside the command, `sudo` works without a prompt for
+    a caller with `fleet:machines.admin` on the machine: the request approves the elevation.
 
     ## Viewing a session
 
@@ -264,25 +266,26 @@ paths:
     post:
       summary: Run a command
       description: |-
-        Runs one command line on the machine with the login shell of an account and returns once
-        it exited or was killed, with its exit status and what it wrote. Pipes, redirection and
-        `&&` work; there is no terminal and no standard input. The machine admits the account
-        through PAM as for a login, so expired and locked accounts, and directory accounts that may
-        not log in, are refused. A command that fails is still a successful request: its exit
-        status is its result.
+        Runs one command line on the machine as the caller's account, with its login shell, and
+        returns once it exited or was killed, with its exit status and what it wrote. Pipes,
+        redirection and `&&` work; there is no terminal and no standard input. The machine admits
+        the account through PAM as for a login. The account is created if the caller has none yet.
+        A command that fails is still a successful request: its exit status is its result.
+
+        Inside the command, `sudo` works without a prompt while the caller has
+        `fleet:machines.admin` on the machine, and refuses otherwise.
 
         The request is held until the command ends, at most `timeout_seconds` and a few seconds
         more. Neither the command nor its output is hidden from the platform: do not put secrets
         into either.
 
-        Requires `fleet:commands.run` for the machine.
+        Requires `fleet:machines.login` on the machine.
 
         Fails with:
         - `MACHINE_OFFLINE` when the machine is not connected;
         - `FEATURE_UNAVAILABLE` when the machine does not offer `leaflow.fleet.command.v1`;
-        - `ACCOUNT_NOT_FOUND` when the machine has no such account;
-        - `ACCOUNT_NOT_ALLOWED` when the machine refuses the account, with the machine's message
-          in `metadata.pamMessage`;
+        - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
+          the machine refuses the account, as for opening a session;
         - `COMMAND_START_FAILED` when the shell could not start; nothing ran;
         - `MACHINE_TIMEOUT` when the machine did not answer in time. The command may have run.
       operationId: run-machine-command
@@ -760,8 +763,8 @@ paths:
       description: |-
         Opens a session for the caller on a machine, as the caller's account, and returns once it
         is ready. With `desktop` the session has a desktop; without, it offers terminals, programs,
-        files, ports, sound, devices, printers and privilege approvals. The account is created if the caller has none yet.
-        Requires `fleet:machines.login` on the machine.
+        files, ports, sound, devices, printers and privilege approvals. The account is created if
+        the caller has none yet. Requires `fleet:machines.login` on the machine.
 
         Fails with:
         - `MACHINE_OFFLINE` when the machine is not connected;
@@ -1632,8 +1635,8 @@ components:
         session_desktop:
           description: |-
             In `desktop` mode, the desktop environment to start: a detail of the machine's
-            `leaflow.fleet.virtualdesktop.host.v1` feature without its `desktop.` prefix, such as `XFCE`;
-            the machine's default when omitted
+            `leaflow.fleet.virtualdesktop.host.v1` feature without its `desktop.` prefix, such as
+            `XFCE`; the machine's default when omitted
           type: string
           maxLength: 128
       additionalProperties: false
@@ -1652,14 +1655,8 @@ components:
     RunCommandRequest:
       type: object
       required:
-        - username
         - command
       properties:
-        username:
-          description: The account to run as, a local account of the machine such as `root` or a directory account
-          type: string
-          minLength: 1
-          maxLength: 32
         command:
           description: The command line, which the account's login shell runs with `-c`; at most 65536 bytes and no NUL
           type: string
