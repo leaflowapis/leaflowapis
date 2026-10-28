@@ -15,6 +15,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/se
 // viewer opens it first, right after the transport Hello, and opens no other
 // channel before ServerHello arrives. One per connection.
 //
+// Authorization. The session takes who a viewer is and what it may do (its
+// user, client, viewer type, whether it is read-only and the policies of the
+// domains) from the authorization the VirtualDesktop service signed for the
+// connection, never from the viewer.
+//
 // Snapshots. Some channel types, this one included, start with the full
 // state of what they describe, end it with their own SnapshotEnd and then
 // send changes; each package says whether its channel type does. The viewer
@@ -113,11 +118,9 @@ message ClientHello {
   // it for the names of applications and menus it sends from now on. Empty:
   // the session's own language.
   string language_code = 2;
-  // What the viewer is.
-  ViewerType viewer_type = 3;
   // The viewer software, such as "leaflow-desktop/1.2.0" or the browser's
   // User-Agent (RFC 9110 §10.1.5). For display and diagnostics only.
-  string user_agent = 4;
+  string user_agent = 3;
 }
 
 // The session's side of the handshake.

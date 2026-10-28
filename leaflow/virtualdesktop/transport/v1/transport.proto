@@ -409,8 +409,8 @@ message PeerAuthorization {
   bytes viewer_fingerprint_sha256 = 6;
   // SHA-256 fingerprint of the Agent's DTLS certificate, from its answer.
   bytes agent_fingerprint_sha256 = 7;
-  // SHA-256 of the signed viewer authorization both ends hold for the
-  // connection.
+  // SHA-256 of the viewer's authorization that both ends hold for the
+  // connection: the exact serialized bytes the service signed.
   bytes viewer_authorization_sha256 = 8;
   // When the service signed it.
   google.protobuf.Timestamp issued_at = 9;

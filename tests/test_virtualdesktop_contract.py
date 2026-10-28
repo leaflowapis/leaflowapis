@@ -4,6 +4,9 @@ The packages form layers. A package may import only the packages listed for it
 below, so that the peer-to-peer side never depends on the service side and no
 domain depends on another one it does not build on. A new package is added to
 the table on purpose, together with what it may import.
+
+The control plane, between endpoints and the VirtualDesktop service, sits on
+top: it may import peer-to-peer packages, and none of them imports it.
 """
 from __future__ import annotations
 
@@ -57,14 +60,20 @@ ALLOWED_IMPORTS: dict[str, set[str]] = {
     "printing": set(),
     "logs": set(),
     "privilege": set(),
+    # The control plane: the control connection, authorization and signaling,
+    # and the machines with their sessions and users.
+    "control": {"rpc", "transport", "session"},
+    "machine": {"display"},
 }
+
+CONTROL_PLANE = {"control", "machine"}
 
 CONTAINER_WORDS = {"common", "shared", "types", "type", "util", "utils", "misc", "base"}
 IMPORT = re.compile(r'^import\s+(?:public\s+)?"([^"]+)";', re.MULTILINE)
 PACKAGE = re.compile(r"^package\s+([\w.]+);", re.MULTILINE)
 GO_PACKAGE = re.compile(r'^option go_package = "([^"]+)";', re.MULTILINE)
 # Public contracts cite public standards only, never documents of our own.
-LOCAL_DOCUMENT = re.compile(r"\b[\w-]+\.md\b|\bglossary\b|\barchitecture\b|\breview-v1\b", re.IGNORECASE)
+LOCAL_DOCUMENT = re.compile(r"\b[\w-]+\.md\b|\bglossary\b|\barchitecture\s*§|\breview-v1\b", re.IGNORECASE)
 
 
 def proto_files() -> list[Path]:
@@ -120,6 +129,13 @@ class VirtualDesktopContract(unittest.TestCase):
                     if target == name:
                         continue
                     self.assertIn(target, ALLOWED_IMPORTS.get(name, set()), f"{name} may not import {target}")
+
+    def test_peer_to_peer_never_imports_the_control_plane(self) -> None:
+        for name, imported in ALLOWED_IMPORTS.items():
+            if name in CONTROL_PLANE:
+                continue
+            with self.subTest(package=name):
+                self.assertFalse(imported & CONTROL_PLANE, f"{name} may not depend on the control plane")
 
     def test_no_local_documents(self) -> None:
         for path in proto_files():

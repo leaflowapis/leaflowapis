@@ -14,8 +14,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/pr
 // authorization allows approving shows it to its person and returns their
 // decision signed with its device key, the key named in its authorization.
 // The daemon accepts a decision only for the exact bytes it produced, once,
-// before its own deadline, and checks the signature and the authorization
-// itself; the session only carries both. Every viewer that may approve is
+// before its own deadline. It checks the signature itself, and the viewer's
+// authorization too: signed by the service, current, for this session, of a
+// person and with a PrivilegePolicy that allows approving. The session only
+// carries the decision and the authorization. Every viewer that may approve is
 // asked, and the first valid decision counts. When none is connected the
 // daemon does not wait, and the program goes on to its next way of
 // authenticating, such as a password. Automation clients may cause requests

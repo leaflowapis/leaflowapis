@@ -42,7 +42,7 @@ message Call {
   string request_id = 1;
   // The method, in the form of a gRPC request path: "/" + full service name
   // + "/" + method name, such as
-  // "/leaflow.virtualdesktop.capture.v1.CaptureService/CaptureScreen".
+  // "/leaflow.virtualdesktop.capture.v1.CaptureService/CaptureScreenshot".
   string method = 2;
   // The serialized request message of the method.
   bytes payload = 3;
