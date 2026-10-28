@@ -23,10 +23,14 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/tr
 // Identifiers. tray_icon_id is chosen by the session, is never 0 and is never
 // reused in the session.
 //
+// Updates. The session sends at most one TrayIcon per icon every 50 to 100
+// milliseconds, the latest state, however often the application changes it.
+//
 // Images are rendered at the device pixel ratio of the viewer's
 // DisplayConfigure.
 
-// A message from the session on the tray channel.
+// A message from the session on the tray channel. The viewer sends nothing on
+// it.
 message ServerMessage {
   // The message.
   oneof message {
@@ -161,7 +165,9 @@ service TrayService {
   // clicks of buttons 4 to 7).
   rpc ScrollTrayIcon(ScrollTrayIconRequest) returns (ScrollTrayIconResponse);
   // Reads a menu or a submenu of a tray icon whose has_menu is set (dbusmenu
-  // AboutToShow, then GetLayout).
+  // AboutToShow, then GetLayout). An icon without a menu, or an unknown
+  // item, fails with NOT_FOUND; an application that does not answer on D-Bus
+  // with UNAVAILABLE.
   rpc GetTrayMenu(GetTrayMenuRequest) returns (GetTrayMenuResponse);
   // Reports a user interaction with a menu item (dbusmenu Event).
   rpc SendTrayMenuEvent(SendTrayMenuEventRequest) returns (SendTrayMenuEventResponse);
@@ -328,12 +334,14 @@ message SendTrayMenuEventRequest {
 // A user interaction with a menu item (dbusmenu Event "eventId").
 enum MenuEventType {
   MENU_EVENT_TYPE_UNSPECIFIED = 0;
-  // The item was activated ("clicked").
+  // The item was activated ("clicked"). Viewers always send it.
   MENU_EVENT_TYPE_CLICKED = 1;
-  // Its submenu was opened ("opened").
+  // Its submenu was opened ("opened"). Optional.
   MENU_EVENT_TYPE_OPENED = 2;
-  // Its submenu was closed ("closed").
+  // Its submenu was closed ("closed"). Optional.
   MENU_EVENT_TYPE_CLOSED = 3;
+  // The pointer is over the item ("hovered"). Optional.
+  MENU_EVENT_TYPE_HOVERED = 4;
 }
 
 // The response of SendTrayMenuEvent. A disabled or unknown item fails with

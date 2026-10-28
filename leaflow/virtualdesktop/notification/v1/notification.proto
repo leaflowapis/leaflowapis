@@ -12,8 +12,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/no
 // notification packets). The session is the notification server of its
 // applications and draws nothing itself: viewers show the notifications.
 // Expiry runs in the session, so applications learn that their notifications
-// closed even when no viewer is connected. Notifications travel only between
-// the session and its viewers.
+// closed even when no viewer is connected. Balloon messages of XEmbed tray
+// icons (System Tray Protocol) arrive as notifications too. Sound hints are
+// not forwarded. Notifications travel only between the session and its
+// viewers and never enter logs.
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.notification.v1", lane "metadata": opened by
@@ -30,7 +32,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/no
 // labels are plain text, and body is already reduced to the markup subset
 // below, but viewers sanitize it again before rendering it.
 
-// A message from the session on the notification channel.
+// A message from the session on the notification channel. The viewer sends
+// nothing on it.
 message ServerMessage {
   // The message.
   oneof message {
@@ -80,7 +83,9 @@ message Notification {
   uint32 pid = 13;
   // When it appeared or was last replaced.
   google.protobuf.Timestamp created_at = 14;
-  // When the session will close it as expired. Unset: it does not expire.
+  // When the session will close it as expired: the application's timeout,
+  // 6 seconds when it asked for the default. Unset: it does not expire, as
+  // for critical ones.
   google.protobuf.Timestamp expires_at = 15;
 }
 
