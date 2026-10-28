@@ -10,11 +10,17 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/wi
 // order and focus, and the operations a viewer asks for. Names and semantics
 // follow ICCCM and EWMH; message names follow Xpra's window packets.
 //
-// Channel type "leaflow.virtualdesktop.window.v1", lane "metadata". The
-// viewer opens one per connection and sends ClientHello first. The session
-// starts with a snapshot: one Window per window from the bottom of the stack
-// to the top, override-redirect windows last, then WindowGrab if a grab is in
-// progress, then SnapshotEnd.
+// Channel types:
+//   - "leaflow.virtualdesktop.window.v1", lane "metadata": opened by the
+//     viewer, one per connection. The viewer sends ClientMessage, starting
+//     with ClientHello; the session sends ServerMessage, starting with a
+//     snapshot: one Window per window from the bottom of the stack to the
+//     top, override-redirect windows last, then WindowGrab if a grab is in
+//     progress, then SnapshotEnd. Operations on it are sent and forgotten,
+//     as a person's window manager does.
+//   - "leaflow.virtualdesktop.window.v1.WindowService", lane "interactive":
+//     opened by an automation client to operate windows and learn the
+//     outcome. It learns about windows from the window channel.
 //
 // Native windows. In SESSION_MODE_SEAMLESS a viewer may show every window as
 // a window of its own desktop, whose window manager places it. While such a
@@ -492,3 +498,104 @@ message WindowUngrab {
 
 // Ends the snapshot.
 message SnapshotEnd {}
+
+// Operates windows for automation clients. Every call follows the automation
+// rules of the session channel, never makes the caller the driver, and
+// returns the session revision at which it took effect. A window that is gone
+// fails with NOT_FOUND and reason WINDOW_NOT_FOUND; an override-redirect
+// window, which its application places itself, with FAILED_PRECONDITION and
+// reason WINDOW_NOT_MANAGED.
+service WindowService {
+  // Activates a window as WindowActivate does: focuses and raises it and
+  // restores it when minimized.
+  rpc ActivateWindow(ActivateWindowRequest) returns (ActivateWindowResponse);
+  // Asks the application to close a window, as WindowClose does. The window
+  // is gone only when the window channel says so.
+  rpc CloseWindow(CloseWindowRequest) returns (CloseWindowResponse);
+  // Minimizes a window and its transient windows, as WindowMinimize does.
+  rpc MinimizeWindow(MinimizeWindowRequest) returns (MinimizeWindowResponse);
+  // Moves and resizes a window, within its size hints and the work area,
+  // and reads its geometry back.
+  rpc SetWindowGeometry(SetWindowGeometryRequest) returns (SetWindowGeometryResponse);
+  // Changes the states of a window, as WindowStateChange does, and reads them
+  // back.
+  rpc ChangeWindowState(ChangeWindowStateRequest) returns (ChangeWindowStateResponse);
+}
+
+// The request of ActivateWindow.
+message ActivateWindowRequest {
+  // The window.
+  uint64 window_id = 1;
+}
+
+// The response of ActivateWindow.
+message ActivateWindowResponse {
+  // The session revision at which the window became active.
+  uint64 revision = 1;
+}
+
+// The request of CloseWindow.
+message CloseWindowRequest {
+  // The window.
+  uint64 window_id = 1;
+}
+
+// The response of CloseWindow.
+message CloseWindowResponse {
+  // The session revision at which the application was asked.
+  uint64 revision = 1;
+}
+
+// The request of MinimizeWindow.
+message MinimizeWindowRequest {
+  // The window.
+  uint64 window_id = 1;
+}
+
+// The response of MinimizeWindow.
+message MinimizeWindowResponse {
+  // The session revision at which the window was minimized.
+  uint64 revision = 1;
+}
+
+// The request of SetWindowGeometry.
+message SetWindowGeometryRequest {
+  // The window.
+  uint64 window_id = 1;
+  // The client area wanted, in canvas coordinates.
+  leaflow.virtualdesktop.display.v1.Rectangle geometry = 2;
+}
+
+// The response of SetWindowGeometry.
+message SetWindowGeometryResponse {
+  // The client area the window got, read back from the X server; it may
+  // differ from the request because of size hints, the work area or the
+  // application.
+  leaflow.virtualdesktop.display.v1.Rectangle geometry = 1;
+  // Window.resize_counter after the change.
+  uint64 resize_counter = 2;
+  // The session revision at which the geometry was read back.
+  uint64 revision = 3;
+}
+
+// The request of ChangeWindowState.
+message ChangeWindowStateRequest {
+  // The window.
+  uint64 window_id = 1;
+  // How to apply the states.
+  WindowStateOperation operation = 2;
+  // The states. HIDDEN, FOCUSED and MODAL are ignored.
+  repeated WindowState states = 3;
+}
+
+// The response of ChangeWindowState.
+message ChangeWindowStateResponse {
+  // The states the window has afterwards.
+  repeated WindowState states = 1;
+  // The client area the window has afterwards.
+  leaflow.virtualdesktop.display.v1.Rectangle geometry = 2;
+  // Window.resize_counter afterwards.
+  uint64 resize_counter = 3;
+  // The session revision at which they were read back.
+  uint64 revision = 4;
+}
