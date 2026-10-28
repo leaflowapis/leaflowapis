@@ -167,7 +167,7 @@ message ClientHello {
     // A viewer.
     ViewerCredential viewer = 4;
   }
-  // The endpoint software, such as "leaflow-agent/1.0.0" or the browser's
+  // The endpoint software, such as "leaflow-virtualdesktop-agent/1.0.0" or the browser's
   // User-Agent (RFC 9110 §10.1.5). For diagnostics only.
   string user_agent = 5;
 }
