@@ -10,13 +10,15 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/dr
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.draw.v1", lane "metadata": opened by the viewer,
-//     one per connection, before any frame can flow. It negotiates encodings
-//     and carries acknowledgements, withdrawals and repaint requests.
+//     one per connection, before any frame can flow. The viewer sends
+//     ClientMessage, the session ServerMessage. It negotiates encodings and
+//     carries acknowledgements, withdrawals and repaint requests.
 //     FrameAcknowledge may also travel as a Datagram of this channel.
 //   - "leaflow.virtualdesktop.draw.v1.frame", lane "media": opened by the
-//     session, one per frame. It carries one FrameStart, the frame's
-//     WindowDraw messages and one FrameEnd, then closes. Its envelopes are not
-//     resent after a migration.
+//     session, one per frame. The session sends FrameMessage: one FrameStart,
+//     the frame's WindowDraw messages and one FrameEnd, then closes the
+//     channel; the viewer sends nothing. Its envelopes are not resent after a
+//     migration.
 //
 // Frames. frame_id starts at 1 and grows by exactly 1 with every frame of a
 // connection, so the viewer knows the fate of every frame below the newest it
@@ -51,8 +53,7 @@ message ClientMessage {
   }
 }
 
-// A message from the session: on the draw channel ServerHello and
-// FrameCancel, on a frame channel FrameStart, WindowDraw and FrameEnd.
+// A message from the session on the draw channel.
 message ServerMessage {
   // The message.
   oneof message {
@@ -60,12 +61,19 @@ message ServerMessage {
     ServerHello server_hello = 1;
     // Frames the session withdrew.
     FrameCancel frame_cancel = 2;
-    // Starts a frame.
-    FrameStart frame_start = 3;
+  }
+}
+
+// A message from the session on a frame channel.
+message FrameMessage {
+  // The message.
+  oneof message {
+    // Starts the frame. The first message.
+    FrameStart frame_start = 1;
     // One encoded rectangle of a window.
-    WindowDraw window_draw = 4;
-    // Ends a frame.
-    FrameEnd frame_end = 5;
+    WindowDraw window_draw = 2;
+    // Ends the frame. The last message.
+    FrameEnd frame_end = 3;
   }
 }
 
