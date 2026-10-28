@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package leaflow.virtualdesktop.accessibility.v1;
 
-import "google/protobuf/duration.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/accessibility/v1;accessibilityv1";
@@ -14,37 +13,39 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/ac
 // lane "interactive": opened by the viewer.
 //
 // Model. Applications expose their user interface as a tree of nodes through
-// the platform's accessibility API, AT-SPI2 on Linux. The session presents
-// these trees as one, with roles, states and names as WAI-ARIA 1.2 defines
-// them and as W3C Core Accessibility API Mappings 1.2 maps the platform's to
-// them, after the Chrome DevTools Protocol Accessibility domain. The root has
-// one child per application exposing a tree; an application's children are
-// its windows. The session turns on the platform's accessibility support
-// when it starts and never changes how applications are launched, so an
-// application that does not follow that setting exposes no tree. It is then
-// absent, and its windows remain reachable through capture and input only.
+// AT-SPI2. The session presents these trees as one, after the Chrome DevTools
+// Protocol Accessibility domain: roles mapped to WAI-ARIA 1.2 as W3C Core
+// Accessibility API Mappings 1.2 maps them, states and actions as AT-SPI2
+// names them. The root has one child per application exposing a tree; an
+// application's children are its windows. The session turns on the
+// platform's accessibility support when it starts and never changes how
+// applications are launched, so an application that does not follow that
+// setting exposes no tree; its windows remain reachable through capture and
+// input only.
 //
 // Identifiers. node_id is chosen by the session, is never 0 and is never
-// reused in the session. It names the same platform object for as long as
-// the application keeps it. A call that names a node that is gone fails with
-// NOT_FOUND and reason NODE_GONE; one that names a window that is gone fails
-// with NOT_FOUND and reason WINDOW_GONE; one that names a window whose
-// application exposes no tree fails with FAILED_PRECONDITION and reason
-// TREE_UNAVAILABLE.
+// reused in the session. It names the same object for as long as the
+// application keeps it. Calls fail with NOT_FOUND and reason NODE_NOT_FOUND
+// for a node that is gone or defunct (metadata "nodeId"), with NOT_FOUND and
+// reason WINDOW_NOT_FOUND for a window that is gone, with
+// FAILED_PRECONDITION and reason TREE_UNAVAILABLE for a window whose
+// application exposes no tree, and with UNAVAILABLE and reason
+// ROUTE_UNAVAILABLE while the session's accessibility bus does not run.
 //
-// Coordinates. Every Rectangle here is in canvas coordinates, where input goes.
+// Coordinates. The bounds of a node are in the coordinates of its window's
+// client area (AT-SPI2 ATSPI_COORD_TYPE_WINDOW), so that they stay valid
+// while the window moves; input to a node goes to that window at a point of
+// its bounds.
 //
-// Changes. PerformAction, SetValue, SetTextSelection and InvokeMenuItem act
-// on the applications, so they need what input needs: a viewer that is not
-// read-only, holding the input lease of the session channel. They fail like
-// InputService calls otherwise. A call returns once the application accepted
-// the request, with the session revision at which it did; whether it had the
-// intended effect is for the caller to observe, such as with
-// WaitForCondition or through the changes after that revision.
+// Changes. PerformAction, SetValue, SetTextSelection, SelectOptions and
+// InvokeMenuItem act on applications and follow the automation rules of the
+// session channel. A call returns once the application accepted the request,
+// with the session revision at which it did; whether it had the intended
+// effect is for the caller to observe, such as through the change package.
 
 // Reads and operates the accessibility trees.
 service AccessibilityService {
-  // Returns part of the tree, breadth first.
+  // Returns part of the tree.
   rpc GetTree(GetTreeRequest) returns (GetTreeResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -53,9 +54,13 @@ service AccessibilityService {
   rpc FindNodes(FindNodesRequest) returns (FindNodesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // Returns the deepest node at a point and its ancestors (AT-SPI2
-  // Component.GetAccessibleAtPoint).
+  // Returns the deepest node at a point of a window and its ancestors
+  // (AT-SPI2 Component.GetAccessibleAtPoint).
   rpc GetNodeAtPoint(GetNodeAtPointRequest) returns (GetNodeAtPointResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Returns the active window and the node with the keyboard focus.
+  rpc GetFocus(GetFocusRequest) returns (GetFocusResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // Returns the text of a node and its caret and selections (AT-SPI2 Text).
@@ -69,16 +74,16 @@ service AccessibilityService {
   // Moves the caret or selects text in a node (AT-SPI2 Text.SetSelection,
   // Text.SetCaretOffset).
   rpc SetTextSelection(SetTextSelectionRequest) returns (SetTextSelectionResponse);
+  // Makes the selected options of a combo box or list box exactly the ones
+  // named, opening it as needed (after Playwright selectOption).
+  rpc SelectOptions(SelectOptionsRequest) returns (SelectOptionsResponse);
   // Opens the menus of a window's menu bar along a path of item names and
   // activates the last item.
   rpc InvokeMenuItem(InvokeMenuItemRequest) returns (InvokeMenuItemResponse);
-  // Waits until conditions on the trees hold, or a timeout passes.
-  rpc WaitForCondition(WaitForConditionRequest) returns (WaitForConditionResponse) {
-    option idempotency_level = NO_SIDE_EFFECTS;
-  }
 }
 
-// One node of an accessibility tree (CDP Accessibility.AXNode).
+// One node of an accessibility tree (CDP Accessibility.AXNode). Texts are
+// written by applications; see the session channel on untrusted content.
 message Node {
   // The node.
   uint64 node_id = 1;
@@ -86,9 +91,9 @@ message Node {
   uint64 parent_id = 2;
   // Its children in order, all of them, whether returned or not.
   repeated uint64 child_ids = 3;
-  // The WAI-ARIA 1.2 role, such as "button" or "menuitem", mapped from the
-  // platform role as Core-AAM 1.2 maps it. Empty when no WAI-ARIA role
-  // corresponds, such as for an application or a top-level window.
+  // The WAI-ARIA 1.2 role, such as "button" or "menuitem", as Core-AAM 1.2
+  // maps the platform role. Empty when none corresponds, such as for an
+  // application or a top-level window.
   string role = 4;
   // The role as the platform names it, such as the AT-SPI2 role name
   // "push button".
@@ -97,21 +102,22 @@ message Node {
   string name = 6;
   // The accessible description.
   string description = 7;
-  // The text of a text field or the value of a widget with one, such as the
-  // selected option of a combo box. Password fields report no text.
+  // The text of a text field, or the value of a widget with one, at most
+  // 1000 characters; GetText reads more. Empty when redacted.
   string value = 8;
   // The numeric value of a range widget, such as a slider. Unset for others.
   RangeValue range_value = 9;
-  // Its states, in no particular order.
+  // Its states (AT-SPI2 GetState).
   repeated State states = 10;
   // The standard actions it offers.
   repeated Action actions = 11;
   // The actions it offers as the platform names them, such as the AT-SPI2
-  // action names "click" or "activate".
+  // action names "click", "press" or "activate".
   repeated string platform_actions = 12;
-  // Where it is shown. Unset when it has no on-screen extent.
+  // Where it is, in the coordinates of window_id. It may lie outside the
+  // client area when scrolled out of view. Unset when it has no extent.
   leaflow.virtualdesktop.display.v1.Rectangle bounds = 13;
-  // The window it is shown in. 0 when unknown.
+  // The window it is in. 0 only when unknown, and then bounds is unset.
   uint64 window_id = 14;
   // The process of its application. 0 when unknown.
   uint32 pid = 15;
@@ -131,6 +137,8 @@ message Node {
   // The object attributes the platform reports, such as "placeholder-text"
   // (AT-SPI2 Accessible.GetAttributes).
   map<string, string> attributes = 22;
+  // A password field (AT-SPI2 ROLE_PASSWORD_TEXT): its value is withheld.
+  bool redacted = 23;
 }
 
 // The value of a range widget (aria-valuenow, aria-valuemin, aria-valuemax;
@@ -146,59 +154,64 @@ message RangeValue {
   double step = 4;
 }
 
-// A state of a node, named after WAI-ARIA 1.2 states and properties where one
-// exists, otherwise after AT-SPI2 states.
+// A state of a node (AT-SPI2 AtspiStateType).
 enum State {
   STATE_UNSPECIFIED = 0;
-  // Can take the keyboard focus.
-  STATE_FOCUSABLE = 1;
-  // Has the keyboard focus.
-  STATE_FOCUSED = 2;
-  // Does not accept interaction (aria-disabled).
-  STATE_DISABLED = 3;
-  // Can be selected.
-  STATE_SELECTABLE = 4;
-  // Is selected (aria-selected).
-  STATE_SELECTED = 5;
-  // Can be checked.
-  STATE_CHECKABLE = 6;
-  // Is checked (aria-checked="true").
-  STATE_CHECKED = 7;
-  // Is partly checked or partly pressed (aria-checked or aria-pressed
-  // "mixed"; AT-SPI2 INDETERMINATE).
-  STATE_MIXED = 8;
-  // A toggle button that is pressed (aria-pressed="true").
-  STATE_PRESSED = 9;
-  // Can be expanded or collapsed.
-  STATE_EXPANDABLE = 10;
-  // Is expanded (aria-expanded="true").
-  STATE_EXPANDED = 11;
-  // Its text can be edited.
-  STATE_EDITABLE = 12;
-  // Its value cannot be changed (aria-readonly).
-  STATE_READ_ONLY = 13;
-  // Must be filled in (aria-required).
-  STATE_REQUIRED = 14;
-  // Its value is invalid (aria-invalid; AT-SPI2 INVALID_ENTRY).
-  STATE_INVALID = 15;
-  // Is being updated (aria-busy).
-  STATE_BUSY = 16;
-  // Blocks interaction with the rest of its application (aria-modal).
-  STATE_MODAL = 17;
-  // Allows several of its children to be selected (aria-multiselectable).
-  STATE_MULTI_SELECTABLE = 18;
-  // A text field of several lines (aria-multiline).
-  STATE_MULTI_LINE = 19;
-  // Opens a menu or another popup (aria-haspopup).
-  STATE_HAS_POPUP = 20;
-  // Is drawn on the screen, though possibly covered (AT-SPI2 SHOWING).
-  STATE_SHOWING = 21;
-  // The active window, or the active item of a container (AT-SPI2 ACTIVE).
-  STATE_ACTIVE = 22;
-  // The default button of its window (AT-SPI2 IS_DEFAULT).
-  STATE_DEFAULT = 23;
-  // A link that was visited (AT-SPI2 VISITED).
-  STATE_VISITED = 24;
+  // ATSPI_STATE_ACTIVE: the active window, or the active item of a
+  // container.
+  STATE_ACTIVE = 1;
+  // ATSPI_STATE_BUSY.
+  STATE_BUSY = 2;
+  // ATSPI_STATE_CHECKABLE.
+  STATE_CHECKABLE = 3;
+  // ATSPI_STATE_CHECKED.
+  STATE_CHECKED = 4;
+  // ATSPI_STATE_COLLAPSED.
+  STATE_COLLAPSED = 5;
+  // ATSPI_STATE_EDITABLE.
+  STATE_EDITABLE = 6;
+  // ATSPI_STATE_ENABLED.
+  STATE_ENABLED = 7;
+  // ATSPI_STATE_EXPANDABLE.
+  STATE_EXPANDABLE = 8;
+  // ATSPI_STATE_EXPANDED.
+  STATE_EXPANDED = 9;
+  // ATSPI_STATE_FOCUSABLE.
+  STATE_FOCUSABLE = 10;
+  // ATSPI_STATE_FOCUSED.
+  STATE_FOCUSED = 11;
+  // ATSPI_STATE_HAS_POPUP.
+  STATE_HAS_POPUP = 12;
+  // ATSPI_STATE_INDETERMINATE: partly checked or partly pressed.
+  STATE_INDETERMINATE = 13;
+  // ATSPI_STATE_INVALID_ENTRY.
+  STATE_INVALID_ENTRY = 14;
+  // ATSPI_STATE_MODAL.
+  STATE_MODAL = 15;
+  // ATSPI_STATE_MULTI_LINE.
+  STATE_MULTI_LINE = 16;
+  // ATSPI_STATE_MULTISELECTABLE.
+  STATE_MULTISELECTABLE = 17;
+  // ATSPI_STATE_PRESSED.
+  STATE_PRESSED = 18;
+  // ATSPI_STATE_READ_ONLY.
+  STATE_READ_ONLY = 19;
+  // ATSPI_STATE_REQUIRED.
+  STATE_REQUIRED = 20;
+  // ATSPI_STATE_SELECTABLE.
+  STATE_SELECTABLE = 21;
+  // ATSPI_STATE_SELECTED.
+  STATE_SELECTED = 22;
+  // ATSPI_STATE_SENSITIVE: it responds to the user.
+  STATE_SENSITIVE = 23;
+  // ATSPI_STATE_SHOWING: drawn on the screen, though possibly covered.
+  STATE_SHOWING = 24;
+  // ATSPI_STATE_SINGLE_LINE.
+  STATE_SINGLE_LINE = 25;
+  // ATSPI_STATE_VISIBLE: meant to be visible, though possibly not showing.
+  STATE_VISIBLE = 26;
+  // ATSPI_STATE_VISITED.
+  STATE_VISITED = 27;
 }
 
 // A standard action, mapped from the platform's actions (after AccessKit
@@ -250,22 +263,26 @@ enum RelationType {
 }
 
 // What nodes to match (after AT-SPI2 MatchRule). A node matches when it meets
-// every field that is set.
+// every field that is set. Texts compare case-insensitively after collapsing
+// white space.
 message MatchRule {
-  // The WAI-ARIA role.
+  // The WAI-ARIA role, exactly.
   string role = 1;
-  // The platform role.
+  // The platform role, exactly.
   string platform_role = 2;
   // The accessible name, exactly.
   string name = 3;
-  // A part of the accessible name, compared case-insensitively.
+  // A part of the accessible name.
   string name_contains = 4;
   // The value, exactly.
   string value = 5;
+  // A part of the text the node shows: its name or its text (after
+  // Playwright getByText).
+  string text_contains = 6;
   // States the node has, all of them.
-  repeated State states = 6;
+  repeated State states = 7;
   // States the node has none of.
-  repeated State excluded_states = 7;
+  repeated State excluded_states = 8;
 }
 
 // The request of GetTree.
@@ -275,23 +292,26 @@ message GetTreeRequest {
   uint64 window_id = 1;
   // The root of the part returned: this node.
   uint64 node_id = 2;
-  // The levels below the root to return, at most 64. 0: 64.
+  // The deepest level below the root to return. 0: no limit.
   uint32 max_depth = 3;
-  // The most nodes to return, at most 10000. 0: 1000.
+  // The most nodes to return. 0: 5000.
   uint32 max_nodes = 4;
-  // Also returns nodes that are not drawn on the screen and their subtrees.
-  // By default the session skips them, so that hidden content does not use
-  // up max_nodes.
-  bool include_hidden = 5;
+  // Only nodes one can act on, and their ancestors: enabled, not passive,
+  // with an action, editable text, a value or a selectable state.
+  bool interactive_only = 5;
+  // Only nodes drawn on the screen (STATE_SHOWING), and their ancestors.
+  bool showing_only = 6;
 }
 
 // The response of GetTree.
 message GetTreeResponse {
-  // The root first, then breadth first. Every node lists all its children,
-  // so a caller fetches a subtree that was cut off with another GetTree.
+  // The root first, then depth first in pre-order. Every node lists all its
+  // children, so a caller reads a subtree that was cut off with another
+  // GetTree.
   repeated Node nodes = 1;
-  // Nodes were left out because of max_depth or max_nodes.
-  bool truncated = 2;
+  // Nothing was left out: no limit cut the tree and no application timed
+  // out.
+  bool complete = 2;
   // The session revision the nodes belong to.
   uint64 revision = 3;
 }
@@ -305,10 +325,8 @@ message FindNodesRequest {
   uint64 node_id = 2;
   // What to match.
   MatchRule rule = 3;
-  // The most nodes to return, at most 1000. 0: 100.
+  // The most nodes to return. 0: 50.
   uint32 max_results = 4;
-  // Also searches nodes that are not drawn on the screen.
-  bool include_hidden = 5;
 }
 
 // The response of FindNodes.
@@ -323,17 +341,34 @@ message FindNodesResponse {
 
 // The request of GetNodeAtPoint.
 message GetNodeAtPointRequest {
-  // The point.
-  sint32 x = 1;
+  // The window.
+  uint64 window_id = 1;
+  // The point, relative to the window.
+  sint32 x = 2;
   // See x.
-  sint32 y = 2;
+  sint32 y = 3;
 }
 
 // The response of GetNodeAtPoint.
 message GetNodeAtPointResponse {
   // The deepest node at the point first, then its ancestors up to its
-  // window. Empty when the window there exposes no tree.
+  // window.
   repeated Node nodes = 1;
+  // The session revision the nodes belong to.
+  uint64 revision = 2;
+}
+
+// The request of GetFocus.
+message GetFocusRequest {}
+
+// The response of GetFocus.
+message GetFocusResponse {
+  // The active window (EWMH _NET_ACTIVE_WINDOW). 0: none.
+  uint64 window_id = 1;
+  // The node with the keyboard focus. Unset when unknown.
+  Node node = 2;
+  // The session revision it belongs to.
+  uint64 revision = 3;
 }
 
 // The request of GetText.
@@ -347,7 +382,7 @@ message GetTextRequest {
   uint32 max_characters = 3;
 }
 
-// The response of GetText.
+// The response of GetText. A redacted node fails with PERMISSION_DENIED.
 message GetTextResponse {
   // The text from start_offset.
   string text = 1;
@@ -373,13 +408,14 @@ message PerformActionRequest {
   uint64 node_id = 1;
   // The standard action. Set exactly one of action and platform_action.
   Action action = 2;
-  // An action the node lists in platform_actions.
+  // One of the node's platform_actions, by name.
   string platform_action = 3;
 }
 
-// The response of PerformAction. A node that does not offer the action fails
-// with FAILED_PRECONDITION and reason ACTION_UNAVAILABLE; one whose
-// application refuses it fails with ABORTED and reason ACTION_REFUSED.
+// The response of PerformAction. A node without the action, or without the
+// platform interface it needs, fails with FAILED_PRECONDITION and reason
+// ACTION_NOT_SUPPORTED; one whose application refuses it with ABORTED and
+// reason ACTION_REFUSED.
 message PerformActionResponse {
   // The session revision at which the application accepted the action.
   uint64 revision = 1;
@@ -422,13 +458,32 @@ message SetTextSelectionResponse {
   uint64 revision = 1;
 }
 
+// The request of SelectOptions.
+message SelectOptionsRequest {
+  // The combo box or list box.
+  uint64 node_id = 1;
+  // The options to select, by accessible name, compared exactly after
+  // collapsing white space. One for a control that selects one. A name the
+  // control lacks fails with NOT_FOUND and reason OPTION_NOT_FOUND
+  // (metadata "option").
+  repeated string option_names = 2;
+}
+
+// The response of SelectOptions.
+message SelectOptionsResponse {
+  // The control as read back after the change.
+  Node node = 1;
+  // The session revision at which the options were selected.
+  uint64 revision = 2;
+}
+
 // The request of InvokeMenuItem. The session opens one menu level at a time,
 // matching each name exactly after trimming surrounding white space, and
 // waits for each menu to appear. It fails before activating anything: with
 // NOT_FOUND and reason MENU_ITEM_NOT_FOUND when a name matches no item, with
 // FAILED_PRECONDITION and reason MENU_ITEM_AMBIGUOUS when it matches several,
 // and with FAILED_PRECONDITION and reason MENU_ITEM_DISABLED when an item is
-// disabled. The ErrorInfo metadata "path_index" names the failing name. Menus
+// disabled. The ErrorInfo metadata "pathIndex" names the failing name. Menus
 // it opened are closed again on failure.
 message InvokeMenuItemRequest {
   // The window whose menu bar to use.
@@ -442,71 +497,4 @@ message InvokeMenuItemRequest {
 message InvokeMenuItemResponse {
   // The session revision at which the last item was activated.
   uint64 revision = 1;
-}
-
-// The request of WaitForCondition. The session evaluates the conditions when
-// the trees change and at least every 100 milliseconds, and answers as soon
-// as all of them have held for stable_period, or when the timeout passes.
-message WaitForConditionRequest {
-  // 1 to 8 conditions, all of which must hold.
-  repeated Condition conditions = 1;
-  // How long all conditions must hold without interruption. Unset: once
-  // they hold.
-  google.protobuf.Duration stable_period = 2;
-  // The longest wait, at most 10 seconds. 0 seconds: evaluate once. Unset: 3
-  // seconds.
-  google.protobuf.Duration timeout = 3;
-}
-
-// A condition on a subtree: a node matching the rule exists, or none does.
-message Condition {
-  // The subtree to search: that of this window. Set at most one of window_id
-  // and node_id; neither: all trees.
-  uint64 window_id = 1;
-  // The subtree to search: that of this node.
-  uint64 node_id = 2;
-  // What to match.
-  MatchRule rule = 3;
-  // The condition holds when no node matches instead.
-  bool absent = 4;
-}
-
-// The response of WaitForCondition.
-message WaitForConditionResponse {
-  // SATISFIED when all conditions held for stable_period; UNSATISFIED when
-  // at least one was found not to hold; UNKNOWN otherwise. UNKNOWN is never
-  // success.
-  ConditionStatus status = 1;
-  // The outcome of each condition, in the order of the request.
-  repeated ConditionResult results = 2;
-  // How long the session waited.
-  google.protobuf.Duration elapsed = 3;
-  // The session revision the outcome belongs to.
-  uint64 revision = 4;
-}
-
-// The outcome of a condition.
-enum ConditionStatus {
-  CONDITION_STATUS_UNSPECIFIED = 0;
-  // It holds.
-  CONDITION_STATUS_SATISFIED = 1;
-  // It does not hold.
-  CONDITION_STATUS_UNSATISFIED = 2;
-  // The session could not tell, such as because the window exposes no tree
-  // or the search was incomplete. Absence is only proven by a complete
-  // search.
-  CONDITION_STATUS_UNKNOWN = 3;
-}
-
-// The outcome of one condition at the end of the wait.
-message ConditionResult {
-  // The outcome.
-  ConditionStatus status = 1;
-  // The matching nodes, at most 16, without their subtrees.
-  repeated Node nodes = 2;
-  // Why the status is UNKNOWN, as an ErrorInfo reason such as
-  // TREE_UNAVAILABLE, WINDOW_GONE, NODE_GONE or SEARCH_INCOMPLETE, or
-  // NOT_STABLE when the condition held but not for stable_period. Empty
-  // otherwise.
-  string reason = 3;
 }

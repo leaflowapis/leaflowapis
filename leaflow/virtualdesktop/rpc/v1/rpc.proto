@@ -27,6 +27,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/rp
 // google.rpc.ErrorInfo whose domain is "virtualdesktop.leaflow.cloud" and
 // whose reason is listed by the package that defines the method. A reason a
 // receiver does not know is handled by the canonical code of the status.
+//
+// Execution. The ErrorInfo of a failed call that acts on the session carries
+// the metadata key "executionState" with an ExecutionState name, telling the
+// caller whether retrying is safe. A missing key means
+// EXECUTION_STATE_UNKNOWN.
 
 // Invokes a method.
 message Call {
@@ -87,4 +92,16 @@ message ServerMessage {
     // Answers a call.
     CallResult call_result = 1;
   }
+}
+
+// How far a failed call got, for deciding whether to retry it.
+enum ExecutionState {
+  EXECUTION_STATE_UNSPECIFIED = 0;
+  // Nothing was done; retrying is safe. Every refusal.
+  EXECUTION_STATE_NOT_STARTED = 1;
+  // Everything was done; the result says nothing about the effect.
+  EXECUTION_STATE_COMPLETED = 2;
+  // It may or may not have had an effect. The caller observes the session
+  // before retrying; nobody repeats the call for it.
+  EXECUTION_STATE_UNKNOWN = 3;
 }

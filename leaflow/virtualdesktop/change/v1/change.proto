@@ -29,17 +29,23 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/ch
 //
 // Revisions. Every change carries the session revision at which it was
 // observed. A client passes the revision its action returned, such as
-// DispatchPointerEventResponse.revision, as after_revision and learns what was
+// ClickResponse.revision, as after_revision and learns what was
 // observed after the action took effect. That includes changes the action did
 // not cause, such as a message arriving meanwhile.
 
-// Reports what changed in the session.
+// Reports what changed in the session and waits for conditions on it.
 service ChangeService {
   // Waits for changes after a revision and for the session to become quiet
   // after them, then returns them. An after_revision whose changes are no
   // longer kept fails with OUT_OF_RANGE and reason REVISION_COMPACTED; the
   // client then reads the state anew.
   rpc WaitForChanges(WaitForChangesRequest) returns (WaitForChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Waits until conditions on windows and accessibility nodes hold, or a
+  // timeout passes. The session samples them every 100 milliseconds and
+  // answers once all of them held in stable_samples samples in a row.
+  rpc WaitForCondition(WaitForConditionRequest) returns (WaitForConditionResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
@@ -262,4 +268,100 @@ enum Politeness {
   POLITENESS_POLITE = 1;
   // At once (aria-live="assertive").
   POLITENESS_ASSERTIVE = 2;
+}
+
+// The request of WaitForCondition.
+message WaitForConditionRequest {
+  // 1 to 8 conditions, all of which must hold.
+  repeated Condition conditions = 1;
+  // How many samples in a row all conditions must hold in, 1 to 5. 0: 2.
+  uint32 stable_samples = 2;
+  // The longest wait, at most 10 seconds. 0 seconds: sample once. Unset: 5
+  // seconds.
+  google.protobuf.Duration timeout = 3;
+}
+
+// A condition on the session.
+message Condition {
+  // The condition.
+  oneof condition {
+    // On windows.
+    WindowCondition window = 1;
+    // On accessibility nodes.
+    NodeCondition node = 2;
+  }
+}
+
+// A window matching these fields exists, or none does. A field that is not
+// set matches any window.
+message WindowCondition {
+  // Only this window.
+  uint64 window_id = 1;
+  // A part of the title, compared case-insensitively.
+  string title_contains = 2;
+  // The desktop file ID, exactly.
+  string desktop_file_id = 3;
+  // The window it is transient for.
+  optional uint64 transient_for = 4;
+  // One of these types.
+  repeated leaflow.virtualdesktop.window.v1.WindowType window_types = 5;
+  // All of these states.
+  repeated leaflow.virtualdesktop.window.v1.WindowState states = 6;
+  // The condition holds when no window matches instead, such as when a
+  // dialog closed.
+  bool absent = 7;
+}
+
+// A node matching the rule exists in a subtree, or none does.
+message NodeCondition {
+  // The subtree to search: that of this window. Set at most one of window_id
+  // and node_id; neither: all trees.
+  uint64 window_id = 1;
+  // The subtree to search: that of this node.
+  uint64 node_id = 2;
+  // What to match.
+  leaflow.virtualdesktop.accessibility.v1.MatchRule rule = 3;
+  // The condition holds when no node matches instead.
+  bool absent = 4;
+}
+
+// The response of WaitForCondition.
+message WaitForConditionResponse {
+  // SATISFIED when every condition held; otherwise UNSATISFIED when one was
+  // found not to hold, or UNKNOWN. UNKNOWN is never success.
+  ConditionStatus status = 1;
+  // The outcome of each condition, in the order of the request.
+  repeated ConditionResult results = 2;
+  // How long the session waited.
+  google.protobuf.Duration elapsed = 3;
+  // The session revision of the last sample.
+  uint64 revision = 4;
+}
+
+// The outcome of a condition.
+enum ConditionStatus {
+  CONDITION_STATUS_UNSPECIFIED = 0;
+  // It holds.
+  CONDITION_STATUS_SATISFIED = 1;
+  // It does not hold.
+  CONDITION_STATUS_UNSATISFIED = 2;
+  // The session could not tell, such as because the window exposes no tree
+  // or the search was incomplete. Absence is proven only by a complete
+  // search.
+  CONDITION_STATUS_UNKNOWN = 3;
+}
+
+// The outcome of one condition at the last sample.
+message ConditionResult {
+  // The outcome.
+  ConditionStatus status = 1;
+  // Window conditions: the matching windows.
+  repeated uint64 window_ids = 2;
+  // Node conditions: the matching nodes, at most 16, without their subtrees.
+  repeated leaflow.virtualdesktop.accessibility.v1.Node nodes = 3;
+  // Why the status is UNKNOWN, as an ErrorInfo reason such as
+  // TREE_UNAVAILABLE, WINDOW_NOT_FOUND, NODE_NOT_FOUND or SEARCH_INCOMPLETE,
+  // or NOT_STABLE when the condition held but not in enough samples. Empty
+  // otherwise.
+  string reason = 4;
 }

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package leaflow.virtualdesktop.input.v1;
 
+import "google/protobuf/duration.proto";
 import "google/rpc/status.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
@@ -11,15 +12,15 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/in
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.input.v1", lane "input": opened by the viewer,
-//     one per connection. It carries the input of a person and the state of
-//     the focused text field. PointerMotion travels as a Datagram of this
-//     channel.
+//     one per connection. The viewer sends ClientMessage, the input of a
+//     person; PointerMotion travels as a Datagram of the channel. The session
+//     sends ServerMessage: the state of the focused editor and dropped input.
 //   - "leaflow.virtualdesktop.input.v1.InputService", lane "input": opened by
 //     an automation client to inject input and learn where it went.
 //
-// The session ignores input from read-only viewers. All input goes through
-// the input lease of the session channel: the viewer holding it is served,
-// and input from others is refused until the lease ends.
+// The session ignores input from read-only viewers. Input on the input
+// channel is a person's and always takes the input lease of the session
+// channel, from whoever held it.
 //
 // Order. Every message of the viewer on the input channel carries input_seq
 // from one counter of the connection, starting at 1. Everything but
@@ -336,8 +337,7 @@ message CompositionKey {
 // The session dropped a KeyEvent, PointerButton or PointerWheel. Its
 // google.rpc.ErrorInfo reason is one of:
 //   CLIPBOARD_INPUT_DEPENDENCY_FAILED  the clipboard content it named was not
-//                                      in place in time;
-//   INPUT_LEASE_HELD                   another viewer holds the input lease.
+//                                      in place in time.
 message InputError {
   // input_seq of the dropped input.
   uint64 input_seq = 1;
@@ -354,8 +354,7 @@ message InputError {
 //   TEXT_INPUT_UNCONFIRMED        the application did not confirm the text
 //                                 (see paused);
 //   NATIVE_COMPOSITION_CANCELLED  the native input context ended the
-//                                 composition;
-//   INPUT_LEASE_HELD              another viewer holds the input lease.
+//                                 composition.
 message TextInputError {
   // input_seq of the dropped input.
   uint64 input_seq = 1;
@@ -377,103 +376,193 @@ message TextInputError {
   google.rpc.Status error = 7;
 }
 
-// Input for automation clients, after the Chrome DevTools Protocol Input
-// domain. A call returns once the input was injected; whether it had the
-// intended effect is for the caller to observe. Calls that inject input fail
-// with FAILED_PRECONDITION and reason INPUT_LEASE_HELD while another viewer
-// holds the input lease, and with PERMISSION_DENIED for a read-only viewer.
+// Input for automation clients. Gestures run in the session as a whole, with
+// the timing of a person, so that double clicks, drags and key chords work
+// whatever the network delay (after the Chrome DevTools Protocol Input
+// domain). Keys are named as X keysym names (XStringToKeysym), such as
+// "Return", "Control_L" or "F13"; an unknown name fails with
+// INVALID_ARGUMENT and reason UNKNOWN_KEYSYM (metadata "keysym"). Every call
+// follows the automation rules of the session channel and returns the
+// session revision at which it took effect.
 service InputService {
-  // Presses, releases or moves the pointer, or scrolls.
-  rpc DispatchPointerEvent(DispatchPointerEventRequest) returns (DispatchPointerEventResponse);
-  // Presses or releases a key.
-  rpc DispatchKeyEvent(DispatchKeyEventRequest) returns (DispatchKeyEventResponse);
-  // Inserts text into the focused text field without typing keys.
-  rpc InsertText(InsertTextRequest) returns (InsertTextResponse);
+  // Clicks a point, once or up to three times in a row.
+  rpc Click(ClickRequest) returns (ClickResponse);
+  // Moves the pointer to a point.
+  rpc MovePointer(MovePointerRequest) returns (MovePointerResponse);
+  // Scrolls at a point.
+  rpc Scroll(ScrollRequest) returns (ScrollResponse);
+  // Presses a button at one point, moves to another and releases it there.
+  rpc Drag(DragRequest) returns (DragResponse);
+  // Presses keys in order and releases them in reverse, such as
+  // ["Control_L", "s"].
+  rpc PressKeys(PressKeysRequest) returns (PressKeysResponse);
+  // Types text into the focused editor, through its input method context
+  // when it has one and as keys otherwise.
+  rpc TypeText(TypeTextRequest) returns (TypeTextResponse);
+  // Presses or releases a pointer button, for gestures the calls above do
+  // not cover, such as a long press.
+  rpc DispatchPointerButton(DispatchPointerButtonRequest) returns (DispatchPointerButtonResponse);
+  // Presses or releases a key, for gestures the calls above do not cover.
+  rpc DispatchKey(DispatchKeyRequest) returns (DispatchKeyResponse);
   // Returns where the pointer is (X11 QueryPointer).
   rpc GetPointerPosition(GetPointerPositionRequest) returns (GetPointerPositionResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
 
-// What a pointer event does.
-enum PointerEventType {
-  POINTER_EVENT_TYPE_UNSPECIFIED = 0;
-  // A button goes down.
-  POINTER_EVENT_TYPE_PRESSED = 1;
-  // A button goes up.
-  POINTER_EVENT_TYPE_RELEASED = 2;
-  // The pointer moves.
-  POINTER_EVENT_TYPE_MOVED = 3;
-  // The wheel turns.
-  POINTER_EVENT_TYPE_WHEEL = 4;
-}
-
-// The request of DispatchPointerEvent.
-message DispatchPointerEventRequest {
-  // What the event does.
-  PointerEventType type = 1;
-  // Where. The pointer moves there first.
+// A point for automation input.
+message Point {
+  // The window the point is relative to. 0: canvas coordinates.
+  uint64 window_id = 1;
+  // The point, within the window's client area.
   sint32 x = 2;
   // See x.
   sint32 y = 3;
-  // PRESSED and RELEASED: the X button number, as in PointerButton.
-  uint32 button = 4;
-  // WHEEL: the horizontal scroll in value120 units.
-  sint32 delta_x = 5;
-  // WHEEL: the vertical scroll in value120 units.
-  sint32 delta_y = 6;
-  // The window x and y are relative to. 0: they are canvas coordinates. Fails
-  // with NOT_FOUND and reason WINDOW_GONE when the window no longer exists,
-  // before anything is injected.
-  uint64 window_id = 7;
+  // Window.resize_counter the caller saw, such as in a capture. When the
+  // window's size changed since, the call fails with FAILED_PRECONDITION and
+  // reason WINDOW_RESIZED, before anything happens. 0: not checked.
+  uint64 resize_counter = 4;
 }
 
-// The response of DispatchPointerEvent.
-message DispatchPointerEventResponse {
-  // The window under the point that received the event. 0: none.
+// The request of Click.
+message ClickRequest {
+  // Where.
+  Point point = 1;
+  // The X button number, as in PointerButton. 0: 1.
+  uint32 button = 2;
+  // Clicks in a row, 1 to 3. 0: 1.
+  uint32 count = 3;
+  // Keys held during the click, such as ["Control_L"].
+  repeated string modifiers = 4;
+}
+
+// The response of Click.
+message ClickResponse {
+  // The window that received the click. 0: none.
   uint64 window_id = 1;
-  // The session revision at which the event was injected.
+  // The session revision at which the click ended.
   uint64 revision = 2;
 }
 
-// What a key event does.
-enum KeyEventType {
-  KEY_EVENT_TYPE_UNSPECIFIED = 0;
-  // The key goes down.
-  KEY_EVENT_TYPE_DOWN = 1;
-  // The key goes up.
-  KEY_EVENT_TYPE_UP = 2;
+// The request of MovePointer.
+message MovePointerRequest {
+  // Where.
+  Point point = 1;
 }
 
-// The request of DispatchKeyEvent.
-message DispatchKeyEventRequest {
-  // Down or up.
-  KeyEventType type = 1;
-  // The X keysym, as in KeyEvent.
-  uint32 keysym = 2;
-  // The W3C UI Events code value, as in KeyEvent. Used when keysym is 0.
-  string code = 3;
-}
-
-// The response of DispatchKeyEvent.
-message DispatchKeyEventResponse {
-  // The window with the X focus that received the key. 0: none.
+// The response of MovePointer.
+message MovePointerResponse {
+  // The window under the pointer. 0: none.
   uint64 window_id = 1;
-  // The session revision at which the key was injected.
+  // The session revision at which the pointer arrived.
   uint64 revision = 2;
 }
 
-// The request of InsertText.
-message InsertTextRequest {
-  // The text. Not empty.
+// The request of Scroll.
+message ScrollRequest {
+  // Where the pointer is while scrolling.
+  Point point = 1;
+  // Horizontal scroll in value120 units, as PointerWheel; positive scrolls
+  // right.
+  sint32 delta_x = 2;
+  // Vertical scroll in value120 units; positive scrolls down.
+  sint32 delta_y = 3;
+  // Keys held while scrolling.
+  repeated string modifiers = 4;
+}
+
+// The response of Scroll.
+message ScrollResponse {
+  // The window that received the scroll. 0: none.
+  uint64 window_id = 1;
+  // The session revision at which the scroll ended.
+  uint64 revision = 2;
+}
+
+// The request of Drag.
+message DragRequest {
+  // Where the button goes down.
+  Point start = 1;
+  // Where it comes up.
+  Point end = 2;
+  // The X button number. 0: 1.
+  uint32 button = 3;
+  // Keys held during the drag.
+  repeated string modifiers = 4;
+  // How long the pointer takes from start to end, at most 5 seconds. Unset:
+  // 350 milliseconds.
+  google.protobuf.Duration duration = 5;
+}
+
+// The response of Drag.
+message DragResponse {
+  // The window under the end point. 0: none.
+  uint64 window_id = 1;
+  // The session revision at which the button came up.
+  uint64 revision = 2;
+}
+
+// The request of PressKeys.
+message PressKeysRequest {
+  // The keys, pressed in this order and released in reverse.
+  repeated string keys = 1;
+  // The window to activate first. 0: the active window.
+  uint64 window_id = 2;
+}
+
+// The response of PressKeys.
+message PressKeysResponse {
+  // The window that received the keys. 0: none.
+  uint64 window_id = 1;
+  // The session revision at which the last key came up.
+  uint64 revision = 2;
+}
+
+// The request of TypeText.
+message TypeTextRequest {
+  // The text, at most 16384 characters. Not empty.
   string text = 1;
 }
 
-// The response of InsertText.
-message InsertTextResponse {
-  // The window of the text field that received it.
+// The response of TypeText.
+message TypeTextResponse {
+  // The window of the editor that received it. 0: none.
   uint64 window_id = 1;
-  // The session revision at which the text was inserted.
+  // The session revision at which the text was typed.
+  uint64 revision = 2;
+}
+
+// The request of DispatchPointerButton.
+message DispatchPointerButtonRequest {
+  // Where. The pointer moves there first.
+  Point point = 1;
+  // The X button number.
+  uint32 button = 2;
+  // A press or a release.
+  bool pressed = 3;
+}
+
+// The response of DispatchPointerButton.
+message DispatchPointerButtonResponse {
+  // The window that received it. 0: none.
+  uint64 window_id = 1;
+  // The session revision at which it was injected.
+  uint64 revision = 2;
+}
+
+// The request of DispatchKey.
+message DispatchKeyRequest {
+  // The key.
+  string key = 1;
+  // A press or a release.
+  bool pressed = 2;
+}
+
+// The response of DispatchKey.
+message DispatchKeyResponse {
+  // The window with the X focus that received it. 0: none.
+  uint64 window_id = 1;
+  // The session revision at which it was injected.
   uint64 revision = 2;
 }
 
