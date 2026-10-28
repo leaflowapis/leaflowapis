@@ -48,7 +48,7 @@ info:
 
     A machine that is reinstalled enrolls again as a new machine with a new key.
 
-    ## Linux users
+    ## Linux users and groups
 
     Project members reach a machine as Linux users. A machine that allows user management, as
     its `user-management` capability says, can have **managed users**: Linux users created for a
@@ -57,8 +57,13 @@ info:
 
     Disabling a user, unassigning its member, or the member leaving the project ends the user's
     sessions and stops new ones; a managed user is also locked on the machine. **No Linux user
-    and no file is ever deleted.** Elevation through sudo is approved by a person on a viewer,
-    never by a password.
+    and no file is ever deleted.**
+
+    The same machines can have **managed groups**, created, changed and deleted here. Managed
+    users can join managed groups and the existing groups the machine marks as assignable, such
+    as `audio`; other existing groups, including `sudo` and `wheel`, are shown but never changed.
+    A user may use sudo when it is an administrator or a member of an administrator group.
+    Elevation through sudo is approved by a person on a viewer, never by a password.
 
     ## Viewing a session
 
@@ -82,6 +87,7 @@ tags:
   - name: Machine
   - name: Enrollment
   - name: MachineUser
+  - name: MachineGroup
   - name: Session
   - name: Viewer
   - name: Client
@@ -318,14 +324,17 @@ paths:
       summary: Create a managed Linux user for a project member
       description: |-
         Creates a Linux user on the machine for a member of the project. The user has no password
-        and becomes root through sudo only when `admin` is true. The machine creates it the next
-        time it is connected; until then `sync_status` is `pending`.
+        and becomes root through sudo only when `admin` is true or one of its `groups` is an
+        administrator group. The machine creates it the next time it is connected; until then
+        `sync_status` is `pending`.
 
         Fails with:
         - `USER_MANAGEMENT_UNAVAILABLE` when the machine does not allow user management;
         - `USER_NOT_PROJECT_MEMBER` when `user_id` is not a member of the project;
         - `MACHINE_USERNAME_TAKEN` when the machine already has a Linux user of that name;
-        - `MACHINE_USER_ALREADY_ASSIGNED` when the member already has a Linux user on the machine.
+        - `MACHINE_USER_ALREADY_ASSIGNED` when the member already has a Linux user on the machine;
+        - `MACHINE_GROUP_NOT_ASSIGNABLE` when a group is neither managed nor assignable, with
+          `metadata.group`.
 
         Requires `virtualdesktop:machine_users.manage`.
       operationId: create-machine-user
@@ -362,6 +371,7 @@ paths:
           managed user stays with the member it was created for; disable it instead.
         - `admin` grants or withdraws sudo. Only managed users can be changed; for other users
           `privileged` reports what the machine allows.
+        - `groups` replaces the groups assigned to a managed user.
         - `disabled` disables or enables the user. Disabling ends the user's sessions and refuses
           new ones; a managed user is also locked on the machine.
 
@@ -370,7 +380,8 @@ paths:
         - `MACHINE_USER_ALREADY_ASSIGNED` when the member already has another Linux user on the
           machine;
         - `MANAGED_USER_ASSIGNED` when `user_id` would move a managed user to another member;
-        - `MACHINE_USER_NOT_MANAGED` when `admin` is set on a user that is not managed.
+        - `MACHINE_USER_NOT_MANAGED` when `admin` or `groups` is set on a user that is not managed;
+        - `MACHINE_GROUP_NOT_ASSIGNABLE` when a group is neither managed nor assignable.
 
         Requires `virtualdesktop:machine_users.manage`.
       operationId: update-machine-user
@@ -392,6 +403,124 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MachineUserResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/groups:
+    get:
+      summary: List the Linux groups of a machine
+      description: |-
+        Returns the managed groups and the existing groups the machine marks as assignable, ordered
+        by name.
+      operationId: list-machine-groups
+      tags:
+        - MachineGroup
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineGroupList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Create a managed Linux group
+      description: |-
+        Creates a group on the machine. Its members become root through sudo when `admin` is true.
+        The machine creates it the next time it is connected; until then `sync_status` is
+        `pending`.
+
+        Fails with:
+        - `USER_MANAGEMENT_UNAVAILABLE` when the machine does not allow user management;
+        - `MACHINE_GROUP_NAME_TAKEN` when the machine already has a group of that name.
+
+        Requires `virtualdesktop:machine_users.manage`.
+      operationId: create-machine-group
+      tags:
+        - MachineGroup
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMachineGroupRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineGroupResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/groups/{machineGroupId}:
+    patch:
+      summary: Update a managed Linux group
+      description: |-
+        Grants or withdraws sudo for the group's members. Fails with `MACHINE_GROUP_NOT_MANAGED`
+        for a group the platform did not create.
+
+        Requires `virtualdesktop:machine_users.manage`.
+      operationId: update-machine-group
+      tags:
+        - MachineGroup
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: "#/components/parameters/MachineGroupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMachineGroupRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineGroupResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Delete a managed Linux group
+      description: |-
+        Removes the group from its members and deletes it from the machine the next time the
+        machine is connected. Files owned by the group keep its group id. Fails with
+        `MACHINE_GROUP_NOT_MANAGED` for a group the platform did not create.
+
+        Requires `virtualdesktop:machine_users.manage`.
+      operationId: delete-machine-group
+      tags:
+        - MachineGroup
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: "#/components/parameters/MachineGroupId"
+      responses:
+        "204":
+          description: Deleted
         default:
           description: Error
           content:
@@ -795,6 +924,13 @@ components:
       schema:
         type: string
         format: uuid
+    MachineGroupId:
+      name: machineGroupId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     SessionId:
       name: sessionId
       in: path
@@ -1003,9 +1139,9 @@ components:
       additionalProperties: false
     SyncStatus:
       description: |-
-        Whether the machine has applied the user as configured. `synced` it has; `pending` it has
-        not yet, such as while it is offline; `failed` it could not, and `failure_reason` says why.
-        Users that are not managed are always `synced`.
+        Whether the machine has applied the user or group as configured. `synced` it has; `pending`
+        it has not yet, such as while it is offline; `failed` it could not, and `failure_reason`
+        says why. Users and groups that are not managed are always `synced`.
       type: string
       enum:
         - synced
@@ -1024,6 +1160,8 @@ components:
         - privileged
         - session_allowed
         - user
+        - groups
+        - assigned_groups
         - disabled_at
         - sync_status
         - failure_reason
@@ -1067,6 +1205,16 @@ components:
           oneOf:
             - $ref: "#/components/schemas/NamedIdentity"
             - type: "null"
+        groups:
+          description: As the machine reports it, the groups the user belongs to
+          type: array
+          items:
+            type: string
+        assigned_groups:
+          description: Managed users only, empty otherwise. The groups the platform assigns
+          type: array
+          items:
+            type: string
         disabled_at:
           description: When the user was disabled; null while enabled
           type:
@@ -1134,6 +1282,12 @@ components:
           description: The user may become root through sudo
           type: boolean
           default: false
+        groups:
+          description: The groups to assign, each managed or assignable
+          type: array
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/GroupName"
       additionalProperties: false
     UpdateMachineUserRequest:
       type: object
@@ -1149,6 +1303,124 @@ components:
           type: boolean
         disabled:
           description: Disables or enables the user
+          type: boolean
+        groups:
+          description: Replaces the groups assigned to a managed user
+          type: array
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/GroupName"
+      additionalProperties: false
+    GroupName:
+      description: A Linux group name
+      type: string
+      minLength: 1
+      maxLength: 32
+      pattern: "^[a-z_][a-z0-9_-]*$"
+    MachineGroupResource:
+      type: object
+      required:
+        - id
+        - machine_id
+        - name
+        - gid
+        - managed
+        - assignable
+        - admin
+        - privileged
+        - sync_status
+        - failure_reason
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        machine_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        gid:
+          description: The Linux group id; null until the machine has created the group
+          type:
+            - integer
+            - "null"
+          format: int64
+        managed:
+          description: The platform created the group and can change or delete it
+          type: boolean
+        assignable:
+          description: Managed users can be added to the group
+          type: boolean
+        admin:
+          description: Managed groups only, null otherwise. The members may become root through sudo
+          type:
+            - boolean
+            - "null"
+        privileged:
+          description: As the machine reports it, the members can become root through the group
+          type: boolean
+        sync_status:
+          $ref: "#/components/schemas/SyncStatus"
+        failure_reason:
+          description: |-
+            Why the machine could not apply the group, such as `GROUP_ALREADY_EXISTS`; null unless
+            `sync_status` is `failed`
+          type:
+            - string
+            - "null"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    MachineGroupList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MachineGroupResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateMachineGroupRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          $ref: "#/components/schemas/GroupName"
+        admin:
+          description: The members may become root through sudo
+          type: boolean
+          default: false
+      additionalProperties: false
+    UpdateMachineGroupRequest:
+      type: object
+      required:
+        - admin
+      properties:
+        admin:
+          description: The members may become root through sudo
           type: boolean
       additionalProperties: false
     SessionMode:

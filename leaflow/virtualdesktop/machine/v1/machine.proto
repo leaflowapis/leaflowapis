@@ -31,12 +31,16 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/machine/v1
 // machine but missing from it has ended, and a changed boot_id means every
 // earlier session ended. Nothing is replayed after a reconnect.
 //
-// Users. Platform users reach a machine as Linux users. On a machine that
-// allows user management the service keeps a set of managed users with
-// SetManagedUsers: the daemon creates them without passwords, grants sudo to
-// administrators and locks the disabled ones. Managed users are never
-// deleted. Other Linux users of the machine are left as they are; the service
-// may still open sessions for them.
+// Users and groups. Platform users reach a machine as Linux users. On a
+// machine that allows user management the service keeps a set of managed
+// users and managed groups with SetManagedUsers: the daemon creates users
+// without passwords, grants sudo to administrators and to the members of
+// administrator groups, and locks the disabled users. Managed users are never
+// deleted; managed groups are deleted when the service stops keeping them.
+// Other users and groups of the machine are left as they are: the service may
+// open sessions for existing users, and may add managed users to the existing
+// groups the machine's configuration names as assignable, which never include
+// a group that grants root, such as sudo or wheel.
 //
 // Trust. The service accepts reports and calls only about the machine's own
 // objects, and closes a connection that reports otherwise with
@@ -90,16 +94,25 @@ service MachineService {
   rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse) {
     option idempotency_level = IDEMPOTENT;
   }
-  // Sets the managed users of the machine: all of them, replacing the
-  // previous set. Only when the machine allows user management, as its
-  // "user-management" capability says. The daemon records which users it
-  // created this way; only those are managed.
+  // Sets the managed groups and users of the machine: all of them, replacing
+  // the previous set. Only when the machine allows user management, as its
+  // "user-management" capability says. The daemon records which users and
+  // groups it created this way; only those are managed.
+  //
+  // For each group of the request the daemon creates the group (groupadd(8))
+  // when there is none of that name, and lets its members become root through
+  // sudo(8) when admin is set, and only then; a person on a viewer approves
+  // the elevation. A managed group missing from the request is deleted
+  // (groupdel(8)) after the users are set.
   //
   // For each user of the request the daemon:
   //   - creates the user with a home directory (useradd(8)) when there is
   //     none of that name. It sets no password: the password field stays
   //     locked, then and after every later change;
   //   - sets the full name of the GECOS field to display_name;
+  //   - makes the user a member of exactly the listed groups among the
+  //     managed groups and the assignable groups, and leaves its other
+  //     groups alone;
   //   - lets the user become root through sudo(8) when admin is set, and
   //     only then. A person on a viewer approves the elevation
   //     (leaflow.virtualdesktop.privilege.v1); no password is asked;
@@ -111,14 +124,22 @@ service MachineService {
   // daemon never deletes a managed user or its files. A managed user that is
   // not disabled may have a session, whatever groups the machine allows.
   //
-  // Users the daemon could not set up are listed in the response, each with
-  // one of:
+  // Groups and users the daemon could not set up are listed in the response.
+  // A group failure carries one of:
+  //   - ALREADY_EXISTS and reason GROUP_ALREADY_EXISTS for a group of that
+  //     name the daemon did not create;
+  //   - INVALID_ARGUMENT and reason INVALID_GROUP_NAME for a name
+  //     groupadd(8) refuses;
+  //   - INTERNAL and reason GROUP_SETUP_FAILED when a command failed.
+  // A user failure carries one of:
   //   - ALREADY_EXISTS and reason USER_ALREADY_EXISTS for a user of that
   //     name the daemon did not create;
   //   - INVALID_ARGUMENT and reason INVALID_USERNAME for a name useradd(8)
   //     refuses;
+  //   - PERMISSION_DENIED and reason GROUP_NOT_ALLOWED for a listed group
+  //     that is neither managed nor assignable, with metadata "group";
   //   - INTERNAL and reason USER_SETUP_FAILED when a command failed.
-  // The other users took effect. The daemon then reports the machine with
+  // The others took effect. The daemon then reports the machine with
   // ReportMachineStatus.
   //
   // Fails with PERMISSION_DENIED and reason USER_MANAGEMENT_DISABLED, and
@@ -339,6 +360,20 @@ message User {
   bool disabled = 11;
 }
 
+// A Linux group of the machine (group(5)).
+message Group {
+  // The group name.
+  string name = 1;
+  // The group id.
+  uint32 gid = 2;
+  // The daemon created the group for SetManagedUsers.
+  bool managed = 3;
+  // The machine's configuration lets the service add managed users to it.
+  bool assignable = 4;
+  // The members can become root through a sudoers rule for the group.
+  bool privileged = 5;
+}
+
 // A Linux user the platform manages.
 message ManagedUser {
   // The login name.
@@ -349,18 +384,41 @@ message ManagedUser {
   bool admin = 3;
   // The account is expired and its sessions are terminated.
   bool disabled = 4;
+  // The supplementary groups, each a managed group of the request or an
+  // assignable group of the machine.
+  repeated string groups = 5;
+}
+
+// A Linux group the platform manages.
+message ManagedGroup {
+  // The group name.
+  string name = 1;
+  // The members may become root through sudo(8).
+  bool admin = 2;
 }
 
 // The request of SetManagedUsers.
 message SetManagedUsersRequest {
   // Every managed user of the machine, at most 1000.
   repeated ManagedUser users = 1;
+  // Every managed group of the machine, at most 1000.
+  repeated ManagedGroup groups = 2;
 }
 
 // The response of SetManagedUsers.
 message SetManagedUsersResponse {
   // The users that did not take effect.
   repeated ManagedUserFailure failures = 1;
+  // The groups that did not take effect.
+  repeated ManagedGroupFailure group_failures = 2;
+}
+
+// A managed group the daemon could not set up.
+message ManagedGroupFailure {
+  // ManagedGroup.name.
+  string name = 1;
+  // Why, with a google.rpc.ErrorInfo.
+  google.rpc.Status status = 2;
 }
 
 // A managed user the daemon could not set up.
@@ -443,6 +501,9 @@ message ReportMachineStatusRequest {
   // Every session since the machine booted, closed ones included until the
   // service has seen them closed once.
   repeated Session sessions = 9;
+  // The managed groups and the assignable groups. Other groups are not
+  // reported; User.groups names them all.
+  repeated Group groups = 10;
 }
 
 // The response of ReportMachineStatus.
