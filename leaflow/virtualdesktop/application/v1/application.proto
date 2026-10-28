@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package leaflow.virtualdesktop.application.v1;
 
+import "google/protobuf/timestamp.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/application/v1;applicationv1";
@@ -180,9 +181,9 @@ message DesktopIconRemoved {
 // Ends the snapshot.
 message SnapshotEnd {}
 
-// Lists applications and launches them. Launching and opening need an
-// ApplicationPolicy and a viewer that is not read-only; otherwise they fail
-// with PERMISSION_DENIED.
+// Lists applications and their processes, launches and ends them. Launching,
+// opening and terminating need an ApplicationPolicy and a viewer that is not
+// read-only; otherwise they fail with PERMISSION_DENIED.
 service ApplicationService {
   // Lists the applications, NoDisplay ones included, a page at a time.
   rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse) {
@@ -201,6 +202,13 @@ service ApplicationService {
   // (freedesktop mime-apps). Other executable files are opened, not run. It
   // returns as LaunchApplication does.
   rpc OpenUri(OpenUriRequest) returns (OpenUriResponse);
+  // Lists the processes of the session that belong to an application.
+  rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Ends a process of the session. It acts on the session and follows the
+  // automation rules of the session channel for automation clients.
+  rpc TerminateProcess(TerminateProcessRequest) returns (TerminateProcessResponse);
 }
 
 // The request of ListApplications.
@@ -287,6 +295,55 @@ message OpenUriResponse {
   optional uint64 window_id = 2;
   // The session revision at which the startup sequence ended.
   uint64 revision = 3;
+}
+
+// A process of the session.
+message Process {
+  // Its process ID.
+  uint32 pid = 1;
+  // Its executable name, such as "firefox" (Linux /proc/[pid]/comm).
+  string name = 2;
+  // The desktop file ID of its application. Empty when unknown.
+  string desktop_file_id = 3;
+  // The windows it owns, in the ids of the window channel.
+  repeated uint64 window_ids = 4;
+  // When it started.
+  google.protobuf.Timestamp started_at = 5;
+}
+
+// The request of ListProcesses.
+message ListProcessesRequest {
+  // At most 1000. 0: 200.
+  uint32 page_size = 1;
+  // From the previous response. Empty for the first page.
+  string page_token = 2;
+  // Lists every process of the session, not only those that own a window or
+  // belong to an application, such as one running only in the tray.
+  bool include_all = 3;
+}
+
+// The response of ListProcesses.
+message ListProcessesResponse {
+  // The processes, by pid.
+  repeated Process processes = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+// The request of TerminateProcess.
+message TerminateProcessRequest {
+  // A process of the session. Others fail with NOT_FOUND and reason
+  // PROCESS_NOT_FOUND.
+  uint32 pid = 1;
+  // Kills it at once (SIGKILL) instead of asking it to end (SIGTERM).
+  bool force = 2;
+}
+
+// The response of TerminateProcess. The process may take a while to end; its
+// windows disappear from the window channel when it does.
+message TerminateProcessResponse {
+  // The session revision at which the signal was sent.
+  uint64 revision = 1;
 }
 
 // Allows a viewer to launch applications and open URIs. Carried in the
