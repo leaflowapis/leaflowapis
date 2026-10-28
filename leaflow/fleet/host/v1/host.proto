@@ -17,10 +17,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 // of the domain "fleet.leaflow.cloud".
 //
 // Kinds. A session without options has no desktop: its viewers use the
-// domains of the session layer, such as terminals, programs, files, ports and
-// approvals (leaflow.fleet.terminal.v1 and its siblings). Options add a
-// feature, such as a desktop (leaflow.fleet.virtualdesktop.host.v1 DesktopOptions);
-// the session then also offers that feature's domains.
+// domains of the session layer, such as terminals, programs, files, ports,
+// sound, devices, printers and approvals (leaflow.fleet.terminal.v1 and its
+// siblings). Options add a feature, such as a desktop
+// (leaflow.fleet.virtualdesktop.host.v1 DesktopOptions); the session then
+// also offers that feature's domains.
 //
 // Reconciliation. The daemon reports every session with ReportSessions after
 // every connect and whenever its list of sessions changes, and each change of
@@ -37,7 +38,13 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 // AVAILABLE while the Agent's session package is installed. Details, each
 // present when the machine has it:
 //   - "privilege.sudo", "privilege.polkit": elevations a person approves on
-//     a viewer (leaflow.fleet.privilege.v1).
+//     a viewer (leaflow.fleet.privilege.v1);
+//   - "audio.pulseaudio", "audio.pipewire": sound and the viewer's
+//     microphone (leaflow.fleet.audio.v1);
+//   - "camera.v4l2loopback": the viewer's camera (leaflow.fleet.camera.v1);
+//   - "gamepad.uinput": the viewer's gamepads (leaflow.fleet.gamepad.v1);
+//   - "printing.cups": printers of the machine besides the viewer's
+//     (leaflow.fleet.printing.v1).
 
 // Opens and ends the sessions of a machine. Served by the daemon on its
 // control connection; the service calls it.

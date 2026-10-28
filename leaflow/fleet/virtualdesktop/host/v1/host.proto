@@ -8,7 +8,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/host
 
 // Desktop sessions: a session of the machine (leaflow.fleet.host.v1) that
 // also has an X server and the domains of the desktop, such as windows,
-// input and sound. OpenSession with DesktopOptions among its options opens
+// input and the clipboard. OpenSession with DesktopOptions among its options opens
 // one; its Session carries DesktopState among its details.
 //
 // With DesktopOptions, OpenSession also fails with these reasons of the
@@ -23,12 +23,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/host
 // Feature): AVAILABLE while the Agent's desktop package is installed and its
 // X server can start. Details, each present when the machine has it:
 //   - "x11.xvfb", "x11.xorg-dummy": the X server sessions run on;
-//   - "audio.pulseaudio", "audio.pipewire": sound and the viewer's
-//     microphone;
 //   - "accessibility.at-spi": the accessibility tree;
-//   - "camera.v4l2loopback": the viewer's camera;
-//   - "gamepad.uinput": the viewer's gamepads;
-//   - "printing.cups": printers of the machine besides the viewer's;
 //   - "desktop." followed by the DesktopNames of an installed X session
 //     (XDG_SESSION_DESKTOP), such as "desktop.XFCE": a desktop environment
 //     SESSION_MODE_DESKTOP can start.

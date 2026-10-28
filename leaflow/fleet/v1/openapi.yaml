@@ -60,8 +60,8 @@ info:
       exist on the machine; members log in over SSH with their keys and become root through sudo
       as their permissions allow;
     - `leaflow.fleet.command.v1`: running commands;
-    - `leaflow.fleet.host.v1`: sessions, with terminals, programs, files, ports and privilege
-      approvals;
+    - `leaflow.fleet.host.v1`: sessions, with terminals, programs, files, ports, sound, devices,
+      printers and privilege approvals;
     - `leaflow.fleet.virtualdesktop.host.v1`: sessions with a desktop.
 
     A machine installed without a desktop does not offer `leaflow.fleet.virtualdesktop.host.v1`. A
@@ -760,7 +760,7 @@ paths:
       description: |-
         Opens a session for the caller on a machine, as the caller's account, and returns once it
         is ready. With `desktop` the session has a desktop; without, it offers terminals, programs,
-        files, ports and privilege approvals. The account is created if the caller has none yet.
+        files, ports, sound, devices, printers and privilege approvals. The account is created if the caller has none yet.
         Requires `fleet:machines.login` on the machine.
 
         Fails with:
