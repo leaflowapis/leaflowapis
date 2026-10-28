@@ -4,14 +4,14 @@ package leaflow.virtualdesktop.machine.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
-import "google/rpc/status.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/machine/v1;machinev1";
 
-// Machines that run the Agent, and their sessions and users: enrollment,
-// what a machine reports, and the sessions and Linux users the service asks
-// the Agent's daemon to manage. Every call travels on the daemon's control
+// Machines that run the Agent, their sessions and the directory they serve:
+// enrollment, what a machine reports, the sessions the service asks the
+// Agent's daemon to open, and the accounts and groups of the platform users
+// who may reach the machine. Every call travels on the daemon's control
 // connection (leaflow.virtualdesktop.control.v1) and fails there with the
 // reasons of each method in a google.rpc.ErrorInfo.
 //
@@ -25,37 +25,40 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/machine/v1
 // secret.
 //
 // Reconciliation. The daemon reports the whole machine with
-// ReportMachineStatus after every connect and whenever its users or its list
-// of sessions changes, and each change of a session with ReportSessionState.
+// ReportMachineStatus after every connect and whenever its list of sessions
+// or the state of its directory changes, and each change of a session with ReportSessionState.
 // The full report is authoritative: a session the service holds open on the
 // machine but missing from it has ended, and a changed boot_id means every
 // earlier session ended. Nothing is replayed after a reconnect.
 //
-// Users and groups. Platform users reach a machine as Linux users. On a
-// machine that allows user management the service keeps a set of managed
-// users and managed groups with SetManagedUsers: the daemon creates users
-// without passwords, grants sudo to administrators and to the members of
-// administrator groups, and locks the disabled users. Managed users are never
-// deleted; managed groups are deleted when the service stops keeping them.
-// Other users and groups of the machine are left as they are: the service may
-// open sessions for existing users, and may add managed users to the existing
-// groups the machine's configuration names as assignable, which never include
-// a group that grants root, such as sudo or wheel.
+// Directory. Platform users reach a machine through the directory of its
+// project, as through a domain: accounts and groups whose ids the service
+// allocates, the same on every machine of the project. The service sends each
+// machine its copy with SetDirectory, which says for every account whether it
+// may log in to this machine and become root through sudo. The daemon answers
+// name service (NSS) lookups and PAM from that copy, and asks
+// GetAccountAccess when an account logs in or elevates, so that withdrawn
+// access ends at once; while the service is unreachable it decides from its
+// copy. Directory accounts and groups never appear in /etc/passwd or
+// /etc/group, and the local accounts and groups of the machine are left as
+// they are. A person on a viewer approves elevation through sudo
+// (leaflow.virtualdesktop.privilege.v1); no password is asked.
 //
 // Trust. The service accepts reports and calls only about the machine's own
 // objects, and closes a connection that reports otherwise with
 // POLICY_VIOLATION.
 
-// Manages the sessions and Linux users of a machine. Served by the daemon on
-// its control connection; the service calls it.
+// Manages the sessions and the directory copy of a machine. Served by the
+// daemon on its control connection; the service calls it.
 service MachineService {
-  // Opens a session for a platform user and returns once it is ready: its X
-  // server runs and its session process started. A Linux user has at most
-  // one session. Calling again with the session_id of an open session of the
+  // Opens a session for a platform user, as the user's directory account,
+  // and returns once it is ready: its X server runs and its session process
+  // started. An account has at most one session. Calling again with the session_id of an open session of the
   // same user returns that session.
   //
   // Fails with:
-  //   - NOT_FOUND and reason USER_NOT_FOUND for an unknown Linux user;
+  //   - NOT_FOUND and reason USER_NOT_FOUND for an account the directory
+  //     copy does not hold;
   //   - PERMISSION_DENIED and reason USER_NOT_ALLOWED for root, a system
   //     user or one outside the allowed groups;
   //   - PERMISSION_DENIED and reason ACCOUNT_EXPIRED when PAM reports the
@@ -94,57 +97,29 @@ service MachineService {
   rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse) {
     option idempotency_level = IDEMPOTENT;
   }
-  // Sets the managed groups and users of the machine: all of them, replacing
-  // the previous set. Only when the machine allows user management, as its
-  // "user-management" capability says. The daemon records which users and
-  // groups it created this way; only those are managed.
+  // Replaces the machine's copy of the directory. The daemon serves the
+  // accounts and groups of the request through NSS and PAM from then on,
+  // keeps the copy across restarts and answers from it while the service is
+  // unreachable. A request with the revision the daemon holds changes
+  // nothing.
   //
-  // For each group of the request the daemon creates the group (groupadd(8))
-  // when there is none of that name, and lets its members become root through
-  // sudo(8) when admin is set, and only then; a person on a viewer approves
-  // the elevation. A managed group missing from the request is deleted
-  // (groupdel(8)) after the users are set.
+  // For each account:
+  //   - its name, uid, primary group (its own group of the same name and
+  //     id), GECOS name, home directory and shell resolve whatever its
+  //     access, so that the files it owns keep their owner;
+  //   - PAM admits it only while login_allowed is set and disabled is not;
+  //     an account that loses either has its sessions terminated, which end
+  //     with SESSION_CLOSE_REASON_USER_DISABLED;
+  //   - sudo(8) lets it become root only while admin is set as well;
+  //   - its home directory is created on its first session, owned by it, and
+  //     never deleted.
+  // Each group resolves with its members. An account or group missing from
+  // the request no longer resolves; its files keep their ids.
   //
-  // For each user of the request the daemon:
-  //   - creates the user with a home directory (useradd(8)) when there is
-  //     none of that name. It sets no password: the password field stays
-  //     locked, then and after every later change;
-  //   - sets the full name of the GECOS field to display_name;
-  //   - makes the user a member of exactly the listed groups among the
-  //     managed groups and the assignable groups, and leaves its other
-  //     groups alone;
-  //   - lets the user become root through sudo(8) when admin is set, and
-  //     only then. A person on a viewer approves the elevation
-  //     (leaflow.virtualdesktop.privilege.v1); no password is asked;
-  //   - when disabled is set, expires the account (shadow(5)), so that PAM
-  //     refuses it everywhere, and terminates its sessions, which end with
-  //     SESSION_CLOSE_REASON_USER_DISABLED. Enabling the user clears the
-  //     expiry and leaves the password locked.
-  // A managed user missing from the request is disabled the same way. The
-  // daemon never deletes a managed user or its files. A managed user that is
-  // not disabled may have a session, whatever groups the machine allows.
-  //
-  // Groups and users the daemon could not set up are listed in the response.
-  // A group failure carries one of:
-  //   - ALREADY_EXISTS and reason GROUP_ALREADY_EXISTS for a group of that
-  //     name the daemon did not create;
-  //   - INVALID_ARGUMENT and reason INVALID_GROUP_NAME for a name
-  //     groupadd(8) refuses;
-  //   - INTERNAL and reason GROUP_SETUP_FAILED when a command failed.
-  // A user failure carries one of:
-  //   - ALREADY_EXISTS and reason USER_ALREADY_EXISTS for a user of that
-  //     name the daemon did not create;
-  //   - INVALID_ARGUMENT and reason INVALID_USERNAME for a name useradd(8)
-  //     refuses;
-  //   - PERMISSION_DENIED and reason GROUP_NOT_ALLOWED for a listed group
-  //     that is neither managed nor assignable, with metadata "group";
-  //   - INTERNAL and reason USER_SETUP_FAILED when a command failed.
-  // The others took effect. The daemon then reports the machine with
-  // ReportMachineStatus.
-  //
-  // Fails with PERMISSION_DENIED and reason USER_MANAGEMENT_DISABLED, and
-  // then changes nothing.
-  rpc SetManagedUsers(SetManagedUsersRequest) returns (SetManagedUsersResponse) {
+  // An account or group whose name or id a local account or group of the
+  // machine already uses is not served, so that it can take over no local
+  // file or right; ReportMachineStatus lists it in conflicts.
+  rpc SetDirectory(SetDirectoryRequest) returns (SetDirectoryResponse) {
     option idempotency_level = IDEMPOTENT;
   }
 }
@@ -170,6 +145,20 @@ service MachineRegistryService {
   // CLOSED is final: later reports of the session are ignored.
   rpc ReportSessionState(ReportSessionStateRequest) returns (ReportSessionStateResponse) {
     option idempotency_level = IDEMPOTENT;
+  }
+}
+
+// Answers the daemon's questions about the directory. Served by the service
+// on daemon connections.
+service DirectoryService {
+  // Returns what an account may do on the calling machine now, from the
+  // platform's current permissions. The daemon asks when the account logs in
+  // and when it asks to become root, and updates its copy with the answer.
+  //
+  // Fails with NOT_FOUND and reason ACCOUNT_NOT_FOUND for a name that is not
+  // an account of the machine's directory.
+  rpc GetAccountAccess(GetAccountAccessRequest) returns (GetAccountAccessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
   }
 }
 
@@ -243,7 +232,7 @@ enum SessionCloseReason {
   SESSION_CLOSE_REASON_HELPER_LOST = 8;
   // Opening failed and was undone.
   SESSION_CLOSE_REASON_OPEN_FAILED = 9;
-  // SetManagedUsers disabled the user.
+  // The account was disabled or may no longer log in to the machine.
   SESSION_CLOSE_REASON_USER_DISABLED = 10;
 }
 
@@ -282,8 +271,8 @@ message OpenSessionRequest {
   string session_id = 1;
   // The platform user who will own it.
   string user_id = 2;
-  // The Linux user the platform user maps to. The daemon only checks that
-  // the user may have a session.
+  // The platform user's directory account. The daemon only checks that the
+  // account may have a session.
   string username = 3;
   // How the session shows its windows.
   leaflow.virtualdesktop.display.v1.SessionMode mode = 4;
@@ -331,102 +320,93 @@ message TerminateSessionRequest {
 // The response of TerminateSession.
 message TerminateSessionResponse {}
 
-// A Linux user of the machine (passwd(5)).
-message User {
+// The directory of the machine's project, as the machine sees it.
+message Directory {
+  // Names this content: it changes whenever anything below changes.
+  string revision = 1;
+  // At most 10000.
+  repeated Account accounts = 2;
+  // At most 10000.
+  repeated Group groups = 3;
+}
+
+// A directory account (passwd(5)).
+message Account {
   // The login name.
   string username = 1;
   // The user id.
   uint32 uid = 2;
-  // The primary group id.
+  // The primary group id: the account's own group, of the same name and id.
   uint32 gid = 3;
-  // The full name, from the GECOS field.
+  // The full name for the GECOS field, plain text.
   string display_name = 4;
   // The home directory.
   string home_directory = 5;
   // The login shell.
   string shell = 6;
-  // The supplementary groups.
-  repeated string groups = 7;
-  // The user can become root, through a group such as sudo or wheel or a
-  // sudoers rule, and so can see every session on the machine.
-  bool privileged = 8;
-  // The daemon would open a session for the user: not root, not a system
-  // user, and in an allowed group.
-  bool session_allowed = 9;
-  // The daemon created the user for SetManagedUsers.
-  bool managed = 10;
-  // The account is expired (shadow(5)) and cannot log in, such as a managed
-  // user that is disabled.
-  bool disabled = 11;
+  // The platform user of the account.
+  string user_id = 7;
+  // What the account may do on this machine.
+  AccountAccess access = 8;
 }
 
-// A Linux group of the machine (group(5)).
+// What an account may do on one machine.
+message AccountAccess {
+  // The account may log in and have sessions.
+  bool login_allowed = 1;
+  // The account may become root through sudo(8).
+  bool admin = 2;
+  // The account is disabled: no login and no sudo, whatever the others say.
+  bool disabled = 3;
+}
+
+// A directory group (group(5)).
 message Group {
   // The group name.
   string name = 1;
   // The group id.
   uint32 gid = 2;
-  // The daemon created the group for SetManagedUsers.
-  bool managed = 3;
-  // The machine's configuration lets the service add managed users to it.
-  bool assignable = 4;
-  // The members can become root through a sudoers rule for the group.
-  bool privileged = 5;
+  // The usernames of its members, each an account of the directory.
+  repeated string members = 3;
 }
 
-// A Linux user the platform manages.
-message ManagedUser {
-  // The login name.
+// The request of SetDirectory.
+message SetDirectoryRequest {
+  // The machine's whole directory.
+  Directory directory = 1;
+}
+
+// The response of SetDirectory.
+message SetDirectoryResponse {}
+
+// The request of GetAccountAccess.
+message GetAccountAccessRequest {
+  // The account's login name.
   string username = 1;
-  // The full name for the GECOS field, plain text.
-  string display_name = 2;
-  // The user may become root through sudo(8).
-  bool admin = 3;
-  // The account is expired and its sessions are terminated.
-  bool disabled = 4;
-  // The supplementary groups, each a managed group of the request or an
-  // assignable group of the machine.
-  repeated string groups = 5;
 }
 
-// A Linux group the platform manages.
-message ManagedGroup {
-  // The group name.
-  string name = 1;
-  // The members may become root through sudo(8).
-  bool admin = 2;
+// The response of GetAccountAccess.
+message GetAccountAccessResponse {
+  // What the account may do on the calling machine now.
+  AccountAccess access = 1;
 }
 
-// The request of SetManagedUsers.
-message SetManagedUsersRequest {
-  // Every managed user of the machine, at most 1000.
-  repeated ManagedUser users = 1;
-  // Every managed group of the machine, at most 1000.
-  repeated ManagedGroup groups = 2;
+// A directory account or group the daemon does not serve, because a local
+// account or group of the machine uses its name or id.
+message DirectoryConflict {
+  // An account or a group.
+  DirectoryEntryType type = 1;
+  // The name of the account or group in the directory.
+  string name = 2;
 }
 
-// The response of SetManagedUsers.
-message SetManagedUsersResponse {
-  // The users that did not take effect.
-  repeated ManagedUserFailure failures = 1;
-  // The groups that did not take effect.
-  repeated ManagedGroupFailure group_failures = 2;
-}
-
-// A managed group the daemon could not set up.
-message ManagedGroupFailure {
-  // ManagedGroup.name.
-  string name = 1;
-  // Why, with a google.rpc.ErrorInfo.
-  google.rpc.Status status = 2;
-}
-
-// A managed user the daemon could not set up.
-message ManagedUserFailure {
-  // ManagedUser.username.
-  string username = 1;
-  // Why, with a google.rpc.ErrorInfo.
-  google.rpc.Status status = 2;
+// The type of a directory entry.
+enum DirectoryEntryType {
+  DIRECTORY_ENTRY_TYPE_UNSPECIFIED = 0;
+  // An account.
+  DIRECTORY_ENTRY_TYPE_ACCOUNT = 1;
+  // A group.
+  DIRECTORY_ENTRY_TYPE_GROUP = 2;
 }
 
 // The request of EnrollMachine.
@@ -487,23 +467,21 @@ message ReportMachineStatusRequest {
   string architecture = 5;
   // What the machine can do, as dotted names; unknown names are ignored.
   // Such as "x11.xvfb", "x11.xorg-dummy", "audio.pipewire",
-  // "audio.pulseaudio", "accessibility.at-spi", "privilege.pam",
-  // "privilege.polkit" and "user-management".
+  // "audio.pulseaudio", "accessibility.at-spi", "privilege.pam" and
+  // "privilege.polkit".
   repeated string capabilities = 6;
   // The desktop environments SESSION_MODE_DESKTOP can start: the
   // DesktopNames of the installed X sessions (XDG_SESSION_DESKTOP). Empty
   // when none is installed.
   repeated string session_desktops = 7;
-  // The Linux users that can log in: those with UID_MIN ≤ uid ≤ UID_MAX
-  // (login.defs(5)) and every user with a session. Users only known through
-  // a directory such as LDAP may be missing.
-  repeated User users = 8;
   // Every session since the machine booted, closed ones included until the
   // service has seen them closed once.
   repeated Session sessions = 9;
-  // The managed groups and the assignable groups. Other groups are not
-  // reported; User.groups names them all.
-  repeated Group groups = 10;
+  // Directory.revision of the copy the daemon serves. Empty before the
+  // first SetDirectory.
+  string directory_revision = 11;
+  // The accounts and groups of that copy the daemon does not serve.
+  repeated DirectoryConflict conflicts = 12;
 }
 
 // The response of ReportMachineStatus.
