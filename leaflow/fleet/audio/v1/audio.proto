@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package leaflow.fleet.virtualdesktop.audio.v1;
+package leaflow.fleet.audio.v1;
 
 import "google/protobuf/duration.proto";
 import "google/rpc/status.proto";
-import "leaflow/fleet/virtualdesktop/device/v1/device.proto";
+import "leaflow/fleet/device/v1/device.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/audio/v1;audiov1";
+option go_package = "github.com/leaflowapis/leaflow-go/fleet/audio/v1;audiov1";
 
 // Sound between the session and the viewer, as codec packets that viewers
 // encode and decode with WebCodecs: the session's sound played by the viewer
@@ -14,14 +14,14 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/audi
 // session (MS-RDPEAI audio input).
 //
 // Channel types:
-//   - "leaflow.fleet.virtualdesktop.audio.v1.output", lane "media": opened by a
+//   - "leaflow.fleet.audio.v1.output", lane "media": opened by a
 //     viewer to play the session's sound, after a gesture of its person, as
 //     browsers require. Read-only viewers may. The viewer sends one
 //     AudioRequest; the session sends OutputServerMessage: the format, then
 //     packets as Datagrams of the channel. The session captures the monitor
 //     of its sound output and drops packets queued longer than about 200
 //     milliseconds. Closing the channel stops the sound.
-//   - "leaflow.fleet.virtualdesktop.audio.v1.input", lane "media": opened by the
+//   - "leaflow.fleet.audio.v1.input", lane "media": opened by the
 //     viewer that provides the microphone (see the device package), only
 //     while its demand is ACTIVE. The viewer sends InputClientMessage: the
 //     request, then packets as Datagrams; the session sends
@@ -101,7 +101,7 @@ message InputServerMessage {
     // The session accepts the stream. The first message.
     InputGrant grant = 1;
     // The session ends the stream. The last message.
-    leaflow.fleet.virtualdesktop.device.v1.CaptureEnd end = 2;
+    leaflow.fleet.device.v1.CaptureEnd end = 2;
   }
 }
 

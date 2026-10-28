@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package leaflow.fleet.virtualdesktop.device.v1;
+package leaflow.fleet.device.v1;
 
 import "google/protobuf/duration.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/device/v1;devicev1";
+option go_package = "github.com/leaflowapis/leaflow-go/fleet/device/v1;devicev1";
 
 // Devices of the viewer that feed the session: its microphone, camera and
 // gamepads. The session presents them to its applications as virtual devices
@@ -12,7 +12,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/devi
 // microphone or the camera, so that a viewer captures only while something
 // consumes it.
 //
-// Channel type "leaflow.fleet.virtualdesktop.device.v1", lane "metadata": opened by
+// Channel type "leaflow.fleet.device.v1", lane "metadata": opened by
 // the viewer, one per connection. The session sends ServerMessage; the viewer
 // sends nothing. It starts with a snapshot: one DeviceDemand for the
 // microphone and one for the camera, then SnapshotEnd; later DeviceDemand

@@ -1,15 +1,15 @@
 syntax = "proto3";
 
-package leaflow.fleet.virtualdesktop.gamepad.v1;
+package leaflow.fleet.gamepad.v1;
 
 import "google/rpc/status.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/gamepad/v1;gamepadv1";
+option go_package = "github.com/leaflowapis/leaflow-go/fleet/gamepad/v1;gamepadv1";
 
 // The viewer's gamepads as input devices of the session's user. Names follow
 // the W3C Gamepad API.
 //
-// Channel type "leaflow.fleet.virtualdesktop.gamepad.v1", lane "input": opened by
+// Channel type "leaflow.fleet.gamepad.v1", lane "input": opened by
 // the viewer, one per gamepad it provides, within GamepadLimits.max_devices,
 // after its person agreed and a gamepad is connected. The viewer sends
 // GamepadClientMessage: the descriptor, then states; the session sends

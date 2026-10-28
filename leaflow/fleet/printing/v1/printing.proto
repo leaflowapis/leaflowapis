@@ -1,10 +1,10 @@
 syntax = "proto3";
 
-package leaflow.fleet.virtualdesktop.printing.v1;
+package leaflow.fleet.printing.v1;
 
 import "google/rpc/status.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/printing/v1;printingv1";
+option go_package = "github.com/leaflowapis/leaflow-go/fleet/printing/v1;printingv1";
 
 // Printers of the viewer's machine offered to the session's applications
 // (after MS-RDPEPC; attributes and states named after IPP/1.1, RFC 8011). The
@@ -16,10 +16,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/prin
 // machine; it reports such a job COMPLETED once the file is saved.
 //
 // Channel types:
-//   - "leaflow.fleet.virtualdesktop.printing.v1", lane "interactive": opened by the
+//   - "leaflow.fleet.printing.v1", lane "interactive": opened by the
 //     viewer that shares printers, after its person chose them. The viewer
 //     sends ClientMessage, the session ServerMessage.
-//   - "leaflow.fleet.virtualdesktop.printing.v1.document", lane "bulk": opened by
+//   - "leaflow.fleet.printing.v1.document", lane "bulk": opened by
 //     the viewer, one per job it accepted. It sends one
 //     PrintDocumentRequest; the session answers with PrintDocument
 //     messages. Flow control is the channel's credit.
