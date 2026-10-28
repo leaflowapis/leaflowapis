@@ -23,8 +23,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/directory/v1;direct
 // /etc/passwd or /etc/group, and the local accounts and groups of the
 // machine are left as they are. Directory accounts have no password: a
 // person on a viewer of one of the account's sessions approves elevation
-// through sudo (leaflow.fleet.privilege.v1), and inside a command the
-// platform runs for the account, its request does
+// through sudo, or the account's owner does on the platform, or their setting
+// for the machine does at once (leaflow.fleet.privilege.v1); inside a command
+// the platform runs for the account, its request does
 // (leaflow.fleet.command.v1).
 //
 // Feature "leaflow.fleet.directory.v1" (leaflow.fleet.machine.v1 Feature):

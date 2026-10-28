@@ -31,6 +31,49 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/privilege/v1;privil
 // line. They may contain secrets: viewers show them to the person and never
 // store or log them.
 
+// Decides on the platform the PAM authentications of directory accounts
+// (leaflow.fleet.directory.v1), so that sudo works where no viewer can
+// approve, such as after an SSH login, and its owner can approve from any of
+// their devices. Served by the service on daemon connections
+// (leaflow.fleet.control.v1).
+//
+// The daemon asks for every PAM authentication of a directory account, at
+// the same time as it shows the request to the viewers of the session the
+// process belongs to, if any. The first decision counts: the daemon cancels
+// this call (CallCancel) once a viewer decides, and stops showing the request
+// once this call answers. A decision of the platform is not signed; the
+// daemon trusts it as it trusts the service for the directory.
+//
+// Unlike a viewer, the platform keeps the request's claims with the request
+// and shows them to the account's owner: at most the first 4 KiB of
+// command_line, and remote_host and tty.
+service PrivilegeService {
+  // Decides a request. While the account's owner has set the machine to
+  // approve their requests without asking, the request is approved at once.
+  // Otherwise the owner is asked on the platform, and the answer is their
+  // decision, or EXPIRED once expires_at passes without one.
+  //
+  // Fails with:
+  //   - NOT_FOUND and reason ACCOUNT_NOT_FOUND when the username of the
+  //     authentication is not an account of the machine's directory;
+  //   - PERMISSION_DENIED and reason PRIVILEGE_NOT_ALLOWED when the account
+  //     may not become root on the machine (Account.admin), or the operation
+  //     is not a PAM authentication.
+  rpc DecidePrivilegeRequest(DecidePrivilegeRequestRequest) returns (DecidePrivilegeRequestResponse);
+}
+
+// The request of DecidePrivilegeRequest.
+message DecidePrivilegeRequestRequest {
+  // The request, as the daemon shows it to viewers.
+  PrivilegeRequest request = 1;
+}
+
+// The response of DecidePrivilegeRequest.
+message DecidePrivilegeRequestResponse {
+  // APPROVED, DENIED or EXPIRED.
+  PrivilegeOutcome outcome = 1;
+}
+
 // A message from the viewer.
 message ClientMessage {
   // The message.
@@ -79,7 +122,8 @@ message PrivilegeRequest {
   bytes nonce = 2;
   // The machine.
   string machine_id = 3;
-  // The session the asking process belongs to.
+  // The session the asking process belongs to. Empty when it belongs to no
+  // session of the platform, such as after an SSH login.
   string session_id = 4;
   // When the request was made.
   google.protobuf.Timestamp created_at = 5;

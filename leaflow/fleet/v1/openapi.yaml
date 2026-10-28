@@ -11,12 +11,13 @@ info:
 
     This API coordinates. It admits viewers to sessions and passes the signaling of their
     connections, but everything a session shows or receives — terminals, files, the screen,
-    input, the clipboard, printing and privilege approvals — travels end to end between the viewer
-    and the session, encrypted with keys that never leave them. The platform sees which machine,
-    which session and who is connected, and nothing of what happens inside.
+    input, the clipboard, printing and privilege approvals on a viewer — travels end to end
+    between the viewer and the session, encrypted with keys that never leave them. The platform
+    sees which machine, which session and who is connected, and nothing of what happens inside.
 
-    Commands are the exception: the platform passes a command and its output between the caller
-    and the machine, and sees both.
+    Commands and privilege requests decided on the platform are the exception: the platform passes
+    a command and its output between the caller and the machine, and keeps the command line of a
+    privilege request it asks the owner about; it sees both.
 
     ## Authentication
 
@@ -82,8 +83,7 @@ info:
     machines or for chosen ones. Changes reach the machines within about a minute, and every login
     and elevation is checked against the current permissions while the machine is connected. To
     keep a member out of some machines, deny them `fleet:machines.login` on those machines.
-    Elevation through sudo is approved on a viewer, or by the request of a command run through this
-    API, never by a password.
+    Elevation through sudo is never approved by a password; see "Approving sudo".
 
     Members log in over SSH with the keys they own among the project's SSH keys, while they may
     log in to the machine.
@@ -99,6 +99,25 @@ info:
     port, no distributed key and no address the caller can reach. Like logging in, it requires
     `fleet:machines.login` on the machine. Inside the command, `sudo` works without a prompt for
     a caller with `fleet:machines.admin` on the machine: the request approves the elevation.
+
+    ## Approving sudo
+
+    An account may become root through sudo on a machine while its user has
+    `fleet:machines.admin` there. Each elevation is approved, in the first of these ways that
+    applies:
+
+    - inside a command run through this API, by the request itself;
+    - at once, while the user has set the machine to approve without asking, for a while or for
+      good (`PUT /api/v1/machines/{machineId}/privilege-approval`);
+    - by the user, on any of their devices, for a request listed by
+      `GET /api/v1/privilege-requests` (`POST …:approve` or `…:deny`), or on a viewer of the session
+      the asking process belongs to. A request nobody decides expires, and sudo fails.
+
+    Requests reach the user's devices as they happen through EventBus: the event
+    `leaflow.fleet.privilege.requested` when one is waiting and `leaflow.fleet.privilege.decided`
+    when it ends, each addressed to the user in the current project and carrying the request's
+    `id`. A client that subscribes to them needs no polling; one that does not can list the
+    pending requests.
 
     ## Viewing a session
 
@@ -128,6 +147,7 @@ tags:
   - name: Group
   - name: Session
   - name: Viewer
+  - name: Privilege
 paths:
   /api/v1/machines:
     get:
@@ -308,6 +328,171 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RunCommandResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/privilege-approval:
+    get:
+      summary: Get the caller's privilege approval setting for a machine
+      description: |-
+        Returns whether the caller's elevations on the machine are approved without asking. A
+        caller who never set it gets `never`.
+      operationId: get-privilege-approval
+      tags:
+        - Privilege
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivilegeApproval"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      summary: Set the caller's privilege approval setting for a machine
+      description: |-
+        Sets whether the caller's elevations on the machine are approved without asking: `never`
+        asks every time, `until` approves without asking until `auto_approve_until`, `forever`
+        always does. It applies to the caller's own account only, and only while they may become
+        root on the machine. Fails with `INVALID_ARGUMENT` when `auto_approve_until` is missing
+        or past for `until`, or present otherwise.
+      operationId: update-privilege-approval
+      tags:
+        - Privilege
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PrivilegeApproval"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivilegeApproval"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/privilege-requests:
+    get:
+      summary: List the caller's privilege requests
+      description: |-
+        Returns the caller's privilege requests on the project's machines, newest first. Requests
+        are kept for 30 days.
+      operationId: list-privilege-requests
+      tags:
+        - Privilege
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: state
+          in: query
+          description: Return only the requests in this state
+          explode: false
+          schema:
+            $ref: "#/components/schemas/PrivilegeRequestState"
+        - name: machine_id
+          in: query
+          description: Return only the requests on this machine
+          explode: false
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivilegeRequestList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/privilege-requests/{requestId}:
+    get:
+      summary: Get a privilege request
+      description: Returns one of the caller's privilege requests.
+      operationId: get-privilege-request
+      tags:
+        - Privilege
+      parameters:
+        - $ref: "#/components/parameters/PrivilegeRequestId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivilegeRequestResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/privilege-requests/{requestId}:approve:
+    post:
+      summary: Approve a privilege request
+      description: |-
+        Approves one of the caller's pending requests; the waiting sudo goes on as root. Fails with
+        `PRIVILEGE_REQUEST_CLOSED` when the request is no longer pending, with `metadata.state`
+        giving how it ended.
+      operationId: approve-privilege-request
+      tags:
+        - Privilege
+      parameters:
+        - $ref: "#/components/parameters/PrivilegeRequestId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivilegeRequestResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/privilege-requests/{requestId}:deny:
+    post:
+      summary: Deny a privilege request
+      description: |-
+        Denies one of the caller's pending requests; the waiting sudo fails. Fails with
+        `PRIVILEGE_REQUEST_CLOSED` as for approving.
+      operationId: deny-privilege-request
+      tags:
+        - Privilege
+      parameters:
+        - $ref: "#/components/parameters/PrivilegeRequestId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivilegeRequestResource"
         default:
           description: Error
           content:
@@ -1013,6 +1198,13 @@ components:
       schema:
         type: string
         format: uuid
+    PrivilegeRequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     SessionId:
       name: sessionId
       in: path
@@ -1712,6 +1904,119 @@ components:
         stderr_truncated:
           description: "`stderr` is cut short"
           type: boolean
+      additionalProperties: false
+    PrivilegeApproval:
+      type: object
+      required:
+        - auto_approve
+      properties:
+        auto_approve:
+          description: |-
+            `never` asks every time; `until` approves without asking until `auto_approve_until`;
+            `forever` always approves without asking.
+          type: string
+          enum:
+            - never
+            - until
+            - forever
+        auto_approve_until:
+          description: Only with `until`. A setting whose time has passed reads as `never`.
+          type: string
+          format: date-time
+      additionalProperties: false
+    PrivilegeRequestState:
+      description: |-
+        `pending` waits for a decision; `approved` and `denied` were decided by the user, a
+        viewer or the user's setting; `expired` was not decided in time; `cancelled` ended
+        because the asking program gave up or a viewer decided it.
+      type: string
+      enum:
+        - pending
+        - approved
+        - denied
+        - expired
+        - cancelled
+    PrivilegeRequestResource:
+      type: object
+      required:
+        - id
+        - machine_id
+        - username
+        - service
+        - command_line
+        - remote_host
+        - tty
+        - state
+        - approved_without_asking
+        - created_at
+        - expires_at
+        - decided_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        machine_id:
+          type: string
+          format: uuid
+        username:
+          description: The account that asks to become root
+          type: string
+        service:
+          description: The PAM service that asks, such as `sudo`
+          type: string
+        command_line:
+          description: |-
+            What the machine reports the asking program runs, at most 4 KiB, such as
+            `sudo apt install foo`. A claim of the machine.
+          type: string
+        remote_host:
+          description: Where the login came from, when the machine knows it
+          type: string
+        tty:
+          description: The terminal, when the machine knows it, such as `/dev/pts/3`
+          type: string
+        state:
+          $ref: "#/components/schemas/PrivilegeRequestState"
+        approved_without_asking:
+          description: The request was approved at once by the user's setting for the machine
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        decided_at:
+          description: When the request stopped pending; null while pending
+          type:
+            - string
+            - "null"
+          format: date-time
+      additionalProperties: false
+    PrivilegeRequestList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PrivilegeRequestResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
       additionalProperties: false
     ViewerResource:
       type: object
