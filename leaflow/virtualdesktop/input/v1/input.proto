@@ -381,10 +381,32 @@ message TextInputError {
 // the timing of a person, so that double clicks, drags and key chords work
 // whatever the network delay (after the Chrome DevTools Protocol Input
 // domain). Keys are named as X keysym names (XStringToKeysym), such as
-// "Return", "Control_L" or "F13"; an unknown name fails with
-// INVALID_ARGUMENT and reason UNKNOWN_KEYSYM (metadata "keysym"). Every call
-// follows the automation rules of the session channel and returns the
-// session revision at which it took effect.
+// "Return", "Control_L", "F13" or "U20AC", or given as a single character,
+// such as "/"; an unknown name fails with INVALID_ARGUMENT and reason
+// UNKNOWN_KEYSYM (metadata "keysym"). Every call follows the automation rules
+// of the session channel and returns the session revision at which it took
+// effect.
+//
+// What a gesture presses is released when its call ends, however it ends.
+// Keys and buttons pressed with DispatchKey and DispatchPointerButton stay
+// down until released, until the viewer leaves or until another viewer takes
+// the input lease. A press of a pointer button brings the window it goes to
+// to the front, as a person's click does.
+//
+// Besides the refusals of the automation rules, calls fail with:
+//   - NOT_FOUND and reason WINDOW_NOT_FOUND for a window that is gone
+//     (metadata "windowId");
+//   - FAILED_PRECONDITION and reason WINDOW_HIDDEN for a minimized window;
+//   - FAILED_PRECONDITION and reason WINDOW_RESIZED, see Point;
+//   - INVALID_ARGUMENT and reason OUT_OF_BOUNDS for a point outside its
+//     window or the canvas;
+//   - FAILED_PRECONDITION and reason WINDOW_NOT_ACTIVATED when the window
+//     could not be brought to the front or given the keyboard focus;
+//   - UNAVAILABLE and reason INPUT_UNAVAILABLE when the window system did not
+//     apply the input in time;
+//   - for TypeText, FAILED_PRECONDITION and reason TEXT_INPUT_NOT_DELIVERED
+//     when the text was not handed to the editor, or TEXT_INPUT_UNCONFIRMED
+//     when the application did not confirm it (EXECUTION_STATE_UNKNOWN).
 service InputService {
   // Clicks a point, once or up to three times in a row.
   rpc Click(ClickRequest) returns (ClickResponse);
@@ -397,8 +419,9 @@ service InputService {
   // Presses keys in order and releases them in reverse, such as
   // ["Control_L", "s"].
   rpc PressKeys(PressKeysRequest) returns (PressKeysResponse);
-  // Types text into the focused editor, through its input method context
-  // when it has one and as keys otherwise.
+  // Types text into the focused editor the way a viewer's InsertText goes:
+  // through its input method context when it has one, else its accessible
+  // text interface, and into a terminal as keys.
   rpc TypeText(TypeTextRequest) returns (TypeTextResponse);
   // Presses or releases a pointer button, for gestures the calls above do
   // not cover, such as a long press.
@@ -413,7 +436,8 @@ service InputService {
 
 // A point for automation input.
 message Point {
-  // The window the point is relative to. 0: canvas coordinates.
+  // The window the point is relative to. 0: canvas coordinates; the input
+  // goes to the window shown there.
   uint64 window_id = 1;
   // The point, within the window's client area.
   sint32 x = 2;
@@ -433,7 +457,7 @@ message ClickRequest {
   uint32 button = 2;
   // Clicks in a row, 1 to 3. 0: 1.
   uint32 count = 3;
-  // Keys held during the click, such as ["Control_L"].
+  // Modifier keys held during the click, at most 8, such as ["Control_L"].
   repeated string modifiers = 4;
 }
 
@@ -463,12 +487,13 @@ message MovePointerResponse {
 message ScrollRequest {
   // Where the pointer is while scrolling.
   Point point = 1;
-  // Horizontal scroll in value120 units, as PointerWheel; positive scrolls
-  // right.
+  // Horizontal scroll in value120 units, as PointerWheel, at most 12000
+  // either way; positive scrolls right.
   sint32 delta_x = 2;
-  // Vertical scroll in value120 units; positive scrolls down.
+  // Vertical scroll in value120 units, at most 12000 either way; positive
+  // scrolls down.
   sint32 delta_y = 3;
-  // Keys held while scrolling.
+  // Modifier keys held while scrolling.
   repeated string modifiers = 4;
 }
 
@@ -488,7 +513,7 @@ message DragRequest {
   Point end = 2;
   // The X button number. 0: 1.
   uint32 button = 3;
-  // Keys held during the drag.
+  // Modifier keys held during the drag.
   repeated string modifiers = 4;
   // How long the pointer takes from start to end, at most 5 seconds. Unset:
   // 350 milliseconds.
@@ -505,7 +530,7 @@ message DragResponse {
 
 // The request of PressKeys.
 message PressKeysRequest {
-  // The keys, pressed in this order and released in reverse.
+  // The keys, 1 to 8, pressed in this order and released in reverse.
   repeated string keys = 1;
   // The window to activate first. 0: the active window.
   uint64 window_id = 2;
@@ -537,7 +562,7 @@ message TypeTextResponse {
 message DispatchPointerButtonRequest {
   // Where. The pointer moves there first.
   Point point = 1;
-  // The X button number.
+  // The X button number, as in PointerButton.
   uint32 button = 2;
   // A press or a release.
   bool pressed = 3;
