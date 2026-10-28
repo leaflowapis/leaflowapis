@@ -9,10 +9,13 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/ap
 
 // The applications of the session's user, the icons of their desktop, and
 // launching. The session serves them from the freedesktop standards itself,
-// without a desktop environment: the applications menu from the installed
-// desktop entries and menu definitions (Desktop Menu Specification 1.1, with
-// XDG_MENU_PREFIX choosing the menu), and the desktop from Home, File System,
-// Trash and the entries of XDG_DESKTOP_DIR.
+// without a desktop environment and without choosing for the person: the
+// applications menu from the installed desktop entries and, where the
+// machine has one, its menu definition (Desktop Menu Specification 1.1,
+// ${XDG_MENU_PREFIX}applications.menu), and the desktop from Home, File
+// System, Trash and the entries of XDG_DESKTOP_DIR. Viewers present them:
+// they group applications without a menu definition, such as by their
+// categories, and name Home, File System and Trash in their own language.
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.application.v1", lane "metadata": opened by the
@@ -25,8 +28,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/ap
 // Viewers send only desktop file IDs and URIs, never command lines: the
 // session builds every command from the Exec key itself (Desktop Entry
 // Specification, "The Exec key"), so that a viewer cannot inject commands.
-// Names are localized for the language of the session channel's ClientHello
-// and are plain text. Icons are rendered at the viewer's device pixel ratio:
+// Names of applications, menus and launchers are localized for the language
+// of the session channel's ClientHello and are plain text. Icons are rendered at the viewer's device pixel ratio:
 // 16 or 24 pixels in menus, 48 to 64 on the desktop.
 
 // A message from the session on the application channel.
@@ -52,7 +55,8 @@ message ServerMessage {
 message ApplicationMenu {
   // Grows with every change of the menu or of any application.
   uint64 revision = 1;
-  // The root menu.
+  // The root menu. Without a menu definition, an unnamed menu of every
+  // application menus show (not NoDisplay), by desktop file ID.
   Menu root = 2;
 }
 
@@ -62,7 +66,8 @@ message Menu {
   // Its menu path, such as "Settings/Screensavers"; empty for the root.
   // Stable across revisions.
   string menu_path = 1;
-  // The Name of its directory entry.
+  // The Name of its directory entry, else its <Name>; empty without a menu
+  // definition.
   string display_name = 2;
   // The Comment of its directory entry. May be empty.
   string comment = 3;
@@ -90,8 +95,9 @@ message MenuElement {
 message Separator {}
 
 // An application: a desktop entry of type Application, named by its desktop
-// file ID. Entries that are Hidden, fail TryExec, or are excluded by OnlyShowIn
-// or NotShowIn are not listed.
+// file ID. Entries that are Hidden or fail TryExec are not listed. OnlyShowIn
+// and NotShowIn address desktop environments, which a session is not; they
+// are ignored.
 message Application {
   // Its desktop file ID, such as "org.gnome.TextEditor.desktop".
   string desktop_file_id = 1;
@@ -137,8 +143,8 @@ message DesktopIcon {
   string uri = 1;
   // What it shows. Never changes for a uri.
   DesktopIconType type = 2;
-  // Its label: the localized name of Home, File System or Trash, the Name of
-  // a launcher, or the file name.
+  // Its label: the Name of a launcher, or the file name. Empty for Home, File
+  // System and Trash, which viewers name.
   string display_name = 3;
   // Its icon: "user-home", "drive-harddisk", "user-trash" or
   // "user-trash-full", a launcher's Icon, or the icon of the file's media
@@ -150,14 +156,13 @@ message DesktopIcon {
   // The entry is a symbolic link.
   bool symbolic_link = 6;
   // Launchers only: it is trusted, so opening it runs it without asking. A
-  // launcher outside XDG_DATA_DIRS needs the executable bit and, where
-  // recorded, a matching SHA-256 checksum (as Thunar and xfdesktop decide).
+  // launcher outside XDG_DATA_DIRS needs the executable bit.
   bool trusted = 7;
   // TRASH only: the number of items in the trash; 0 selects "user-trash".
   optional uint32 trash_item_count = 8;
 }
 
-// What a desktop icon shows (after xfdesktop's icon types).
+// What a desktop icon shows.
 enum DesktopIconType {
   DESKTOP_ICON_TYPE_UNSPECIFIED = 0;
   // The home folder.
@@ -272,16 +277,16 @@ message OpenUriRequest {
   LauncherConfirmation launcher_confirmation = 2;
 }
 
-// What a person answered when asked about an untrusted launcher (the choices
-// of the Thunar and xfdesktop dialog besides cancelling).
+// What a person answered when asked about an untrusted launcher, besides
+// cancelling.
 enum LauncherConfirmation {
   LAUNCHER_CONFIRMATION_UNSPECIFIED = 0;
   // Nobody was asked; an untrusted launcher is not run.
   LAUNCHER_CONFIRMATION_NONE = 1;
   // Run it this once and leave it untrusted ("Launch Anyway").
   LAUNCHER_CONFIRMATION_LAUNCH_ANYWAY = 2;
-  // Mark it trusted, by setting the executable bit and recording its SHA-256
-  // checksum, then run it ("Mark As Trusted And Launch").
+  // Mark it trusted, by setting the owner's executable bit, then run it
+  // ("Mark As Trusted And Launch").
   LAUNCHER_CONFIRMATION_MARK_TRUSTED = 3;
 }
 
