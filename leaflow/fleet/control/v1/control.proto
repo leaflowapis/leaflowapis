@@ -31,6 +31,18 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // exactly one ClientMessage from the endpoint or ServerMessage from the
 // service. A receiver ignores a message whose case it does not know.
 //
+// Fragments. A message whose encoding is larger than 256 KiB travels as
+// Fragment messages: its encoding cut into consecutive pieces of at most
+// 256 KiB, in order, all with the same message_id and the last with final
+// set. The receiver joins the pieces and handles the result as the one
+// message it encodes, which is never a Fragment itself. Other messages, such
+// as Ping, Pong and the fragments of other messages, may come between the
+// fragments of a message, so that a large message holds up nothing else on
+// the connection. A joined message is at most 16 MiB: a receiver closes with
+// MESSAGE_TOO_BIG a connection that sends more, and a callee whose result
+// would be larger fails the call with RESOURCE_EXHAUSTED and reason
+// RESULT_TOO_LARGE instead.
+//
 // Handshake. The service sends ServerHello as soon as the WebSocket opens;
 // the endpoint answers with ClientHello; the service answers with Welcome or
 // Close. Before Welcome both sides close on any other message.
@@ -44,9 +56,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // service calls the methods of a feature only while the machine reports it
 // available (leaflow.fleet.machine.v1). When a connection drops, its calls in
 // flight end with UNAVAILABLE and reason CONNECTION_LOST and are never
-// replayed. A payload larger than 256 KiB travels in pieces, and one larger
-// than 16 MiB fails its call with RESOURCE_EXHAUSTED and reason
-// RESULT_TOO_LARGE or CALL_TOO_LARGE (leaflow.fleet.rpc.v1).
+// replayed.
 //
 // Signaling. Viewers and session processes send transport.v1 Signal and
 // Migration. The service takes the sender from the connection a message
@@ -111,6 +121,8 @@ message ClientMessage {
     leaflow.fleet.transport.v1.Migration migration = 8;
     // The endpoint closes the connection.
     Close close = 9;
+    // A piece of a message too large to send whole.
+    Fragment fragment = 10;
   }
 }
 
@@ -140,6 +152,8 @@ message ServerMessage {
     ServiceKeys service_keys = 10;
     // The service closes the connection.
     Close close = 11;
+    // A piece of a message too large to send whole.
+    Fragment fragment = 12;
   }
 }
 
@@ -155,8 +169,8 @@ message ServerHello {
   // How long either side waits without receiving anything before it closes
   // the connection.
   google.protobuf.Duration idle_timeout = 4;
-  // The largest message, in bytes, either end may send. At least 512 KiB, so
-  // that a piece of a call's payload (leaflow.fleet.rpc.v1) always fits.
+  // The largest WebSocket message, in bytes, either end may send. At least
+  // 512 KiB, so that a Fragment always fits.
   uint32 max_message_size = 5;
 }
 
@@ -358,6 +372,18 @@ message Pong {
   uint64 monotonic_ms = 1;
 }
 
+// A piece of the encoding of a ClientMessage or ServerMessage larger than
+// 256 KiB (see Fragments).
+message Fragment {
+  // Names the message among the messages the sender is sending in fragments
+  // on the connection.
+  uint64 message_id = 1;
+  // The next bytes of the encoding, at most 256 KiB.
+  bytes data = 2;
+  // Set on the last fragment of the message.
+  bool final = 3;
+}
+
 // Ends the connection in order. The sender then closes the WebSocket with
 // code 4000 plus the reason's number (RFC 6455 §7.4.2), which stands for the
 // reason when this message is lost.
@@ -389,7 +415,8 @@ enum CloseReason {
   CLOSE_REASON_HELLO_TIMEOUT = 6;
   // A malformed or unexpected message. Either side.
   CLOSE_REASON_PROTOCOL_ERROR = 7;
-  // A message larger than max_message_size. Either side.
+  // A message larger than max_message_size, or one joined from fragments
+  // larger than 16 MiB. Either side.
   CLOSE_REASON_MESSAGE_TOO_BIG = 8;
   // The credential did not verify, or names an unknown machine, a used or
   // expired ticket or another key. For a machine credential it is final: the
