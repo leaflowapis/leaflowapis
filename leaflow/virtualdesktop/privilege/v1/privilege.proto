@@ -15,8 +15,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/pr
 // decision signed with its device key, the key named in its authorization.
 // The daemon accepts a decision only for the exact bytes it produced, once,
 // before its own deadline, and checks the signature and the authorization
-// itself; the session only carries both. Automation clients may cause
-// requests but never approve them.
+// itself; the session only carries both. Every viewer that may approve is
+// asked, and the first valid decision counts. When none is connected the
+// daemon does not wait, and the program goes on to its next way of
+// authenticating, such as a password. Automation clients may cause requests
+// but never approve them.
 //
 // Channel type "leaflow.virtualdesktop.privilege.v1", lane "interactive":
 // opened by the viewer, one per connection. ServerHello first, then a snapshot
@@ -104,14 +107,20 @@ message PamAuthentication {
   string service = 1;
   // The account to authenticate as (PAM_USER).
   string username = 2;
+  // The user who asked, when PAM knows it (PAM_RUSER).
+  string requesting_user = 3;
+  // The remote host, when PAM knows it (PAM_RHOST).
+  string remote_host = 4;
+  // The terminal, when PAM knows it (PAM_TTY), such as "/dev/pts/3".
+  string tty = 5;
   // Claim: the polkit action, such as "org.freedesktop.policykit.exec".
   // Empty for sudo.
-  string polkit_action_id = 3;
+  string polkit_action_id = 6;
   // Claim: the localized message polkit asked to show. Empty for sudo.
-  string message = 4;
+  string message = 7;
   // Claim: the localized polkit details, such as "program" and
   // "command_line".
-  map<string, string> details = 5;
+  map<string, string> details = 8;
 }
 
 // Access to a collection of the user's keyring (freedesktop Secret Service
