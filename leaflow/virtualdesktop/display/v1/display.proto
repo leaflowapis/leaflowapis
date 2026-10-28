@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package leaflow.virtualdesktop.display.v1;
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/display/v1;displayv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/display/v1;displayv1";
 
 // The canvas of the virtual desktop: its size, the part windows may use and
 // how the session presents it; also the geometry and image types the other

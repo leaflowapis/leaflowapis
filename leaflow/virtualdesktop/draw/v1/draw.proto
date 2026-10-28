@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.draw.v1;
 
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/draw/v1;drawv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/draw/v1;drawv1";
 
 // The pixels of windows, sent as frames.
 //

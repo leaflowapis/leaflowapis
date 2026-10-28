@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.privilege.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/privilege/v1;privilegev1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/privilege/v1;privilegev1";
 
 // Approval of privileged operations by a person on a viewer device instead of
 // a password: privilege elevation through sudo or polkit, and access to the

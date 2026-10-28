@@ -6,7 +6,7 @@ import "google/protobuf/duration.proto";
 import "google/rpc/status.proto";
 import "leaflow/virtualdesktop/filetransfer/v1/filetransfer.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/datatransfer/v1;datatransferv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/datatransfer/v1;datatransferv1";
 
 // Data passed between the viewer's own desktop and the session by copy and
 // paste or by drag and drop. As in the W3C HTML DataTransfer interface and the

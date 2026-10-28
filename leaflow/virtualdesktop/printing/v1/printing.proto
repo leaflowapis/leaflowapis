@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.printing.v1;
 
 import "google/rpc/status.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/printing/v1;printingv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/printing/v1;printingv1";
 
 // Printers of the viewer's machine offered to the session's applications
 // (after MS-RDPEPC; attributes and states named after IPP/1.1, RFC 8011). The

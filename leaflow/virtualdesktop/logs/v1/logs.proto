@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.logs.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/logs/v1;logsv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/logs/v1;logsv1";
 
 // Diagnostic records of the session's Agent process, for troubleshooting a
 // session from a viewer. A record is an event of a module with typed fields;

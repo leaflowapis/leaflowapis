@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.cursor.v1;
 
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/cursor/v1;cursorv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/cursor/v1;cursorv1";
 
 // The shape and position of the mouse cursor, and what other viewers act on.
 // X shows one cursor at a time, chosen by the window under the pointer, so

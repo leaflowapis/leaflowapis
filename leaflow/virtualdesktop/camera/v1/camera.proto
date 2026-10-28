@@ -5,7 +5,7 @@ package leaflow.virtualdesktop.camera.v1;
 import "google/protobuf/duration.proto";
 import "leaflow/virtualdesktop/device/v1/device.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/camera/v1;camerav1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/camera/v1;camerav1";
 
 // The viewer's camera as the session's video capture device (after
 // MS-RDPECAM). The session decodes the frames and feeds the pixels to the

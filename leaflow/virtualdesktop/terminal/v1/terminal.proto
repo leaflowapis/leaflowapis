@@ -5,7 +5,7 @@ package leaflow.virtualdesktop.terminal.v1;
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/terminal/v1;terminalv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/terminal/v1;terminalv1";
 
 // Interactive terminals running the login shell of the session's user, with
 // its groups, home directory and shell, never as another account (RFC 4254

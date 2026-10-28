@@ -9,7 +9,7 @@ import "leaflow/virtualdesktop/rpc/v1/rpc.proto";
 import "leaflow/virtualdesktop/session/v1/session.proto";
 import "leaflow/virtualdesktop/transport/v1/transport.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/control/v1;controlv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/control/v1;controlv1";
 
 // The control connection between an endpoint and the VirtualDesktop service.
 // The service authenticates endpoints, admits viewers to sessions with signed

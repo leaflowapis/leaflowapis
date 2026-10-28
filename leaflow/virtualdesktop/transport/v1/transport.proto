@@ -5,7 +5,7 @@ package leaflow.virtualdesktop.transport.v1;
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/transport/v1;transportv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/transport/v1;transportv1";
 
 // The end-to-end connection between a viewer and a session, carried by a
 // WebRTC PeerConnection (W3C WebRTC; RFC 8831 data channels). The

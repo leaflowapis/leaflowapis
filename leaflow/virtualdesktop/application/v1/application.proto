@@ -5,7 +5,7 @@ package leaflow.virtualdesktop.application.v1;
 import "google/protobuf/timestamp.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/application/v1;applicationv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/application/v1;applicationv1";
 
 // The applications of the session's user, the icons of their desktop, and
 // launching. The session serves them from the freedesktop standards itself,

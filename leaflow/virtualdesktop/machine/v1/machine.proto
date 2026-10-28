@@ -4,9 +4,10 @@ package leaflow.virtualdesktop.machine.v1;
 
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/machine/v1;machinev1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/machine/v1;machinev1";
 
 // Machines that run the Agent, and their sessions and users: enrollment,
 // what a machine reports, and the sessions and Linux users the service asks
@@ -29,6 +30,13 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/ma
 // The full report is authoritative: a session the service holds open on the
 // machine but missing from it has ended, and a changed boot_id means every
 // earlier session ended. Nothing is replayed after a reconnect.
+//
+// Users. Platform users reach a machine as Linux users. On a machine that
+// allows user management the service keeps a set of managed users with
+// SetManagedUsers: the daemon creates them without passwords, grants sudo to
+// administrators and locks the disabled ones. Managed users are never
+// deleted. Other Linux users of the machine are left as they are; the service
+// may still open sessions for them.
 //
 // Trust. The service accepts reports and calls only about the machine's own
 // objects, and closes a connection that reports otherwise with
@@ -82,28 +90,42 @@ service MachineService {
   rpc TerminateSession(TerminateSessionRequest) returns (TerminateSessionResponse) {
     option idempotency_level = IDEMPOTENT;
   }
-  // Creates a Linux user (useradd(8)). Only when the machine allows user
-  // management, as its "user-management" capability says.
+  // Sets the managed users of the machine: all of them, replacing the
+  // previous set. Only when the machine allows user management, as its
+  // "user-management" capability says. The daemon records which users it
+  // created this way; only those are managed.
   //
-  // Fails with:
-  //   - PERMISSION_DENIED and reason USER_MANAGEMENT_DISABLED;
-  //   - ALREADY_EXISTS and reason USER_ALREADY_EXISTS;
+  // For each user of the request the daemon:
+  //   - creates the user with a home directory (useradd(8)) when there is
+  //     none of that name. It sets no password: the password field stays
+  //     locked, then and after every later change;
+  //   - sets the full name of the GECOS field to display_name;
+  //   - lets the user become root through sudo(8) when admin is set, and
+  //     only then. A person on a viewer approves the elevation
+  //     (leaflow.virtualdesktop.privilege.v1); no password is asked;
+  //   - when disabled is set, expires the account (shadow(5)), so that PAM
+  //     refuses it everywhere, and terminates its sessions, which end with
+  //     SESSION_CLOSE_REASON_USER_DISABLED. Enabling the user clears the
+  //     expiry and leaves the password locked.
+  // A managed user missing from the request is disabled the same way. The
+  // daemon never deletes a managed user or its files. A managed user that is
+  // not disabled may have a session, whatever groups the machine allows.
+  //
+  // Users the daemon could not set up are listed in the response, each with
+  // one of:
+  //   - ALREADY_EXISTS and reason USER_ALREADY_EXISTS for a user of that
+  //     name the daemon did not create;
   //   - INVALID_ARGUMENT and reason INVALID_USERNAME for a name useradd(8)
   //     refuses;
-  //   - PERMISSION_DENIED and reason GROUP_NOT_ALLOWED for a group that
-  //     grants root, such as sudo or wheel, or one the machine does not
-  //     allow.
-  rpc CreateUser(CreateUserRequest) returns (CreateUserResponse);
-  // Deletes a Linux user that CreateUser created (userdel(8)).
+  //   - INTERNAL and reason USER_SETUP_FAILED when a command failed.
+  // The other users took effect. The daemon then reports the machine with
+  // ReportMachineStatus.
   //
-  // Fails with:
-  //   - PERMISSION_DENIED and reason USER_MANAGEMENT_DISABLED;
-  //   - NOT_FOUND and reason USER_NOT_FOUND;
-  //   - PERMISSION_DENIED and reason USER_NOT_ALLOWED for root, a system
-  //     user or one CreateUser did not create;
-  //   - FAILED_PRECONDITION and reason SESSION_ACTIVE while the user has a
-  //     session.
-  rpc DeleteUser(DeleteUserRequest) returns (DeleteUserResponse);
+  // Fails with PERMISSION_DENIED and reason USER_MANAGEMENT_DISABLED, and
+  // then changes nothing.
+  rpc SetManagedUsers(SetManagedUsersRequest) returns (SetManagedUsersResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 // Enrolls machines and takes their reports. Served by the service on daemon
@@ -200,6 +222,8 @@ enum SessionCloseReason {
   SESSION_CLOSE_REASON_HELPER_LOST = 8;
   // Opening failed and was undone.
   SESSION_CLOSE_REASON_OPEN_FAILED = 9;
+  // SetManagedUsers disabled the user.
+  SESSION_CLOSE_REASON_USER_DISABLED = 10;
 }
 
 // Timeouts and limits of a session, which the daemon enforces even while the
@@ -308,36 +332,44 @@ message User {
   // The daemon would open a session for the user: not root, not a system
   // user, and in an allowed group.
   bool session_allowed = 9;
+  // The daemon created the user for SetManagedUsers.
+  bool managed = 10;
+  // The account is expired (shadow(5)) and cannot log in, such as a managed
+  // user that is disabled.
+  bool disabled = 11;
 }
 
-// The request of CreateUser.
-message CreateUserRequest {
+// A Linux user the platform manages.
+message ManagedUser {
   // The login name.
   string username = 1;
-  // The full name for the GECOS field.
+  // The full name for the GECOS field, plain text.
   string display_name = 2;
-  // Supplementary groups.
-  repeated string groups = 3;
-  // Creates the home directory.
-  bool create_home = 4;
+  // The user may become root through sudo(8).
+  bool admin = 3;
+  // The account is expired and its sessions are terminated.
+  bool disabled = 4;
 }
 
-// The response of CreateUser.
-message CreateUserResponse {
-  // The user as created.
-  User user = 1;
+// The request of SetManagedUsers.
+message SetManagedUsersRequest {
+  // Every managed user of the machine, at most 1000.
+  repeated ManagedUser users = 1;
 }
 
-// The request of DeleteUser.
-message DeleteUserRequest {
-  // The login name.
+// The response of SetManagedUsers.
+message SetManagedUsersResponse {
+  // The users that did not take effect.
+  repeated ManagedUserFailure failures = 1;
+}
+
+// A managed user the daemon could not set up.
+message ManagedUserFailure {
+  // ManagedUser.username.
   string username = 1;
-  // Also removes the home directory and the mail spool.
-  bool remove_home = 2;
+  // Why, with a google.rpc.ErrorInfo.
+  google.rpc.Status status = 2;
 }
-
-// The response of DeleteUser.
-message DeleteUserResponse {}
 
 // The request of EnrollMachine.
 message EnrollMachineRequest {

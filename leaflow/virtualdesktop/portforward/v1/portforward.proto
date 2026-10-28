@@ -5,7 +5,7 @@ package leaflow.virtualdesktop.portforward.v1;
 import "google/protobuf/duration.proto";
 import "google/rpc/status.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/portforward/v1;portforwardv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/portforward/v1;portforwardv1";
 
 // TCP and UDP port forwarding between the viewer's machine and the session's
 // (RFC 4254 §7). A forward listens on one side and connects to a fixed

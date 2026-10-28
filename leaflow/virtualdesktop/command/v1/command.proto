@@ -5,7 +5,7 @@ package leaflow.virtualdesktop.command.v1;
 import "google/protobuf/duration.proto";
 import "google/rpc/status.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/command/v1;commandv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/command/v1;commandv1";
 
 // Programs run without a terminal as the session's user, never as root (RFC
 // 4254 §6.5 "exec", with an argument vector instead of a command line).

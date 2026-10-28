@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.gamepad.v1;
 
 import "google/rpc/status.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/gamepad/v1;gamepadv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/gamepad/v1;gamepadv1";
 
 // The viewer's gamepads as input devices of the session's user. Names follow
 // the W3C Gamepad API.

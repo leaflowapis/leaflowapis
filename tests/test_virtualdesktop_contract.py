@@ -106,6 +106,9 @@ class VirtualDesktopContract(unittest.TestCase):
                 self.assertEqual(match.group(1), f"{PREFIX}{package_of(path)}.v1")
 
     def test_go_package_matches_directory(self) -> None:
+        # leaflow-go has one Go module per service. The protocol packages live
+        # in the virtualdesktop module, next to the generated REST package
+        # virtualdesktop/v1/server, so that one version covers both.
         for path in proto_files():
             with self.subTest(path=str(path.relative_to(ROOT))):
                 match = GO_PACKAGE.search(path.read_text(encoding="utf-8"))
@@ -113,7 +116,7 @@ class VirtualDesktopContract(unittest.TestCase):
                 name = package_of(path)
                 self.assertEqual(
                     match.group(1),
-                    f"github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/{name}/v1;{name}v1",
+                    f"github.com/leaflowapis/leaflow-go/virtualdesktop/{name}/v1;{name}v1",
                 )
 
     def test_imports_follow_the_layers(self) -> None:

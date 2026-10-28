@@ -6,7 +6,7 @@ import "google/protobuf/duration.proto";
 import "google/rpc/status.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/input/v1;inputv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/input/v1;inputv1";
 
 // Keyboard, pointer and text input.
 //

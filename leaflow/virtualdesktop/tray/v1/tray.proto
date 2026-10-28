@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.tray.v1;
 
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/tray/v1;trayv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/tray/v1;trayv1";
 
 // The icons applications show in the system tray, and their menus. The
 // session hosts both tray protocols and presents them alike: items of the

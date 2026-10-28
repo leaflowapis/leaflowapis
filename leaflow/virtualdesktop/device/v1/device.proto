@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.device.v1;
 
 import "google/protobuf/duration.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/device/v1;devicev1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/device/v1;devicev1";
 
 // Devices of the viewer that feed the session: its microphone, camera and
 // gamepads. The session presents them to its applications as virtual devices

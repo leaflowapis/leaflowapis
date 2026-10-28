@@ -1,0 +1,1499 @@
+openapi: 3.2.1
+info:
+  title: Leaflow VirtualDesktop API
+  version: 1.0.0
+  description: |-
+    Remote desktops on machines that run the Leaflow VirtualDesktop Agent: adding machines,
+    mapping project members to Linux users, opening and closing desktop sessions, and admitting
+    viewers to them.
+
+    ## What this API sees
+
+    This API coordinates. It admits viewers to sessions and passes the signaling of their
+    connections, but everything a session shows or receives — the screen, input, the clipboard,
+    files, terminals, printing and privilege approvals — travels end to end between the viewer and
+    the session, encrypted with keys that never leave them. The platform sees which machine,
+    which session and who is connected, and nothing of what happens inside.
+
+    ## Authentication
+
+    Every request carries a scoped token; see the `bearerAuth` security scheme.
+
+    **Neither the path nor the headers carry a `project_id`**: the current project is determined by
+    the token.
+
+    ## Adding a machine
+
+    1. Install the Agent and run `leaflow-virtualdesktop-agent daemon enroll` on the machine. The
+       command carries no secret. The machine shows a pairing code such as `7K2QM-9XWTD`.
+    2. Find the request with `GET /api/v1/enrollments:find?pairing_code=…`. Compare its `hostname`
+       and `source_address` with the machine in front of you: the pairing code is not a secret,
+       and anyone can request enrollment.
+    3. Approve it with `POST /api/v1/enrollments/{enrollmentId}:approve`. The machine joins the
+       current project within its next polling interval.
+
+    ## Trusting a machine's key
+
+    Each machine has an Ed25519 key that it generates itself and that never leaves it. Viewers
+    verify that key end to end before they exchange any data with a session, so a client must
+    decide which key belongs to a machine without relying on any party in between:
+
+    - When approving an enrollment, recompute the pairing code from `public_key` and compare it
+      with the code the machine shows. The code is derived as documented for
+      `EnrollMachineResponse.pairing_code` in `leaflow/virtualdesktop/machine/v1/machine.proto`.
+      Approve only when they match, and remember the key for the machine.
+    - On any other client, remember the key the first time it connects to the machine, and
+      refuse to continue whenever the machine later proves a different key. The fingerprint can
+      be compared with the one the Agent prints on the machine.
+
+    A machine that is reinstalled enrolls again as a new machine with a new key.
+
+    ## Linux users
+
+    Project members reach a machine as Linux users. A machine that allows user management, as
+    its `user-management` capability says, can have **managed users**: Linux users created for a
+    member, without a password, with or without sudo. Any machine can also map a member to one of
+    its existing Linux users, which are left as they are.
+
+    Disabling a user, unassigning its member, or the member leaving the project ends the user's
+    sessions and stops new ones; a managed user is also locked on the machine. **No Linux user
+    and no file is ever deleted.** Elevation through sudo is approved by a person on a viewer,
+    never by a password.
+
+    ## Viewing a session
+
+    1. Register the client's device key once: `POST /api/v1/client-challenges`, sign the
+       challenge, then `POST /api/v1/clients`. The private key must never leave the client; in a
+       browser, use a non-extractable WebCrypto key.
+    2. For each connection, create a ticket with
+       `POST /api/v1/sessions/{sessionId}/viewer-tickets`. It is valid for 60 seconds and once.
+    3. Open a WebSocket to the returned `url` with the subprotocol
+       `leaflow.virtualdesktop.control.v1` and follow `leaflow/virtualdesktop/control/v1/control.proto`.
+       The ticket travels inside the protocol and never in a URL.
+
+    What a viewer may do in a session is decided when its ticket is created, from the caller's
+    permissions, and does not change during the connection.
+servers:
+  - url: https://virtualdesktop.leaflow.cloud
+    description: Machines, users, sessions and viewers
+security:
+  - bearerAuth: []
+tags:
+  - name: Machine
+  - name: Enrollment
+  - name: MachineUser
+  - name: Session
+  - name: Viewer
+  - name: Client
+paths:
+  /api/v1/machines:
+    get:
+      summary: List machines
+      description: Returns the machines of the current project, newest first.
+      operationId: list-machines
+      tags:
+        - Machine
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: keyword
+          in: query
+          description: Match the machine name or host name, case-insensitively
+          explode: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}:
+    get:
+      summary: Get a machine
+      operationId: get-machine
+      tags:
+        - Machine
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      summary: Update a machine
+      description: Changes the machine's name. Requires `virtualdesktop:machines.manage`.
+      operationId: update-machine
+      tags:
+        - Machine
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMachineRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Remove a machine
+      description: |-
+        Removes the machine from the project. Every viewer of its sessions is disconnected at once
+        and the Agent is refused from then on; to use the machine again, enroll it again. Sessions
+        still open on the machine can no longer be reached and end according to their own
+        timeouts. Nothing on the machine is deleted.
+
+        Requires `virtualdesktop:machines.manage`.
+      operationId: delete-machine
+      tags:
+        - Machine
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      responses:
+        "204":
+          description: Removed
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/enrollments:find:
+    get:
+      summary: Find an enrollment request by its pairing code
+      description: |-
+        Returns the pending enrollment request whose pairing code matches, or no enrollment when
+        none does. Mistyped codes are expected and are not an error. Letters are matched
+        case-insensitively, `I` and `L` are read as `1`, `O` as `0`, and spaces and hyphens are
+        ignored.
+
+        Only requests that are still pending are found. A request is pending while its machine
+        keeps polling; one it stops polling expires after a few hours.
+
+        Requires `virtualdesktop:machines.manage`.
+      operationId: find-enrollment-by-pairing-code
+      tags:
+        - Enrollment
+      parameters:
+        - name: pairing_code
+          in: query
+          required: true
+          description: The code the machine shows, such as `7K2QM-9XWTD`
+          explode: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 32
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindEnrollmentResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/enrollments/{enrollmentId}:approve:
+    post:
+      summary: Approve an enrollment request
+      description: |-
+        Adds the machine to the current project under the given name and returns it. The Agent
+        learns the decision the next time it polls.
+
+        A request that is no longer pending is rejected with `ENROLLMENT_NOT_PENDING`.
+
+        Requires `virtualdesktop:machines.manage`.
+      operationId: approve-enrollment
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/EnrollmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveEnrollmentRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/enrollments/{enrollmentId}:deny:
+    post:
+      summary: Deny an enrollment request
+      description: |-
+        Refuses the request. The decision is final for the machine's key: the Agent stops
+        polling and reports that it was denied.
+
+        A request that is no longer pending is rejected with `ENROLLMENT_NOT_PENDING`.
+
+        Requires `virtualdesktop:machines.manage`.
+      operationId: deny-enrollment
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/EnrollmentId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/users:
+    get:
+      summary: List the Linux users of a machine
+      description: |-
+        Returns the Linux users the machine reported, together with the managed users created
+        for project members, ordered by user name.
+      operationId: list-machine-users
+      tags:
+        - MachineUser
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineUserList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Create a managed Linux user for a project member
+      description: |-
+        Creates a Linux user on the machine for a member of the project. The user has no password
+        and becomes root through sudo only when `admin` is true. The machine creates it the next
+        time it is connected; until then `sync_status` is `pending`.
+
+        Fails with:
+        - `USER_MANAGEMENT_UNAVAILABLE` when the machine does not allow user management;
+        - `USER_NOT_PROJECT_MEMBER` when `user_id` is not a member of the project;
+        - `MACHINE_USERNAME_TAKEN` when the machine already has a Linux user of that name;
+        - `MACHINE_USER_ALREADY_ASSIGNED` when the member already has a Linux user on the machine.
+
+        Requires `virtualdesktop:machine_users.manage`.
+      operationId: create-machine-user
+      tags:
+        - MachineUser
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMachineUserRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineUserResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/users/{machineUserId}:
+    patch:
+      summary: Update a Linux user of a machine
+      description: |-
+        Changes only the fields present in the request.
+
+        - `user_id` maps a project member to an existing Linux user, or unmaps it with `null`. A
+          managed user stays with the member it was created for; disable it instead.
+        - `admin` grants or withdraws sudo. Only managed users can be changed; for other users
+          `privileged` reports what the machine allows.
+        - `disabled` disables or enables the user. Disabling ends the user's sessions and refuses
+          new ones; a managed user is also locked on the machine.
+
+        Fails with:
+        - `USER_NOT_PROJECT_MEMBER` when `user_id` is not a member of the project;
+        - `MACHINE_USER_ALREADY_ASSIGNED` when the member already has another Linux user on the
+          machine;
+        - `MANAGED_USER_ASSIGNED` when `user_id` would move a managed user to another member;
+        - `MACHINE_USER_NOT_MANAGED` when `admin` is set on a user that is not managed.
+
+        Requires `virtualdesktop:machine_users.manage`.
+      operationId: update-machine-user
+      tags:
+        - MachineUser
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: "#/components/parameters/MachineUserId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMachineUserRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineUserResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions:
+    get:
+      summary: List sessions
+      description: |-
+        Returns the sessions of the current project's machines, newest first. Closed sessions are
+        omitted unless `include_closed` is true.
+      operationId: list-sessions
+      tags:
+        - Session
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: machine_id
+          in: query
+          description: Return only the sessions of this machine
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          description: Return only the sessions of this member
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: include_closed
+          in: query
+          description: Include closed sessions; defaults to false
+          explode: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Open a session
+      description: |-
+        Opens a desktop session for the caller on a machine, as the caller's Linux user there, and
+        returns once it is ready.
+
+        Fails with:
+        - `MACHINE_USER_REQUIRED` when the caller has no Linux user on the machine;
+        - `MACHINE_USER_DISABLED` when that user is disabled;
+        - `MACHINE_OFFLINE` when the machine is not connected;
+        - `USER_HAS_SESSION` when the Linux user already has a session, which `metadata.sessionId`
+          names; connect to it instead;
+        - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED`, `PAM_PERMISSION_DENIED` or
+          `SESSION_CONFLICT` when the machine refuses the Linux user; `PAM_PERMISSION_DENIED`
+          carries the machine's message in `metadata.pamMessage`;
+        - `DISPLAY_UNAVAILABLE` or `SESSION_START_FAILED` when the machine could not start it;
+        - `MACHINE_TIMEOUT` when the machine did not answer in time. The session may still open;
+          list the sessions before trying again.
+      operationId: create-session
+      tags:
+        - Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}:
+    get:
+      summary: Get a session
+      operationId: get-session
+      tags:
+        - Session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}:close:
+    post:
+      summary: Close a session
+      description: |-
+        Ends the session in order: its applications are asked to exit and get a grace period
+        before the session is terminated. Returns once the session is closed. Closing a closed
+        session succeeds.
+
+        The owner may close their own session; closing another member's requires
+        `virtualdesktop:sessions.manage`. Fails with `MACHINE_OFFLINE` or `MACHINE_TIMEOUT` as
+        for opening a session.
+      operationId: close-session
+      tags:
+        - Session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}:terminate:
+    post:
+      summary: Terminate a session
+      description: |-
+        Ends the session at once, killing every process in it. Returns once the session is
+        closed. Terminating a closed session succeeds.
+
+        The owner may terminate their own session; terminating another member's requires
+        `virtualdesktop:sessions.manage`. Fails with `MACHINE_OFFLINE` or `MACHINE_TIMEOUT` as
+        for opening a session.
+      operationId: terminate-session
+      tags:
+        - Session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/viewers:
+    get:
+      summary: List the viewers of a session
+      description: Returns the viewers connected to the session, in the order they connected.
+      operationId: list-session-viewers
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/viewers/{connectionId}:
+    delete:
+      summary: Disconnect a viewer
+      description: |-
+        Disconnects the viewer from the session; the session goes on. The viewer can connect
+        again only with a new ticket.
+
+        The owner of the session may disconnect its viewers; otherwise this requires
+        `virtualdesktop:sessions.manage`.
+      operationId: delete-viewer
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "204":
+          description: Disconnected
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/viewer-tickets:
+    post:
+      summary: Create a viewer ticket
+      description: |-
+        Issues a single-use ticket that admits one viewer connection of the given client to the
+        session. It is valid for 60 seconds.
+
+        The owner of a session may operate it. Viewing another member's session requires
+        `virtualdesktop:sessions.view`, which admits watching only, or
+        `virtualdesktop:sessions.control`, which also admits operating it. Each further capability
+        of the session — file transfer, the clipboard, terminals and commands, port forwarding,
+        devices and audio, printing, SSH agent forwarding, approving privilege requests and
+        reading logs — is granted only with its permission; a viewer that may only watch gets
+        none of them.
+
+        A request made by a browser binds the ticket to its `Origin`, which the WebSocket
+        connection must carry too.
+
+        Fails with:
+        - `SESSION_CLOSED` when the session has ended;
+        - `SESSION_ACCESS_DENIED` when the caller may not view the session;
+        - `CLIENT_NOT_FOUND` when the client is not one of the caller's registered clients.
+      operationId: create-viewer-ticket
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateViewerTicketRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerTicketResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/client-challenges:
+    post:
+      summary: Create a client challenge
+      description: |-
+        Returns a random challenge for registering a device key. It is valid for 5 minutes and
+        once, and only for the caller.
+      operationId: create-client-challenge
+      tags:
+        - Client
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientChallengeResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/clients:
+    get:
+      summary: List clients
+      description: |-
+        Returns the caller's registered clients, newest first. Clients belong to the caller and
+        are the same in every project.
+      operationId: list-clients
+      tags:
+        - Client
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Register a client
+      description: |-
+        Registers a device key for the caller. `signature` proves that the client holds the
+        private key: it is the Ed25519 signature (RFC 8032) by the key over the ASCII bytes
+        `leaflow.virtualdesktop.v1.ClientChallenge`, one zero byte and the challenge's 32 bytes.
+
+        A client that acts on its own, such as an assistant, must be registered as `automation`:
+        sessions apply their automation rules to it.
+
+        Fails with:
+        - `CLIENT_CHALLENGE_INVALID` when the challenge is unknown, used, expired or issued to
+          someone else;
+        - `CLIENT_SIGNATURE_INVALID` when the signature does not verify;
+        - `CLIENT_KEY_REGISTERED` when the key is already registered.
+      operationId: create-client
+      tags:
+        - Client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/clients/{clientId}:
+    delete:
+      summary: Revoke a client
+      description: |-
+        Revokes one of the caller's clients. Its tickets are refused from then on and its viewers
+        are disconnected at once. The key cannot be registered again.
+      operationId: delete-client
+      tags:
+        - Client
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Revoked
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  parameters:
+    MachineId:
+      name: machineId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EnrollmentId:
+      name: enrollmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MachineUserId:
+      name: machineUserId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 40
+        pattern: "^[a-z0-9-]+$"
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    NamedIdentity:
+      $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
+    PublicKey:
+      description: An Ed25519 public key (RFC 8032), 32 bytes in standard Base64 (RFC 4648)
+      type: string
+      pattern: "^[A-Za-z0-9+/]{43}=$"
+    OperatingSystem:
+      description: The operating system, from the machine's /etc/os-release
+      type: object
+      required:
+        - id
+        - version_id
+        - pretty_name
+      properties:
+        id:
+          description: ID=, such as `debian`
+          type: string
+        version_id:
+          description: VERSION_ID=, such as `13`
+          type: string
+        pretty_name:
+          description: PRETTY_NAME=, such as `Debian GNU/Linux 13 (trixie)`
+          type: string
+      additionalProperties: false
+    MachineResource:
+      type: object
+      required:
+        - id
+        - name
+        - hostname
+        - public_key
+        - online
+        - operating_system
+        - kernel_release
+        - architecture
+        - capabilities
+        - session_desktops
+        - agent_version
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        hostname:
+          description: The host name the machine last reported
+          type: string
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
+        online:
+          description: The machine's Agent is connected
+          type: boolean
+        operating_system:
+          description: Null until the machine has reported once
+          oneOf:
+            - $ref: "#/components/schemas/OperatingSystem"
+            - type: "null"
+        kernel_release:
+          description: Such as `6.12.43+deb13-amd64`; empty until the machine has reported once
+          type: string
+        architecture:
+          description: Such as `x86_64`; empty until the machine has reported once
+          type: string
+        capabilities:
+          description: |-
+            What the machine can do, as dotted names such as `x11.xvfb`, `audio.pipewire` and
+            `user-management`
+          type: array
+          items:
+            type: string
+        session_desktops:
+          description: The desktop environments a `desktop` session can start
+          type: array
+          items:
+            type: string
+        agent_version:
+          description: The Agent software the machine last connected with
+          type: string
+        created_at:
+          description: When the machine was added to the project
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    MachineList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MachineResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    UpdateMachineRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      additionalProperties: false
+    EnrollmentState:
+      description: |-
+        `pending` waits for a decision. `approved` added the machine to a project. `denied` is
+        final for the machine's key.
+      type: string
+      enum:
+        - pending
+        - approved
+        - denied
+    EnrollmentResource:
+      type: object
+      required:
+        - id
+        - pairing_code
+        - public_key
+        - hostname
+        - source_address
+        - state
+        - created_at
+        - last_seen_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        pairing_code:
+          description: The code the machine shows, `XXXXX-XXXXX`
+          type: string
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
+        hostname:
+          description: The host name the machine reported; chosen by whoever runs the machine
+          type: string
+        source_address:
+          description: The IP address the request came from
+          type: string
+        state:
+          $ref: "#/components/schemas/EnrollmentState"
+        machine_id:
+          description: The machine, once the request is approved
+          type:
+            - string
+            - "null"
+          format: uuid
+        created_at:
+          description: When the machine first asked to enroll
+          type: string
+          format: date-time
+        last_seen_at:
+          description: When the machine last polled
+          type: string
+          format: date-time
+      additionalProperties: false
+    FindEnrollmentResponse:
+      description: "`enrollment` is the pending request with that pairing code, absent when there is none."
+      type: object
+      properties:
+        enrollment:
+          $ref: "#/components/schemas/EnrollmentResource"
+      additionalProperties: false
+    ApproveEnrollmentRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          description: The name of the machine in the project
+          type: string
+          minLength: 1
+          maxLength: 128
+      additionalProperties: false
+    SyncStatus:
+      description: |-
+        Whether the machine has applied the user as configured. `synced` it has; `pending` it has
+        not yet, such as while it is offline; `failed` it could not, and `failure_reason` says why.
+        Users that are not managed are always `synced`.
+      type: string
+      enum:
+        - synced
+        - pending
+        - failed
+    MachineUserResource:
+      type: object
+      required:
+        - id
+        - machine_id
+        - username
+        - uid
+        - display_name
+        - managed
+        - admin
+        - privileged
+        - session_allowed
+        - user
+        - disabled_at
+        - sync_status
+        - failure_reason
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        machine_id:
+          type: string
+          format: uuid
+        username:
+          description: The Linux login name
+          type: string
+        uid:
+          description: The Linux user id; null until the machine has created the user
+          type:
+            - integer
+            - "null"
+          format: int64
+        display_name:
+          description: The full name on the machine
+          type: string
+        managed:
+          description: The user was created for a project member and is managed by the platform
+          type: boolean
+        admin:
+          description: Managed users only, null otherwise. The user may become root through sudo
+          type:
+            - boolean
+            - "null"
+        privileged:
+          description: As the machine reports it, the user can become root
+          type: boolean
+        session_allowed:
+          description: As the machine reports it, the machine would open a session for the user
+          type: boolean
+        user:
+          description: The project member mapped to this Linux user; null when none
+          oneOf:
+            - $ref: "#/components/schemas/NamedIdentity"
+            - type: "null"
+        disabled_at:
+          description: When the user was disabled; null while enabled
+          type:
+            - string
+            - "null"
+          format: date-time
+        sync_status:
+          $ref: "#/components/schemas/SyncStatus"
+        failure_reason:
+          description: |-
+            Why the machine could not apply the user, such as `USER_ALREADY_EXISTS`,
+            `INVALID_USERNAME` or `USER_SETUP_FAILED`; null unless `sync_status` is `failed`
+          type:
+            - string
+            - "null"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    MachineUserList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MachineUserResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateMachineUserRequest:
+      type: object
+      required:
+        - username
+        - user_id
+      properties:
+        username:
+          description: The Linux login name
+          type: string
+          minLength: 1
+          maxLength: 32
+          pattern: "^[a-z_][a-z0-9_-]*$"
+        user_id:
+          description: The project member the user is for
+          type: string
+          format: uuid
+        admin:
+          description: The user may become root through sudo
+          type: boolean
+          default: false
+      additionalProperties: false
+    UpdateMachineUserRequest:
+      type: object
+      properties:
+        user_id:
+          description: The project member mapped to the user, or null to unmap
+          type:
+            - string
+            - "null"
+          format: uuid
+        admin:
+          description: The user may become root through sudo; managed users only
+          type: boolean
+        disabled:
+          description: Disables or enables the user
+          type: boolean
+      additionalProperties: false
+    SessionMode:
+      description: |-
+        `desktop` runs a desktop environment and shows it as one canvas. `seamless` shows every
+        application window on its own.
+      type: string
+      enum:
+        - desktop
+        - seamless
+    SessionState:
+      description: |-
+        `opening` starts; `online` is logged in but not in the foreground; `active` runs;
+        `closing` is ending; `closed` has ended.
+      type: string
+      enum:
+        - opening
+        - online
+        - active
+        - closing
+        - closed
+    SessionCloseReason:
+      description: |-
+        Why a session ended. `close_requested` and `terminate_requested` follow a request;
+        `logout` the user logged out; `disconnected_timeout`, `no_client_timeout` and
+        `max_lifetime` a time limit passed; `display_exit` and `helper_lost` the session failed;
+        `open_failed` it never opened; `user_disabled` its Linux user was disabled;
+        `machine_restarted` the machine restarted; `unknown` the machine no longer reports it.
+      type: string
+      enum:
+        - close_requested
+        - terminate_requested
+        - logout
+        - disconnected_timeout
+        - no_client_timeout
+        - max_lifetime
+        - display_exit
+        - helper_lost
+        - open_failed
+        - user_disabled
+        - machine_restarted
+        - unknown
+    SessionResource:
+      type: object
+      required:
+        - id
+        - machine_id
+        - user
+        - username
+        - mode
+        - state
+        - display
+        - process_running
+        - last_input_at
+        - close_reason
+        - created_at
+        - closed_at
+      properties:
+        id:
+          type: string
+        machine_id:
+          type: string
+          format: uuid
+        user:
+          $ref: "#/components/schemas/NamedIdentity"
+        username:
+          description: The Linux user the session runs as; `user` is the project member who owns the session
+          type: string
+        mode:
+          $ref: "#/components/schemas/SessionMode"
+        state:
+          $ref: "#/components/schemas/SessionState"
+        display:
+          description: The X display, such as `:100`
+          type: string
+        process_running:
+          description: |-
+            The session can admit viewers. False while its process restarts; viewers are then
+            asked to connect again shortly.
+          type: boolean
+        last_input_at:
+          description: The last input of a person in the session
+          type:
+            - string
+            - "null"
+          format: date-time
+        close_reason:
+          description: Null until the session is closed
+          anyOf:
+            - $ref: "#/components/schemas/SessionCloseReason"
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+        closed_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+      additionalProperties: false
+    SessionList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateSessionRequest:
+      type: object
+      required:
+        - machine_id
+      properties:
+        machine_id:
+          type: string
+          format: uuid
+        mode:
+          $ref: "#/components/schemas/SessionMode"
+        width:
+          description: The first width of the canvas, normally the viewer's; the machine's default when omitted
+          type: integer
+          format: int64
+          minimum: 320
+          maximum: 16384
+        height:
+          description: The first height of the canvas; given together with `width`
+          type: integer
+          format: int64
+          minimum: 200
+          maximum: 16384
+        session_desktop:
+          description: For `desktop` sessions, one of the machine's `session_desktops`; the machine's default when omitted
+          type: string
+          maxLength: 128
+      additionalProperties: false
+    ViewerType:
+      description: |-
+        `human` is a person on a browser or the desktop app. `automation` is a client that acts on
+        its own, to which sessions apply their automation rules.
+      type: string
+      enum:
+        - human
+        - automation
+    ClientSummary:
+      type: object
+      required:
+        - id
+        - name
+        - type
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/ViewerType"
+      additionalProperties: false
+    ViewerResource:
+      type: object
+      required:
+        - connection_id
+        - user
+        - client
+        - read_only
+        - policies
+        - remote_address
+        - created_at
+      properties:
+        connection_id:
+          description: The viewer's connection
+          type: integer
+          format: int64
+        user:
+          $ref: "#/components/schemas/NamedIdentity"
+        client:
+          $ref: "#/components/schemas/ClientSummary"
+        read_only:
+          description: The viewer may only watch
+          type: boolean
+        policies:
+          description: |-
+            The capabilities granted to the viewer, as the full names of their policy messages,
+            such as `leaflow.virtualdesktop.filetransfer.v1.FileTransferPolicy`
+          type: array
+          items:
+            type: string
+        remote_address:
+          description: The IP address the viewer connected from
+          type: string
+        created_at:
+          description: When the viewer connected
+          type: string
+          format: date-time
+      additionalProperties: false
+    ViewerList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ViewerResource"
+      additionalProperties: false
+    CreateViewerTicketRequest:
+      type: object
+      required:
+        - client_id
+      properties:
+        client_id:
+          description: The caller's registered client that will connect
+          type: string
+          format: uuid
+      additionalProperties: false
+    ViewerTicketResource:
+      type: object
+      required:
+        - ticket
+        - url
+        - expires_at
+      properties:
+        ticket:
+          description: The ticket to send in `ViewerCredential.ticket`. Never put it in a URL.
+          type: string
+        url:
+          description: The WebSocket URL of the control connection
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ClientChallengeResource:
+      type: object
+      required:
+        - id
+        - challenge
+        - expires_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        challenge:
+          description: 32 random bytes in standard Base64
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ClientResource:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - public_key
+        - created_at
+        - last_used_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/ViewerType"
+        name:
+          type: string
+          maxLength: 128
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          description: When a viewer of the client last connected; null if never
+          type:
+            - string
+            - "null"
+          format: date-time
+      additionalProperties: false
+    ClientList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateClientRequest:
+      type: object
+      required:
+        - type
+        - name
+        - public_key
+        - challenge_id
+        - signature
+      properties:
+        type:
+          $ref: "#/components/schemas/ViewerType"
+        name:
+          description: A name the caller recognizes, such as the browser and computer
+          type: string
+          minLength: 1
+          maxLength: 128
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
+        challenge_id:
+          type: string
+          format: uuid
+        signature:
+          description: The Ed25519 signature, 64 bytes in standard Base64
+          type: string
+          pattern: "^[A-Za-z0-9+/]{86}==$"
+      additionalProperties: false

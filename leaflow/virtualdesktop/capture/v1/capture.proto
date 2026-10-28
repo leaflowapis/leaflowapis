@@ -6,7 +6,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/capture/v1;capturev1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/capture/v1;capturev1";
 
 // Still images of the session for clients that look at it, such as
 // automation clients.

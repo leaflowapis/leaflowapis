@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.window.v1;
 
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/window/v1;windowv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/window/v1;windowv1";
 
 // The windows of the session: what they are, where they are, their stacking
 // order and focus, and the operations a viewer asks for. Names and semantics

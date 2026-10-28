@@ -11,7 +11,7 @@ import "leaflow/virtualdesktop/notification/v1/notification.proto";
 import "leaflow/virtualdesktop/tray/v1/tray.proto";
 import "leaflow/virtualdesktop/window/v1/window.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/change/v1;changev1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/change/v1;changev1";
 
 // What changed in the session, for clients that act on it and need to learn
 // what each action did. The session observes its windows through X11 events,

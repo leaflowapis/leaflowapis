@@ -6,7 +6,7 @@ import "google/protobuf/duration.proto";
 import "google/rpc/status.proto";
 import "leaflow/virtualdesktop/device/v1/device.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/audio/v1;audiov1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/audio/v1;audiov1";
 
 // Sound between the session and the viewer, as codec packets that viewers
 // encode and decode with WebCodecs: the session's sound played by the viewer

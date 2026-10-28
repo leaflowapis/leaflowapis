@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.session.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/session/v1;sessionv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/session/v1;sessionv1";
 
 // The session layer between one viewer and the session it connected to: the
 // handshake, the viewers sharing the session, who drives it, liveness and the

@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.accessibility.v1;
 
 import "leaflow/virtualdesktop/display/v1/display.proto";
 
-option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/accessibility/v1;accessibilityv1";
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/accessibility/v1;accessibilityv1";
 
 // The accessibility trees the applications of the session expose, and the
 // actions they offer through them.
