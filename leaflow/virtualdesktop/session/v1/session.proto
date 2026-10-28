@@ -11,9 +11,12 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/se
 // end of the connection. A viewer is anything that connects through a
 // PeerConnection, such as a browser, the desktop app or an automation client.
 //
-// Channel type "leaflow.virtualdesktop.session.v1", lane "metadata". The
-// viewer opens it first, right after the transport Hello, and opens no other
-// channel before ServerHello arrives. One per connection.
+// Channel types:
+//   - "leaflow.virtualdesktop.session.v1", lane "metadata". The viewer opens
+//     it first, right after the transport Hello, and opens no other channel
+//     before ServerHello arrives. One per connection.
+//   - "leaflow.virtualdesktop.session.v1.SessionService", lane
+//     "interactive": opened by viewers that are not read-only, for handoffs.
 //
 // Authorization. The session takes who a viewer is and what it may do (its
 // user, client, viewer type, whether it is read-only and the policies of the
@@ -46,6 +49,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/se
 // or changes windows, or acts on applications through accessibility, the
 // tray, notifications or drops needs the input lease, and the session
 // refuses it, before doing anything, with:
+//   - PERMISSION_DENIED and reason READ_ONLY for a read-only viewer;
 //   - UNAVAILABLE and reason HUMAN_IN_CONTROL, with a google.rpc.RetryInfo,
 //     while a person holds the lease, a handoff is pending (metadata
 //     "handoffId") or a privilege request waits for a person (metadata
@@ -54,8 +58,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/se
 //     password field, which only people may type into (metadata "windowId");
 //   - FAILED_PRECONDITION and reason BLOCKED_BY_MODAL for a window a modal
 //     window blocks (metadata "windowId" and "modalWindowId");
-//   - UNAVAILABLE and reason INPUT_BUSY while another such call of the
-//     session is still running.
+//   - UNAVAILABLE and reason INPUT_BUSY, with a google.rpc.RetryInfo, while
+//     another such call of the session is still running or another
+//     automation client holds the lease.
 // Failed calls tell whether they had an effect (rpc ExecutionState). For
 // automation clients the session also blacks out password fields in
 // captures and withholds their text.
@@ -289,11 +294,13 @@ enum CloseReason {
 
 // Hands the session over to people.
 service SessionService {
-  // Asks people to operate the session. Automation clients only.
+  // Asks people to operate the session. Automation clients only: people fail
+  // with PERMISSION_DENIED and reason AUTOMATION_ONLY.
   rpc CreateHandoff(CreateHandoffRequest) returns (CreateHandoffResponse);
-  // Ends a handoff. An automation client ends only those it asked for; people
-  // end any, PROTECTED_WINDOW ones before the field goes away included.
-  // Others fail with PERMISSION_DENIED; an unknown one with NOT_FOUND.
+  // Ends a handoff. An automation client ends only those it asked for, others
+  // failing with PERMISSION_DENIED and reason NOT_REQUESTER; people end any,
+  // PROTECTED_WINDOW ones before the field goes away included. An unknown one
+  // fails with NOT_FOUND and reason HANDOFF_NOT_FOUND (metadata "handoffId").
   rpc DeleteHandoff(DeleteHandoffRequest) returns (DeleteHandoffResponse);
 }
 
