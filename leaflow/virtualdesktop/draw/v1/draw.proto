@@ -17,8 +17,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/dr
 //   - "leaflow.virtualdesktop.draw.v1.frame", lane "media": opened by the
 //     session, one per frame. The session sends FrameMessage: one FrameStart,
 //     the frame's WindowDraw messages and one FrameEnd, then closes the
-//     channel; the viewer sends nothing. Its envelopes are not resent after a
-//     migration.
+//     channel; the viewer sends nothing.
 //
 // Frames. frame_id starts at 1 and grows by exactly 1 with every frame of a
 // connection, so the viewer knows the fate of every frame below the newest it
