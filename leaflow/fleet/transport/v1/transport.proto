@@ -92,7 +92,7 @@ message Hello {
   // SHA-256 of the PeerAuthorization bytes signed for this attempt.
   bytes authorization_sha256 = 6;
   // The Ed25519 public key (RFC 8032) that vouches for the sender's DTLS
-  // certificate: the machine key of the Agent, the device key of the viewer.
+  // certificate: the machine key of the Agent, the viewer key of the viewer.
   // The viewer refuses an Agent key other than the one it pinned for the
   // machine; the session refuses a viewer key other than the one in the
   // viewer's authorization.

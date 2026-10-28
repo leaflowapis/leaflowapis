@@ -38,10 +38,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/accessibil
 // its bounds.
 //
 // Changes. PerformAction, SetValue, SetTextSelection, SelectOptions and
-// InvokeMenuItem act on applications and follow the automation rules of the
-// session channel. A call returns once the application accepted the request,
-// with the session revision at which it did; whether it had the intended
-// effect is for the caller to observe, such as through the change package.
+// InvokeMenuItem act on applications and follow the rules for operation calls
+// (leaflow.virtualdesktop.lease.v1). A call returns once the application
+// accepted the request, with the session revision at which it did; whether it
+// had the intended effect is for the caller to observe, such as through the
+// change package.
 
 // Reads and operates the accessibility trees.
 service AccessibilityService {

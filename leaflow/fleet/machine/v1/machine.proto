@@ -3,6 +3,7 @@ syntax = "proto3";
 package leaflow.fleet.machine.v1;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/machine/v1;machinev1";
 
@@ -26,6 +27,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/machine/v1;machinev
 // package is installed or its configuration is edited. Each feature reports
 // its own state through the package that defines it. Nothing is replayed
 // after a reconnect.
+//
+// Events. The daemon records with ReportMachineEvents what the people who
+// manage the machine should see, such as a directory account it does not
+// serve.
 //
 // Features. A machine offers the features of the packages it serves, each
 // named by that package, such as "leaflow.fleet.directory.v1" (logins of the
@@ -53,6 +58,20 @@ service MachineRegistryService {
   // Reports the machine and its features. The latest report replaces the
   // previous one.
   rpc ReportMachineStatus(ReportMachineStatusRequest) returns (ReportMachineStatusResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
+  // Records events the people who manage the machine should see, such as a
+  // directory account the daemon does not serve. The daemon reports a
+  // condition when it begins, not again while it lasts, and never reports
+  // what happens inside sessions. An event whose event_id the service has
+  // recorded is recorded once, so that a call can be repeated after its
+  // answer was lost. The service ignores types it does not know and keeps
+  // events for a limited time.
+  //
+  // Fails with RESOURCE_EXHAUSTED and reason MACHINE_EVENTS_LIMITED when the
+  // machine reports more than the service accepts now; report them again
+  // later.
+  rpc ReportMachineEvents(ReportMachineEventsRequest) returns (ReportMachineEventsResponse) {
     option idempotency_level = IDEMPOTENT;
   }
 }
@@ -146,3 +165,41 @@ message ReportMachineStatusRequest {
 
 // The response of ReportMachineStatus.
 message ReportMachineStatusResponse {}
+
+// The request of ReportMachineEvents.
+message ReportMachineEventsRequest {
+  // The events, oldest first, at most 100.
+  repeated MachineEvent events = 1;
+}
+
+// The response of ReportMachineEvents.
+message ReportMachineEventsResponse {}
+
+// Something that happened on the machine.
+message MachineEvent {
+  // Chosen by the daemon, unique on the machine, such as a UUID; at most 64
+  // bytes.
+  string event_id = 1;
+  // What happened.
+  MachineEventType type = 2;
+  // When it happened, on the machine's clock.
+  google.protobuf.Timestamp occurred_at = 3;
+  // The values of the event, with the keys its type names. At most 16
+  // entries; keys at most 64 bytes, values at most 256 bytes.
+  map<string, string> metadata = 4;
+}
+
+// What happened on a machine.
+enum MachineEventType {
+  MACHINE_EVENT_TYPE_UNSPECIFIED = 0;
+  // A directory account (leaflow.fleet.directory.v1) is not served because a
+  // local account uses its name or its uid, or because its uid is within the
+  // subordinate ids of a local user. Metadata "username", and "conflict":
+  // "name", "uid" or "subordinate".
+  MACHINE_EVENT_TYPE_DIRECTORY_ACCOUNT_CONFLICT = 1;
+  // A directory group is not served because a local group uses its name or
+  // its gid, or because its gid is within the subordinate ids of a local
+  // user. Metadata "groupName", and "conflict": "name", "gid" or
+  // "subordinate".
+  MACHINE_EVENT_TYPE_DIRECTORY_GROUP_CONFLICT = 2;
+}

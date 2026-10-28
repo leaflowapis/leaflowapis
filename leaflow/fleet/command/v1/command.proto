@@ -16,8 +16,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/command/v1;commandv
 // 'command'` runs it (RFC 4254 §6.5 "exec"): pipes, redirection and `&&`
 // work, and there is no terminal and no standard input. The Agent runs it as
 // the account, through the account and session stacks of its PAM service,
-// so expired, disabled and directory accounts that may not log in are
-// refused as they would be over SSH.
+// so expired and locked accounts, and directory accounts that may not log
+// in, are refused as they would be over SSH.
 //
 // Neither the command nor its output is confidential to the platform: do
 // not put secrets into either.

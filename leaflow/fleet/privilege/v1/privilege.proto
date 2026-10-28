@@ -12,16 +12,15 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/privilege/v1;privil
 // Service prompter ask the Agent's privileged daemon, which serializes a
 // PrivilegeRequest and has the session show it to its viewers. A viewer whose
 // authorization allows approving shows it to its person and returns their
-// decision signed with its device key, the key named in its authorization.
+// decision signed with its viewer key, the key named in its authorization.
 // The daemon accepts a decision only for the exact bytes it produced, once,
 // before its own deadline. It checks the signature itself, and the viewer's
-// authorization too: signed by the service, current, for this session, of a
-// person and with a PrivilegePolicy that allows approving. The session only
+// authorization too: signed by the service, current, for this session and
+// with a PrivilegePolicy that allows approving. The session only
 // carries the decision and the authorization. Every viewer that may approve is
 // asked, and the first valid decision counts. When none is connected the
 // daemon does not wait, and the program goes on to its next way of
-// authenticating, such as a password. Automation clients may cause requests
-// but never approve them.
+// authenticating, such as a password.
 //
 // Channel type "leaflow.fleet.privilege.v1", lane "interactive":
 // opened by the viewer, one per connection. ServerHello first, then a snapshot

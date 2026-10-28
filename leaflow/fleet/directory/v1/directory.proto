@@ -4,28 +4,32 @@ package leaflow.fleet.directory.v1;
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/directory/v1;directoryv1";
 
-// Logins of platform users on the machines of their project, through the
-// project's directory, as through a domain: accounts and groups whose ids the
-// service allocates, the same on every machine of the project. Every call
-// travels on the daemon's control connection (leaflow.fleet.control.v1) and
-// fails there with the reasons of each method in a google.rpc.ErrorInfo of
-// the domain "fleet.leaflow.cloud".
+// Logins of platform users on the machines of their projects, after Google
+// Cloud OS Login: every platform user has one account, with the same name and
+// uid on every machine of every project, and each project has its groups;
+// the service allocates their ids. Every call travels on the daemon's control
+// connection (leaflow.fleet.control.v1) and fails there with the reasons of
+// each method in a google.rpc.ErrorInfo of the domain "fleet.leaflow.cloud".
 //
-// The service sends each machine its copy with SetDirectory, which says for
-// every account whether it may log in to this machine and become root
-// through sudo. The Agent answers name service (NSS) lookups and PAM from
-// that copy, for every way into the machine (sshd, su, cron, desktop
-// sessions), and asks GetAccountAccess when an account logs in or elevates,
-// so that withdrawn access holds from the next login on; while the service
-// is unreachable it decides from its copy. Directory accounts and groups
-// never appear in /etc/passwd or /etc/group, and the local accounts and
-// groups of the machine are left as they are. Directory accounts have no
-// password: a person approves an elevation on a viewer of the account's
-// desktop session (leaflow.fleet.privilege.v1).
+// The service sends each machine its copy with SetDirectory: the accounts of
+// the project's members and the project's groups, with for every account
+// whether it may log in to this machine, whether it may become root through
+// sudo and the SSH keys it logs in with. The Agent answers name service (NSS)
+// lookups, PAM and sshd from that copy, for every way into the machine (sshd,
+// su, cron, sessions), and asks GetAccountAccess when an account logs in or
+// elevates, so that withdrawn access holds from the next login on; while the
+// service is unreachable it decides from its copy. Directory accounts and
+// groups never appear in /etc/passwd or /etc/group, and the local accounts
+// and groups of the machine are left as they are. Directory accounts have no
+// password: a person on a viewer of one of the account's sessions approves
+// elevation through sudo (leaflow.fleet.privilege.v1).
 //
 // Feature "leaflow.fleet.directory.v1" (leaflow.fleet.machine.v1 Feature):
 // AVAILABLE while the Agent's NSS module serves passwd and group and its PAM
-// module is in the account stack of the machine's PAM services. Details:
+// module is in the account stack of the machine's PAM services. Details, each
+// present when the machine has it:
+//   - "ssh": sshd(8) takes the accounts' SSH keys from the Agent's
+//     AuthorizedKeysCommand;
 //   - "sudo": sudo is installed, so accounts with AccountAccess.admin may
 //     become root.
 
@@ -42,9 +46,12 @@ service MachineDirectoryService {
   //   - its name, uid, primary group (its own group of the same name and
   //     id), GECOS name, home directory and shell resolve whatever its
   //     access, so that the files it owns keep their owner;
-  //   - PAM admits it only while login_allowed is set and disabled is not;
-  //     when it loses either, the Agent ends what it runs through the
-  //     machine's features, such as its desktop sessions;
+  //   - PAM admits it only while login_allowed is set; when it loses it,
+  //     the Agent ends what it runs through the machine's features, such as
+  //     its sessions, which end with SESSION_CLOSE_REASON_ACCESS_REVOKED
+  //     (leaflow.fleet.host.v1);
+  //   - sshd(8) accepts its ssh_public_keys, through the Agent's
+  //     AuthorizedKeysCommand, only while login_allowed is set;
   //   - sudo(8) lets it become root only while admin is set as well;
   //   - its home directory is created on its first login, owned by it, and
   //     never deleted.
@@ -53,10 +60,10 @@ service MachineDirectoryService {
   //
   // An account or group whose name or id a local account or group of the
   // machine already uses is not served, so that it can take over no local
-  // file or right, and ReportDirectoryStatus lists it in conflicts. So is one
-  // with an id outside 65536 to 2147483647 (below are the system's and the
-  // local administrator's) or within the subordinate ids of a local user
-  // (subuid(5), subgid(5)).
+  // file or right. So is one with an id outside 65536 to 2147483647 (below
+  // are the system's and the local administrator's) or within the
+  // subordinate ids of a local user (subuid(5), subgid(5)). The Agent reports
+  // each with ReportMachineEvents (leaflow.fleet.machine.v1) when it begins.
   //
   // Fails with INVALID_ARGUMENT and reason INVALID_REQUEST, with metadata
   // "field" naming the first offending field, for a directory that breaks a
@@ -78,10 +85,9 @@ service DirectoryService {
   rpc GetAccountAccess(GetAccountAccessRequest) returns (GetAccountAccessResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
-  // Reports the copy the Agent serves. The Agent reports after every
-  // connect, after every SetDirectory that changed its copy, and whenever
-  // its conflicts change. The service sends SetDirectory when the revision
-  // is not the one it holds.
+  // Reports the copy the Agent serves. The Agent reports after every connect
+  // and after every SetDirectory that changed its copy. The service sends
+  // SetDirectory when the revision is not the one it holds.
   rpc ReportDirectoryStatus(ReportDirectoryStatusRequest) returns (ReportDirectoryStatusResponse) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -123,6 +129,9 @@ message Account {
   string user_id = 7;
   // What the account may do on this machine.
   AccountAccess access = 8;
+  // The SSH public keys the account logs in with, each an authorized_keys(5)
+  // key without options, such as "ssh-ed25519 AAAAC3Nz...".
+  repeated string ssh_public_keys = 9;
 }
 
 // What an account may do on one machine.
@@ -131,8 +140,6 @@ message AccountAccess {
   bool login_allowed = 1;
   // The account may become root through sudo(8).
   bool admin = 2;
-  // The account is disabled: no login and no sudo, whatever the others say.
-  bool disabled = 3;
 }
 
 // A directory group (group(5)).
@@ -173,27 +180,7 @@ message ReportDirectoryStatusRequest {
   // Directory.revision of the copy the Agent serves. Empty before the first
   // SetDirectory.
   string revision = 1;
-  // The accounts and groups of that copy the Agent does not serve.
-  repeated DirectoryConflict conflicts = 2;
 }
 
 // The response of ReportDirectoryStatus.
 message ReportDirectoryStatusResponse {}
-
-// A directory account or group the Agent does not serve, because a local
-// account or group of the machine uses its name or id.
-message DirectoryConflict {
-  // An account or a group.
-  DirectoryEntryType type = 1;
-  // The name of the account or group in the directory.
-  string name = 2;
-}
-
-// The type of a directory entry.
-enum DirectoryEntryType {
-  DIRECTORY_ENTRY_TYPE_UNSPECIFIED = 0;
-  // An account.
-  DIRECTORY_ENTRY_TYPE_ACCOUNT = 1;
-  // A group.
-  DIRECTORY_ENTRY_TYPE_GROUP = 2;
-}

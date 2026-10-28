@@ -31,7 +31,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 //
 // Accounts. A session runs as the directory account of its platform user,
 // admitted by PAM as any login is, and ends when the account may no longer
-// log in (SESSION_CLOSE_REASON_USER_DISABLED).
+// log in (SESSION_CLOSE_REASON_ACCESS_REVOKED).
 //
 // Feature "leaflow.fleet.host.v1" (leaflow.fleet.machine.v1 Feature):
 // AVAILABLE while the Agent's session package is installed. Details, each
@@ -180,8 +180,8 @@ enum SessionCloseReason {
   SESSION_CLOSE_REASON_HELPER_LOST = 8;
   // Opening failed and was undone.
   SESSION_CLOSE_REASON_OPEN_FAILED = 9;
-  // The account was disabled or may no longer log in to the machine.
-  SESSION_CLOSE_REASON_USER_DISABLED = 10;
+  // The account may no longer log in to the machine.
+  SESSION_CLOSE_REASON_ACCESS_REVOKED = 10;
 }
 
 // Timeouts and limits of a session, which the daemon enforces even while the

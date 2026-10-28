@@ -33,9 +33,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/datatransf
 //     the channel with CANCELLED abandons the read, and the other side
 //     releases what it spooled for it.
 //   - "leaflow.virtualdesktop.datatransfer.v1.DataTransferService", lane
-//     "interactive": opened by the viewer, for automation clients, which
-//     have no clipboard or drag loop of their own, and to drop uploaded
-//     files.
+//     "interactive": opened by the viewer, for viewers that operate the
+//     session through calls and have no clipboard or drag loop of their own,
+//     and to drop uploaded files.
 //
 // Read-only viewers transfer no data, so that a watcher cannot take away
 // what was copied in the session. Data has no size limit and never enters
@@ -465,9 +465,8 @@ message DataEnd {
   bytes sha256 = 1;
 }
 
-// Copy and paste and drops for automation clients, and drops of uploaded
-// files. Calls need a viewer that is not read-only; drops also need the
-// input lease.
+// Copy and paste and drops through calls, and drops of uploaded files. Calls
+// need a viewer that is not read-only; drops also need the input lease.
 service DataTransferService {
   // Returns the formats a selection holds and, if asked, the data of one.
   // Needs ClipboardPolicy.read_allowed.

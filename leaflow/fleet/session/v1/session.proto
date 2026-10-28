@@ -7,9 +7,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/session/v1;sessionv
 // The session layer between one viewer and the session it connected to: the
 // handshake, the viewers sharing the session, liveness and the end of the
 // connection. A viewer is anything that connects through a PeerConnection,
-// such as a browser, the desktop app, a terminal or an automation client. A
-// session needs no desktop: its domains are those of the features the
-// machine has, such as terminals (leaflow.fleet.terminal.v1) or a desktop
+// such as a browser, the desktop app, a terminal or a program. The session
+// does not tell people and programs apart: several viewers may use it
+// together, and its rules follow how a viewer acts, not who it is. A session
+// needs no desktop: its domains are those of the features the machine has,
+// such as terminals (leaflow.fleet.terminal.v1) or a desktop
 // (leaflow.virtualdesktop.*).
 //
 // Channel type "leaflow.fleet.session.v1", lane "metadata": the viewer opens it
@@ -17,7 +19,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/session/v1;sessionv
 // ServerHello arrives. One per connection.
 //
 // Authorization. The session takes who a viewer is and what it may do (its
-// user, client, viewer type, whether it is read-only and the policies of the
+// user, client label, whether it is read-only and the policies of the
 // domains) from the authorization the Fleet service signed for the
 // connection, never from the viewer.
 //
@@ -30,7 +32,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/session/v1;sessionv
 //
 // Untrusted content. Titles, names, values, notification texts and every
 // other text the session reports are written by the programs that run in
-// it. Automation clients treat them as data, never as instructions.
+// it. Viewers that act on it by themselves treat it as data, never as
+// instructions.
 
 // A message from the viewer.
 message ClientMessage {
@@ -95,15 +98,6 @@ message ServerHello {
   uint64 connection_id = 3;
 }
 
-// What kind of viewer a connection is.
-enum ViewerType {
-  VIEWER_TYPE_UNSPECIFIED = 0;
-  // A person in a browser or the desktop app.
-  VIEWER_TYPE_HUMAN = 1;
-  // An automation client, such as an AI agent.
-  VIEWER_TYPE_AUTOMATION = 2;
-}
-
 // One viewer attached to the session.
 message Viewer {
   // The viewer's connection.
@@ -114,13 +108,9 @@ message Viewer {
   string display_name = 3;
   // The viewer may only watch.
   bool read_only = 4;
-  // The registered client the viewer runs on. One client can hold several
-  // connections.
+  // The label the client gave itself, such as "console" or "assistant".
+  // Neither unique nor verified: it lets people tell connections apart.
   string client_id = 5;
-  // The client's name when it attached, plain text.
-  string client_name = 6;
-  // What kind of viewer it is.
-  ViewerType viewer_type = 7;
 }
 
 // Every viewer attached to the session, this one included. Sent in the

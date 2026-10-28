@@ -8,8 +8,8 @@ import "leaflow/virtualdesktop/display/v1/display.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/capture/v1;capturev1";
 
-// Still images of the session for clients that look at it, such as
-// automation clients.
+// Still images of the session for viewers that look at it through calls
+// rather than through the video stream.
 //
 // Channel type "leaflow.virtualdesktop.capture.v1.CaptureService", lane
 // "bulk": opened by the viewer. Read-only viewers may capture.
@@ -93,9 +93,6 @@ message CaptureScreenshotResponse {
   // The windows composited into the image, bottom to top. For CONTENT, just
   // the window.
   repeated CapturedWindow windows = 5;
-  // For automation clients, the areas blacked out because they show password
-  // fields, in image pixels.
-  repeated leaflow.virtualdesktop.display.v1.Rectangle redactions = 6;
   // When the image was taken.
   google.protobuf.Timestamp captured_at = 7;
   // The area had been unchanged for quiet_period when it was captured. False

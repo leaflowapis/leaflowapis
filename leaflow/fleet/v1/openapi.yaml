@@ -4,8 +4,8 @@ info:
   version: 1.0.0
   description: |-
     Machines that run the Leaflow Fleet Agent (`leaflow-fleet-agent`): adding machines, the
-    project's directory of accounts and groups, running commands, opening and closing sessions,
-    with or without a desktop, and admitting viewers to them.
+    accounts and groups that log in to them, running commands, opening and closing sessions, with
+    or without a desktop, and admitting viewers to them.
 
     ## What this API sees
 
@@ -27,8 +27,8 @@ info:
 
     ## Adding a machine
 
-    1. Install the Agent and run `leaflow-fleet-agent daemon enroll` on the machine. The
-       command carries no secret. The machine shows a pairing code such as `7K2QM-9XWTD`.
+    1. Install the Agent and run `leaflow-fleet-agent daemon enroll` on the machine. The command
+       carries no secret. The machine shows a pairing code such as `7K2QM-9XWTD`.
     2. Find the request with `GET /api/v1/enrollments:find?pairing_code=…`. Compare its `hostname`
        and `source_address` with the machine in front of you: the pairing code is not a secret,
        and anyone can request enrollment.
@@ -56,8 +56,9 @@ info:
     A machine reports what it offers in `features`, each named after the protocol package that
     defines it:
 
-    - `leaflow.fleet.directory.v1`: the project's accounts and groups exist on the machine, and
-      its PAM services, sudo included, admit only the members who may log in;
+    - `leaflow.fleet.directory.v1`: the accounts of the project's members and the project's groups
+      exist on the machine; members log in over SSH with their keys and become root through sudo
+      as their permissions allow;
     - `leaflow.fleet.command.v1`: running commands;
     - `leaflow.fleet.host.v1`: sessions, with terminals, programs, files, ports and privilege
       approvals;
@@ -69,21 +70,25 @@ info:
 
     ## Directory
 
-    The project has a directory, as a domain has. Every member who may log in to one of the
-    project's machines gets an account, with a username and a uid that are the same on every
-    machine, and the project can define groups. Accounts are created automatically, the first time
-    a member may log in to a machine of the project or opens a session; the username comes from the
-    member's email address and can be changed. **Accounts are never deleted**: a member who leaves
-    the project, or whose account is disabled, can no longer log in, and files keep their owner.
+    Every user has one account, as with Google Cloud OS Login: a username and a uid that are the
+    same on every machine of every project. The account is created the first time the user may log
+    in to a machine or opens a session; its username comes from the email address, such as
+    `alice_example_com` for `alice@example.com`, and its owner can change it. A project's machines
+    know the accounts of the project's members and the groups the project defines. A member who
+    leaves the project can no longer log in, and files keep their owner.
 
     Who may log in to which machines, and who may become root there through sudo, are permissions
     of the project's roles: `fleet:machines.login` and `fleet:machines.admin`, each for all
     machines or for chosen ones. Changes reach the machines within about a minute, and every login
-    and elevation is checked against the current permissions while the machine is connected. Elevation through sudo is approved by a person on a viewer, never by a password.
+    and elevation is checked against the current permissions while the machine is connected. To
+    keep a member out of some machines, deny them `fleet:machines.login` on those machines. Elevation through sudo is approved on a viewer, never by a password.
+
+    Members log in over SSH with the keys they own among the project's SSH keys, while they may
+    log in to the machine.
 
     Machines resolve directory accounts and groups themselves and never write them into their local
     account files. A local account or group that already uses a name or id of the directory keeps
-    it, and the machine reports the conflict in `directory_conflicts`.
+    it, and the machine records the conflict among its events.
 
     ## Running commands
 
@@ -95,17 +100,19 @@ info:
 
     ## Viewing a session
 
-    1. Register the client's device key once: `POST /api/v1/client-challenges`, sign the
-       challenge, then `POST /api/v1/clients`. The private key must never leave the client; in a
-       browser, use a non-extractable WebCrypto key.
-    2. For each connection, create a ticket with
+    1. Have an Ed25519 key, for as long as the client wants: one per connection or one kept by the
+       client. The private key must never leave the client; in a browser, use a non-extractable
+       WebCrypto key.
+    2. For each connection, create a ticket for the public key with
        `POST /api/v1/sessions/{sessionId}/viewer-tickets`. It is valid for 60 seconds and once.
     3. Open a WebSocket to the returned `url` with the subprotocol
        `leaflow.fleet.control.v1` and follow `leaflow/fleet/control/v1/control.proto`.
        The ticket travels inside the protocol and never in a URL.
 
     What a viewer may do in a session is decided when its ticket is created, from the caller's
-    permissions, and does not change during the connection.
+    permissions and what the ticket asks for, and does not change during the connection. Viewers
+    are not told apart by kind: a person in a browser and a program that operates the session are
+    both viewers, named by the `client_id` label they choose, and either can be disconnected.
 servers:
   - url: https://fleet.leaflow.cloud
     description: Machines, accounts, commands, sessions and viewers
@@ -119,7 +126,6 @@ tags:
   - name: Group
   - name: Session
   - name: Viewer
-  - name: Client
 paths:
   /api/v1/machines:
     get:
@@ -222,6 +228,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/events:
+    get:
+      summary: List the events of a machine
+      description: |-
+        Returns what the machine reported about itself, newest first, such as a directory account
+        it does not serve because a local account uses its name. Events are kept for 30 days.
+      operationId: list-machine-events
+      tags:
+        - Machine
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: type
+          in: query
+          description: Return only events of this type
+          explode: false
+          schema:
+            $ref: "#/components/schemas/MachineEventType"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineEventList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /api/v1/machines/{machineId}:runCommand:
     post:
       summary: Run a command
@@ -229,8 +267,8 @@ paths:
         Runs one command line on the machine with the login shell of an account and returns once
         it exited or was killed, with its exit status and what it wrote. Pipes, redirection and
         `&&` work; there is no terminal and no standard input. The machine admits the account
-        through PAM as for a login, so disabled and expired accounts, and directory accounts that
-        may not log in, are refused. A command that fails is still a successful request: its exit
+        through PAM as for a login, so expired and locked accounts, and directory accounts that may
+        not log in, are refused. A command that fails is still a successful request: its exit
         status is its result.
 
         The request is held until the command ends, at most `timeout_seconds` and a few seconds
@@ -375,13 +413,22 @@ paths:
   /api/v1/accounts:
     get:
       summary: List accounts
-      description: Returns the accounts of the project's directory, ordered by username.
+      description: |-
+        Returns the accounts of the project's members, ordered by username. A member who has never
+        been able to log in to a machine has no account yet.
       operationId: list-accounts
       tags:
         - Account
       parameters:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: user_id
+          in: query
+          description: Return only the account of this member
+          explode: false
+          schema:
+            type: string
+            format: uuid
         - name: keyword
           in: query
           description: Match the username or the display name, case-insensitively
@@ -405,6 +452,7 @@ paths:
   /api/v1/accounts/{accountId}:
     get:
       summary: Get an account
+      description: Returns the account of a member of the project.
       operationId: get-account
       tags:
         - Account
@@ -426,14 +474,13 @@ paths:
     patch:
       summary: Update an account
       description: |-
-        Changes only the fields present in the request. A new username takes effect on the
-        machines within about a minute; the uid stays, so files keep their owner. Disabling ends the
-        account's sessions on every machine and refuses new logins.
+        Changes the caller's own account, only the fields present in the request. The account is
+        the same in every project, and a new username takes effect on the machines of all of them
+        within about a minute; the uid stays, so files keep their owner.
 
-        Fails with `DIRECTORY_NAME_TAKEN` when the username is already an account or a group of the
-        project.
-
-        Requires `fleet:directory.manage`.
+        Fails with:
+        - `ACCOUNT_NOT_OWNED` when the account is another member's;
+        - `DIRECTORY_NAME_TAKEN` when another account or a group uses the username.
       operationId: update-account
       tags:
         - Account
@@ -486,8 +533,8 @@ paths:
       description: |-
         Creates a group in the project's directory. It reaches the machines within about a minute.
 
-        Fails with `DIRECTORY_NAME_TAKEN` when the name is already an account or a group of the
-        project.
+        Fails with `DIRECTORY_NAME_TAKEN` when an account, or another group of the project, uses the
+        name.
 
         Requires `fleet:directory.manage`.
       operationId: create-group
@@ -612,7 +659,8 @@ paths:
     post:
       summary: Add an account to a group
       description: |-
-        Fails with `GROUP_MEMBER_EXISTS` when the account is already in the group.
+        The account must be a member's. Fails with `GROUP_MEMBER_EXISTS` when the account is
+        already in the group.
 
         Requires `fleet:directory.manage`.
       operationId: create-group-member
@@ -716,7 +764,6 @@ paths:
         Requires `fleet:machines.login` on the machine.
 
         Fails with:
-        - `ACCOUNT_DISABLED` when the caller's account is disabled;
         - `MACHINE_OFFLINE` when the machine is not connected;
         - `FEATURE_UNAVAILABLE` when the machine does not offer sessions, or with `desktop`,
           desktops;
@@ -887,8 +934,8 @@ paths:
     post:
       summary: Create a viewer ticket
       description: |-
-        Issues a single-use ticket that admits one viewer connection of the given client to the
-        session. It is valid for 60 seconds.
+        Issues a single-use ticket that admits one viewer connection with the given public key to
+        the session. It is valid for 60 seconds.
 
         The owner of a session may operate it. Viewing another member's session requires
         `fleet:sessions.view`, which admits watching only, or
@@ -896,15 +943,14 @@ paths:
         of the session — file transfer, the clipboard, terminals and programs, port forwarding,
         devices and audio, printing, SSH agent forwarding, approving privilege requests and
         reading logs — is granted only with its permission; a viewer that may only watch gets
-        none of them.
+        none of them. A ticket may ask for less: to watch only, or for some of the capabilities.
 
         A request made by a browser binds the ticket to its `Origin`, which the WebSocket
         connection must carry too.
 
         Fails with:
         - `SESSION_CLOSED` when the session has ended;
-        - `SESSION_ACCESS_DENIED` when the caller may not view the session;
-        - `CLIENT_NOT_FOUND` when the client is not one of the caller's registered clients.
+        - `SESSION_ACCESS_DENIED` when the caller may not view the session.
       operationId: create-viewer-ticket
       tags:
         - Viewer
@@ -923,115 +969,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ViewerTicketResource"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/client-challenges:
-    post:
-      summary: Create a client challenge
-      description: |-
-        Returns a random challenge for registering a device key. It is valid for 5 minutes and
-        once, and only for the caller.
-      operationId: create-client-challenge
-      tags:
-        - Client
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ClientChallengeResource"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/clients:
-    get:
-      summary: List clients
-      description: |-
-        Returns the caller's registered clients, newest first. Clients belong to the caller and
-        are the same in every project.
-      operationId: list-clients
-      tags:
-        - Client
-      parameters:
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ClientList"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-    post:
-      summary: Register a client
-      description: |-
-        Registers a device key for the caller. `signature` proves that the client holds the
-        private key: it is the Ed25519 signature (RFC 8032) by the key over the ASCII bytes
-        `leaflow.fleet.v1.ClientChallenge`, one zero byte and the challenge's 32 bytes.
-
-        A client that acts on its own, such as an assistant, must be registered as `automation`:
-        sessions apply their automation rules to it.
-
-        Fails with:
-        - `CLIENT_CHALLENGE_INVALID` when the challenge is unknown, used, expired or issued to
-          someone else;
-        - `CLIENT_SIGNATURE_INVALID` when the signature does not verify;
-        - `CLIENT_KEY_REGISTERED` when the key is already registered.
-      operationId: create-client
-      tags:
-        - Client
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateClientRequest"
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ClientResource"
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/clients/{clientId}:
-    delete:
-      summary: Revoke a client
-      description: |-
-        Revokes one of the caller's clients. Its tickets are refused from then on and its viewers
-        are disconnected at once. The key cannot be registered again.
-      operationId: delete-client
-      tags:
-        - Client
-      parameters:
-        - name: clientId
-          in: path
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Revoked
         default:
           description: Error
           content:
@@ -1121,7 +1058,6 @@ components:
         - features
         - agent_version
         - directory_synced
-        - directory_conflicts
         - created_at
         - updated_at
       properties:
@@ -1161,11 +1097,6 @@ components:
         directory_synced:
           description: The machine serves the project's current directory
           type: boolean
-        directory_conflicts:
-          description: The accounts and groups of the directory the machine does not serve, because a local account or group uses their name or id
-          type: array
-          items:
-            $ref: "#/components/schemas/DirectoryConflict"
         created_at:
           description: When the machine was added to the project
           type: string
@@ -1202,20 +1133,6 @@ components:
           items:
             type: string
       additionalProperties: false
-    DirectoryConflict:
-      type: object
-      required:
-        - type
-        - name
-      properties:
-        type:
-          type: string
-          enum:
-            - account
-            - group
-        name:
-          type: string
-      additionalProperties: false
     MachineList:
       type: object
       required:
@@ -1228,6 +1145,71 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MachineResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    MachineEventType:
+      description: |-
+        `directory_account_conflict`: an account is not served on the machine because a local
+        account uses its name or uid, or its uid is among the subordinate ids of a local user;
+        metadata `username`, and `conflict` `name`, `uid` or `subordinate`.
+        `directory_group_conflict`: a group is not served because a local group uses its name or
+        gid, or its gid is among the subordinate ids of a local user; metadata `groupName`, and
+        `conflict` `name`, `gid` or `subordinate`.
+      type: string
+      enum:
+        - directory_account_conflict
+        - directory_group_conflict
+    MachineEventResource:
+      type: object
+      required:
+        - id
+        - type
+        - metadata
+        - occurred_at
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/MachineEventType"
+        metadata:
+          description: The values of the event, with the keys its type names
+          type: object
+          additionalProperties:
+            type: string
+        occurred_at:
+          description: When it happened, on the machine's clock
+          type: string
+          format: date-time
+        created_at:
+          description: When the service recorded it
+          type: string
+          format: date-time
+      additionalProperties: false
+    MachineEventList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MachineEventResource"
         total_count:
           type: integer
           format: int64
@@ -1339,7 +1321,6 @@ components:
         - home_directory
         - shell
         - groups
-        - disabled_at
         - created_at
         - updated_at
       properties:
@@ -1349,10 +1330,10 @@ components:
         user:
           $ref: "#/components/schemas/NamedIdentity"
         username:
-          description: The login name on every machine of the project
+          description: The login name on every machine
           type: string
         uid:
-          description: The user id on every machine of the project
+          description: The user id on every machine
           type: integer
           format: int64
         gid:
@@ -1367,16 +1348,10 @@ components:
         shell:
           type: string
         groups:
-          description: The names of the groups the account is in, besides its own
+          description: The names of the project's groups the account is in, besides its own
           type: array
           items:
             type: string
-        disabled_at:
-          description: When the account was disabled; null while enabled
-          type:
-            - string
-            - "null"
-          format: date-time
         created_at:
           type: string
           format: date-time
@@ -1420,9 +1395,6 @@ components:
           minLength: 2
           maxLength: 255
           pattern: "^/[^\\s:]+$"
-        disabled:
-          description: Disables or enables the account
-          type: boolean
       additionalProperties: false
     GroupResource:
       type: object
@@ -1528,7 +1500,7 @@ components:
         Why a session ended. `close_requested` and `terminate_requested` follow a request;
         `logout` the user logged out; `disconnected_timeout`, `no_client_timeout` and
         `max_lifetime` a time limit passed; `display_exit` and `helper_lost` the session failed;
-        `open_failed` it never opened; `user_disabled` its account may no longer log in;
+        `open_failed` it never opened; `access_revoked` its user may no longer log in;
         `machine_restarted` the machine restarted; `unknown` the machine no longer reports it.
       type: string
       enum:
@@ -1541,7 +1513,7 @@ components:
         - display_exit
         - helper_lost
         - open_failed
-        - user_disabled
+        - access_revoked
         - machine_restarted
         - unknown
     SessionResource:
@@ -1684,7 +1656,7 @@ components:
         - command
       properties:
         username:
-          description: The account to run as, a local account of the machine such as `root` or an account of the project's directory
+          description: The account to run as, a local account of the machine such as `root` or a directory account
           type: string
           minLength: 1
           maxLength: 32
@@ -1742,35 +1714,12 @@ components:
           description: "`stderr` is cut short"
           type: boolean
       additionalProperties: false
-    ViewerType:
-      description: |-
-        `human` is a person on a browser or the desktop app. `automation` is a client that acts on
-        its own, to which sessions apply their automation rules.
-      type: string
-      enum:
-        - human
-        - automation
-    ClientSummary:
-      type: object
-      required:
-        - id
-        - name
-        - type
-      properties:
-        id:
-          type: string
-          format: uuid
-        name:
-          type: string
-        type:
-          $ref: "#/components/schemas/ViewerType"
-      additionalProperties: false
     ViewerResource:
       type: object
       required:
         - connection_id
         - user
-        - client
+        - client_id
         - read_only
         - policies
         - remote_address
@@ -1782,8 +1731,9 @@ components:
           format: int64
         user:
           $ref: "#/components/schemas/NamedIdentity"
-        client:
-          $ref: "#/components/schemas/ClientSummary"
+        client_id:
+          description: The label the viewer's client chose, such as `console` or `assistant`; neither unique nor verified
+          type: string
         read_only:
           description: The viewer may only watch
           type: boolean
@@ -1815,12 +1765,36 @@ components:
     CreateViewerTicketRequest:
       type: object
       required:
-        - client_id
+        - public_key
       properties:
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
         client_id:
-          description: The caller's registered client that will connect
+          description: A label for the client that connects, such as `console` or `assistant`, shown to the other viewers. It is neither unique nor verified.
           type: string
-          format: uuid
+          maxLength: 64
+        read_only:
+          description: The viewer only watches, even if the caller may operate the session
+          type: boolean
+        permissions:
+          description: |-
+            The capabilities the viewer may use, as permission names such as
+            `fleet:files.transfer`; when omitted, every capability the caller holds. A
+            capability the caller does not hold is not granted.
+          type: array
+          maxItems: 16
+          items:
+            type: string
+            enum:
+              - fleet:files.transfer
+              - fleet:clipboard.use
+              - fleet:terminal.use
+              - fleet:ports.forward
+              - fleet:devices.use
+              - fleet:printing.use
+              - fleet:ssh_agent.use
+              - fleet:privilege.approve
+              - fleet:logs.read
       additionalProperties: false
     ViewerTicketResource:
       type: object
@@ -1839,102 +1813,4 @@ components:
         expires_at:
           type: string
           format: date-time
-      additionalProperties: false
-    ClientChallengeResource:
-      type: object
-      required:
-        - id
-        - challenge
-        - expires_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        challenge:
-          description: 32 random bytes in standard Base64
-          type: string
-        expires_at:
-          type: string
-          format: date-time
-      additionalProperties: false
-    ClientResource:
-      type: object
-      required:
-        - id
-        - type
-        - name
-        - public_key
-        - created_at
-        - last_used_at
-      properties:
-        id:
-          type: string
-          format: uuid
-        type:
-          $ref: "#/components/schemas/ViewerType"
-        name:
-          type: string
-          maxLength: 128
-        public_key:
-          $ref: "#/components/schemas/PublicKey"
-        created_at:
-          type: string
-          format: date-time
-        last_used_at:
-          description: When a viewer of the client last connected; null if never
-          type:
-            - string
-            - "null"
-          format: date-time
-      additionalProperties: false
-    ClientList:
-      type: object
-      required:
-        - items
-        - total_count
-        - page
-        - page_size
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/ClientResource"
-        total_count:
-          type: integer
-          format: int64
-          minimum: 0
-        page:
-          type: integer
-          format: int64
-          minimum: 1
-        page_size:
-          type: integer
-          format: int64
-          minimum: 1
-      additionalProperties: false
-    CreateClientRequest:
-      type: object
-      required:
-        - type
-        - name
-        - public_key
-        - challenge_id
-        - signature
-      properties:
-        type:
-          $ref: "#/components/schemas/ViewerType"
-        name:
-          description: A name the caller recognizes, such as the browser and computer
-          type: string
-          minLength: 1
-          maxLength: 128
-        public_key:
-          $ref: "#/components/schemas/PublicKey"
-        challenge_id:
-          type: string
-          format: uuid
-        signature:
-          description: The Ed25519 signature, 64 bytes in standard Base64
-          type: string
-          pattern: "^[A-Za-z0-9+/]{86}==$"
       additionalProperties: false
