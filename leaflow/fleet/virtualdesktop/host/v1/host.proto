@@ -12,7 +12,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/host
 // one; its Session carries DesktopState among its details.
 //
 // With DesktopOptions, OpenSession also fails with these reasons of the
-// domain "virtualdesktop.leaflow.cloud":
+// domain "fleet.leaflow.cloud":
 //   - RESOURCE_EXHAUSTED and reason DISPLAY_UNAVAILABLE when no X display
 //     number was free after 3 attempts;
 //   - FAILED_PRECONDITION and reason SESSION_CONFLICT when the user has a

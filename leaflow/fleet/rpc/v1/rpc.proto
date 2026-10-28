@@ -27,9 +27,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/rpc/v1;rpcv1";
 //
 // Errors. CallResult.error is a google.rpc.Status. Its details carry a
 // google.rpc.ErrorInfo whose reason is listed by the package that defines
-// the method, and whose domain is that of the package family listing the
-// reason: "fleet.leaflow.cloud" or "virtualdesktop.leaflow.cloud". A reason a
-// receiver does not know is handled by the canonical code of the status.
+// the method, and whose domain is "fleet.leaflow.cloud". A reason a receiver
+// does not know is handled by the canonical code of the status.
 //
 // Execution. The ErrorInfo of a failed call that acts on the session carries
 // the metadata key "executionState" with an ExecutionState name, telling the
