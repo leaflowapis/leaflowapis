@@ -59,8 +59,10 @@ service MachineService {
   // Fails with:
   //   - NOT_FOUND and reason USER_NOT_FOUND for an account the directory
   //     copy does not hold;
-  //   - PERMISSION_DENIED and reason USER_NOT_ALLOWED for root, a system
-  //     user or one outside the allowed groups;
+  //   - PERMISSION_DENIED and reason USER_NOT_ALLOWED for an account that
+  //     may not log in to the machine (AccountAccess), one the machine does
+  //     not serve (ReportMachineStatusRequest.conflicts) or one outside the
+  //     groups the machine allows sessions;
   //   - PERMISSION_DENIED and reason ACCOUNT_EXPIRED when PAM reports the
   //     account expired (PAM_ACCT_EXPIRED);
   //   - PERMISSION_DENIED and reason PAM_PERMISSION_DENIED when PAM refuses
@@ -118,7 +120,14 @@ service MachineService {
   //
   // An account or group whose name or id a local account or group of the
   // machine already uses is not served, so that it can take over no local
-  // file or right; ReportMachineStatus lists it in conflicts.
+  // file or right; ReportMachineStatus lists it in conflicts. So is one with
+  // an id outside 65536 to 2147483647 (below are the system's and the local
+  // administrator's) or within the subordinate ids of a local user
+  // (subuid(5), subgid(5)).
+  //
+  // Fails with INVALID_ARGUMENT and reason INVALID_REQUEST, with metadata
+  // "field" naming the first offending field, for a directory that breaks a
+  // rule of Directory, Account or Group; nothing of it is served then.
   rpc SetDirectory(SetDirectoryRequest) returns (SetDirectoryResponse) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -322,7 +331,8 @@ message TerminateSessionResponse {}
 
 // The directory of the machine's project, as the machine sees it.
 message Directory {
-  // Names this content: it changes whenever anything below changes.
+  // Names this content: it changes whenever anything below changes. 1 to
+  // 256 bytes without control characters.
   string revision = 1;
   // At most 10000.
   repeated Account accounts = 2;
@@ -332,17 +342,24 @@ message Directory {
 
 // A directory account (passwd(5)).
 message Account {
-  // The login name.
+  // The login name, as useradd(8) accepts it by default: 1 to 32 characters
+  // of [a-z0-9_-], starting with a letter or "_". No other account or group
+  // of the directory has it.
   string username = 1;
-  // The user id.
+  // The user id, from 65536 to 2147483647. No other account has it.
   uint32 uid = 2;
-  // The primary group id: the account's own group, of the same name and id.
+  // The primary group id: the account's own group, of the same name and id,
+  // so equal to uid.
   uint32 gid = 3;
-  // The full name for the GECOS field, plain text.
+  // The full name for the GECOS field, plain text of at most 1024 bytes;
+  // ':' and ',' show as spaces.
   string display_name = 4;
-  // The home directory.
+  // The home directory: an absolute path below /home without ".", ".." or
+  // empty components, whitespace or ':', such as "/home/alice". No other
+  // account has it.
   string home_directory = 5;
-  // The login shell.
+  // The login shell: an absolute path with the same rules, such as
+  // "/bin/bash".
   string shell = 6;
   // The platform user of the account.
   string user_id = 7;
@@ -362,9 +379,11 @@ message AccountAccess {
 
 // A directory group (group(5)).
 message Group {
-  // The group name.
+  // The group name, by the rules of Account.username; no account or other
+  // group of the directory has it.
   string name = 1;
-  // The group id.
+  // The group id, from 65536 to 2147483647; no other group and no account's
+  // own group has it.
   uint32 gid = 2;
   // The usernames of its members, each an account of the directory.
   repeated string members = 3;
