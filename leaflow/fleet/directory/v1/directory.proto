@@ -11,19 +11,20 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/directory/v1;direct
 // connection (leaflow.fleet.control.v1) and fails there with the reasons of
 // each method in a google.rpc.ErrorInfo of the domain "fleet.leaflow.cloud".
 //
-// The service sends each machine its copy with SetDirectory: the accounts of
-// the project's members and the project's groups, with for every account
-// whether it may log in to this machine, whether it may become root through
-// sudo and the SSH keys it logs in with. The Agent answers name service (NSS)
-// lookups, PAM and sshd from that copy, for every way into the machine (sshd,
-// su, cron, sessions), and asks GetAccount when an account logs in or
-// elevates, so that withdrawn access holds from the next login on; while the
-// service is unreachable it decides from its copy. Directory accounts and
-// groups never appear in /etc/passwd or /etc/group, and the local accounts
-// and groups of the machine are left as they are. Directory accounts have no
-// password: a person on a viewer of one of the account's sessions approves
-// elevation through sudo (leaflow.fleet.privilege.v1), and inside a command
-// the platform runs for the account, its request does
+// The service sends each machine its copy with SetDirectory, and changes to
+// it with UpdateDirectory: the accounts of the project's members and the
+// project's groups, with for every account whether it may log in to this
+// machine, whether it may become root through sudo and the SSH keys it logs
+// in with. The Agent answers name service (NSS) lookups, PAM and sshd from
+// that copy, for every way into the machine (sshd, su, cron, sessions), and
+// asks GetAccount when an account logs in or elevates, so that withdrawn
+// access holds from the next login on; while the service is unreachable it
+// decides from its copy. Directory accounts and groups never appear in
+// /etc/passwd or /etc/group, and the local accounts and groups of the
+// machine are left as they are. Directory accounts have no password: a
+// person on a viewer of one of the account's sessions approves elevation
+// through sudo (leaflow.fleet.privilege.v1), and inside a command the
+// platform runs for the account, its request does
 // (leaflow.fleet.command.v1).
 //
 // Feature "leaflow.fleet.directory.v1" (leaflow.fleet.machine.v1 Feature):
@@ -73,6 +74,28 @@ service MachineDirectoryService {
   rpc SetDirectory(SetDirectoryRequest) returns (SetDirectoryResponse) {
     option idempotency_level = IDEMPOTENT;
   }
+  // Changes the machine's copy of the directory from base_revision, the
+  // revision it holds, to revision: the accounts and groups of the request
+  // are added or replace those of the same name, and the names removed go.
+  // What results is served exactly as the same directory sent whole with
+  // SetDirectory would be. The service sends a change instead of the whole
+  // directory when it knows the revision the machine holds
+  // (ReportDirectoryStatus, or the last call that succeeded), and the whole
+  // directory whenever this call fails. A request with the revision the
+  // Agent holds already changes nothing, so that a retry succeeds.
+  //
+  // Fails with:
+  //   - FAILED_PRECONDITION and reason REVISION_MISMATCH, with metadata
+  //     "revision", the revision the Agent holds (empty for none), when
+  //     base_revision is not it; the copy stays as it is;
+  //   - INVALID_ARGUMENT and reason INVALID_REQUEST, with metadata "field"
+  //     naming the first offending field, for a request that names an entry
+  //     twice, adds and removes the same name or removes one the copy does
+  //     not have, or whose result breaks a rule of Directory, Account or
+  //     Group; the copy stays as it is.
+  rpc UpdateDirectory(UpdateDirectoryRequest) returns (UpdateDirectoryResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
 }
 
 // Answers the Agent's questions about the directory and takes its reports.
@@ -90,8 +113,9 @@ service DirectoryService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // Reports the copy the Agent serves. The Agent reports after every connect
-  // and after every SetDirectory that changed its copy. The service sends
-  // SetDirectory when the revision is not the one it holds.
+  // and after every SetDirectory or UpdateDirectory that changed its copy.
+  // The service sends SetDirectory, or UpdateDirectory from the reported
+  // revision, when it is not the one the service holds.
   rpc ReportDirectoryStatus(ReportDirectoryStatusRequest) returns (ReportDirectoryStatusResponse) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -160,6 +184,26 @@ message SetDirectoryRequest {
 
 // The response of SetDirectory.
 message SetDirectoryResponse {}
+
+// The request of UpdateDirectory.
+message UpdateDirectoryRequest {
+  // The revision the change applies to: Directory.revision of the copy the
+  // machine holds.
+  string base_revision = 1;
+  // Directory.revision after the change.
+  string revision = 2;
+  // Accounts added, or replacing the account of the same username.
+  repeated Account accounts = 3;
+  // Groups added, or replacing the group of the same name.
+  repeated Group groups = 4;
+  // The usernames of the accounts removed.
+  repeated string removed_accounts = 5;
+  // The names of the groups removed.
+  repeated string removed_groups = 6;
+}
+
+// The response of UpdateDirectory.
+message UpdateDirectoryResponse {}
 
 // The request of GetAccount.
 message GetAccountRequest {
