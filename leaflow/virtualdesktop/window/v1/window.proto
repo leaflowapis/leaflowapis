@@ -42,9 +42,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/wi
 // becomes the driver when it sends WindowStacking, WindowActivate,
 // WindowConfigure, WindowClose, WindowMinimize or WindowStateChange, or input
 // that the input channel says makes it the driver; the session applies the
-// operation. A viewer with neither, such as an automation client, never
-// becomes the driver: its operations are applied and the driver sees their
-// result like any change. Requests of
+// operation. A person's viewer with neither never becomes the driver: its
+// operations are applied and the driver sees their result like any change.
+// Automation clients never drive either: they learn about windows here and
+// operate them through WindowService, which follows the automation rules;
+// the session ignores their operations on this channel. Requests of
 // applications that only the driver may grant (WindowActivate and
 // WindowRestack from the session) go to the driver; while there is none the
 // session decides itself. Override-redirect windows, such as menus, are
