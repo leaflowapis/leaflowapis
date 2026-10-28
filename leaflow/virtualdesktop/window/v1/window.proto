@@ -501,10 +501,25 @@ message SnapshotEnd {}
 
 // Operates windows for automation clients. Every call follows the automation
 // rules of the session channel, never makes the caller the driver, and
-// returns the session revision at which it took effect. A window that is gone
-// fails with NOT_FOUND and reason WINDOW_NOT_FOUND; an override-redirect
-// window, which its application places itself, with FAILED_PRECONDITION and
-// reason WINDOW_NOT_MANAGED.
+// returns the session revision at which it took effect. Besides the
+// automation rules, calls fail before anything happens with:
+//   - NOT_FOUND and reason WINDOW_NOT_FOUND for a window that is gone;
+//   - FAILED_PRECONDITION and reason WINDOW_NOT_MANAGED for a window the
+//     session does not place: an override-redirect window, which its
+//     application places itself, or any window of a desktop session, whose
+//     own window manager places it;
+//   - FAILED_PRECONDITION and reason WINDOW_HIDDEN for a minimized window
+//     in SetWindowGeometry and ChangeWindowState; ActivateWindow restores
+//     it.
+// After acting they fail with:
+//   - FAILED_PRECONDITION and reason WINDOW_NOT_ACTIVATED when the window did
+//     not get the focus within a second;
+//   - FAILED_PRECONDITION and reason WINDOW_NOT_MINIMIZED when the window
+//     manager kept the window shown, such as a dialog that stays with its
+//     owner;
+//   - UNAVAILABLE and reason WINDOW_SYSTEM_UNAVAILABLE when the window system
+//     did not answer in time.
+// Metadata "windowId" names the window.
 service WindowService {
   // Activates a window as WindowActivate does: focuses and raises it and
   // restores it when minimized.
