@@ -337,7 +337,8 @@ message CompositionKey {
 // The session dropped a KeyEvent, PointerButton or PointerWheel. Its
 // google.rpc.ErrorInfo reason is one of:
 //   CLIPBOARD_INPUT_DEPENDENCY_FAILED  the clipboard content it named was not
-//                                      in place in time.
+//                                      in place in time;
+//   INPUT_QUEUE_FULL                   too much input waited to be applied.
 message InputError {
   // input_seq of the dropped input.
   uint64 input_seq = 1;
