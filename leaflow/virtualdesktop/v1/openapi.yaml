@@ -1056,10 +1056,12 @@ components:
       additionalProperties: false
     MachineEventType:
       description: |-
-        `directory_account_conflict`: a directory account is not served because a local account
-        uses its name or uid; metadata `username`, and `conflict` `name` or `uid`.
-        `directory_group_conflict`: a directory group is not served because a local group uses its
-        name or gid; metadata `groupName`, and `conflict` `name` or `gid`.
+        `directory_account_conflict`: an account is not served on the machine because a local
+        account uses its name or uid, or its uid is among the subordinate ids of a local user;
+        metadata `username`, and `conflict` `name`, `uid` or `subordinate`.
+        `directory_group_conflict`: a group is not served because a local group uses its name or
+        gid, or its gid is among the subordinate ids of a local user; metadata `groupName`, and
+        `conflict` `name`, `gid` or `subordinate`.
       type: string
       enum:
         - directory_account_conflict

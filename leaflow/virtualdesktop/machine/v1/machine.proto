@@ -542,9 +542,13 @@ message MachineEvent {
 enum MachineEventType {
   MACHINE_EVENT_TYPE_UNSPECIFIED = 0;
   // A directory account is not served because a local account uses its name
-  // or its uid. Metadata "username", and "conflict": "name" or "uid".
+  // or its uid, or because its uid is within the subordinate ids of a local
+  // user. Metadata "username", and "conflict": "name", "uid" or
+  // "subordinate".
   MACHINE_EVENT_TYPE_DIRECTORY_ACCOUNT_CONFLICT = 1;
   // A directory group is not served because a local group uses its name or
-  // its gid. Metadata "groupName", and "conflict": "name" or "gid".
+  // its gid, or because its gid is within the subordinate ids of a local
+  // user. Metadata "groupName", and "conflict": "name", "gid" or
+  // "subordinate".
   MACHINE_EVENT_TYPE_DIRECTORY_GROUP_CONFLICT = 2;
 }
