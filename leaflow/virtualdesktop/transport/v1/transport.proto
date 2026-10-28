@@ -33,9 +33,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/tr
 // lane its channel type names; where a lane has several data channels, the
 // channel uses the one at index (channel_id / 2) modulo their count.
 //
-// Opening. Both ends send Hello on "binding" as soon as it opens and answer
-// the other's challenge with a second Hello. Nothing else is sent until both
-// answers have verified.
+// Opening. The viewer sends Hello on "binding" as soon as it opens; the
+// session sends its own once the viewer's arrived, with the same epoch, and
+// each end answers the other's challenge with a second Hello. Nothing else
+// is sent until both answers have verified.
 //
 // Channels. Logical channels follow the SSH connection protocol (RFC 4254 §5)
 // with absolute credit as in QUIC (RFC 9000 §4.1). A channel carries the
@@ -78,8 +79,11 @@ message Hello {
   bytes attempt_id = 1;
   // The logical connection.
   uint64 connection_id = 2;
-  // The epoch of this path: 1 when the connection is new, one more than the
-  // committed epoch when it migrates.
+  // The epoch of this path, chosen by the viewer: 1 for the first attempt of
+  // the connection, then one more than the committed epoch, since the
+  // session may have taken an earlier attempt that the viewer did not. The
+  // session accepts one more than its committed epoch, or 1 while no path
+  // has carried the connection, and greets with the same epoch.
   uint64 epoch = 3;
   // 32 unpredictable bytes.
   bytes challenge = 4;
