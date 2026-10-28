@@ -11,7 +11,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/pr
 // session presents the shared printers only to its own user, through a
 // private print queue, and hands every job to the viewer, which prints it on
 // its own machine. This version carries PDF documents to printers whose
-// drivers take PDF.
+// drivers take PDF. A viewer may also share a printer that keeps documents
+// instead of printing them, such as one that saves each as a PDF file on its
+// machine; it reports such a job COMPLETED once the file is saved.
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.printing.v1", lane "interactive": opened by the
