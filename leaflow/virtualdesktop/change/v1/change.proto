@@ -78,9 +78,11 @@ message WaitForChangesRequest {
 }
 
 // The response of WaitForChanges. Changes are coalesced: something that
-// appeared and vanished within the range is not reported, and several
-// updates of one window or node are reported once, as its latest state with
-// all changed fields, at the revision of the last update.
+// appeared and vanished within the range is not reported, nor are the nodes
+// of a window that closed within it, and several updates of one window or
+// node are reported once, as its latest state with all changed fields, at
+// the revision of the last update. Of window activations and focus moves
+// only the last is reported.
 message WaitForChangesResponse {
   // The changes in revision order.
   repeated Change changes = 1;
@@ -201,7 +203,9 @@ message NodeUpdated {
 
 // A node was removed from a tree.
 message NodeRemoved {
-  // The node as it was last, without its subtree.
+  // The node as it was last reported, without its subtree. Of a node whose
+  // changes were never reported, only node_id and, where known, parent_id
+  // and window_id.
   leaflow.virtualdesktop.accessibility.v1.Node node = 1;
 }
 
@@ -274,7 +278,8 @@ enum Politeness {
 message WaitForConditionRequest {
   // 1 to 8 conditions, all of which must hold.
   repeated Condition conditions = 1;
-  // How many samples in a row all conditions must hold in, 1 to 5. 0: 2.
+  // How many samples in a row all conditions must hold in, 1 to 5. 0: 2;
+  // 1 when the timeout is 0 seconds.
   uint32 stable_samples = 2;
   // The longest wait, at most 10 seconds. 0 seconds: sample once. Unset: 5
   // seconds.
