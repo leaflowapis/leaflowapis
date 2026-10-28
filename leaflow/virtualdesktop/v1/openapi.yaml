@@ -50,18 +50,22 @@ info:
 
     ## Directory
 
-    The project has a directory, as a domain has. Every member who may log in to one of the
-    project's machines gets an account, with a username and a uid that are the same on every
-    machine, and the project can define groups. Accounts are created automatically, the first time
-    a member may log in to a machine of the project or opens a session; the username comes from the
-    member's email address and can be changed. **Accounts are never deleted**: a member who leaves
-    the project, or whose account is disabled, can no longer log in, and files keep their owner.
+    Every user has one account, as with Google Cloud OS Login: a username and a uid that are the
+    same on every machine of every project. The account is created the first time the user may log
+    in to a machine or opens a session; its username comes from the email address, such as
+    `alice_example_com` for `alice@example.com`, and its owner can change it. A project's machines
+    know the accounts of the project's members and the groups the project defines. A member who
+    leaves the project can no longer log in, and files keep their owner.
 
     Who may log in to which machines, and who may become root there through sudo, are permissions
     of the project's roles: `virtualdesktop:machines.login` and `virtualdesktop:machines.admin`,
     each for all machines or for chosen ones. Changes reach the machines within about a minute, and
     every login and elevation is checked against the current permissions while the machine is
-    connected. Elevation through sudo is approved by a person on a viewer, never by a password.
+    connected. To keep a member out of some machines, deny them `virtualdesktop:machines.login` on
+    those machines. Elevation through sudo is approved on a viewer, never by a password.
+
+    Members log in over SSH with the keys they own among the project's SSH keys, while they may
+    log in to the machine.
 
     Machines resolve directory accounts and groups themselves and never write them into their local
     account files. A local account or group that already uses a name or id of the directory keeps
@@ -332,13 +336,22 @@ paths:
   /api/v1/accounts:
     get:
       summary: List accounts
-      description: Returns the accounts of the project's directory, ordered by username.
+      description: |-
+        Returns the accounts of the project's members, ordered by username. A member who has never
+        been able to log in to a machine has no account yet.
       operationId: list-accounts
       tags:
         - Account
       parameters:
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: user_id
+          in: query
+          description: Return only the account of this member
+          explode: false
+          schema:
+            type: string
+            format: uuid
         - name: keyword
           in: query
           description: Match the username or the display name, case-insensitively
@@ -362,6 +375,7 @@ paths:
   /api/v1/accounts/{accountId}:
     get:
       summary: Get an account
+      description: Returns the account of a member of the project.
       operationId: get-account
       tags:
         - Account
@@ -383,14 +397,13 @@ paths:
     patch:
       summary: Update an account
       description: |-
-        Changes only the fields present in the request. A new username takes effect on the
-        machines within about a minute; the uid stays, so files keep their owner. Disabling ends the
-        account's sessions on every machine and refuses new logins.
+        Changes the caller's own account, only the fields present in the request. The account is
+        the same in every project, and a new username takes effect on the machines of all of them
+        within about a minute; the uid stays, so files keep their owner.
 
-        Fails with `DIRECTORY_NAME_TAKEN` when the username is already an account or a group of the
-        project.
-
-        Requires `virtualdesktop:directory.manage`.
+        Fails with:
+        - `ACCOUNT_NOT_OWNED` when the account is another member's;
+        - `DIRECTORY_NAME_TAKEN` when another account or a group uses the username.
       operationId: update-account
       tags:
         - Account
@@ -443,8 +456,8 @@ paths:
       description: |-
         Creates a group in the project's directory. It reaches the machines within about a minute.
 
-        Fails with `DIRECTORY_NAME_TAKEN` when the name is already an account or a group of the
-        project.
+        Fails with `DIRECTORY_NAME_TAKEN` when an account, or another group of the project, uses the
+        name.
 
         Requires `virtualdesktop:directory.manage`.
       operationId: create-group
@@ -569,7 +582,8 @@ paths:
     post:
       summary: Add an account to a group
       description: |-
-        Fails with `GROUP_MEMBER_EXISTS` when the account is already in the group.
+        The account must be a member's. Fails with `GROUP_MEMBER_EXISTS` when the account is
+        already in the group.
 
         Requires `virtualdesktop:directory.manage`.
       operationId: create-group-member
@@ -672,7 +686,6 @@ paths:
         `virtualdesktop:machines.login` on the machine.
 
         Fails with:
-        - `ACCOUNT_DISABLED` when the caller's account is disabled;
         - `MACHINE_OFFLINE` when the machine is not connected;
         - `USER_HAS_SESSION` when the account already has a session on the machine, which
           `metadata.sessionId` names; connect to it instead;
@@ -1202,7 +1215,6 @@ components:
         - home_directory
         - shell
         - groups
-        - disabled_at
         - created_at
         - updated_at
       properties:
@@ -1212,10 +1224,10 @@ components:
         user:
           $ref: "#/components/schemas/NamedIdentity"
         username:
-          description: The login name on every machine of the project
+          description: The login name on every machine
           type: string
         uid:
-          description: The user id on every machine of the project
+          description: The user id on every machine
           type: integer
           format: int64
         gid:
@@ -1230,16 +1242,10 @@ components:
         shell:
           type: string
         groups:
-          description: The names of the groups the account is in, besides its own
+          description: The names of the project's groups the account is in, besides its own
           type: array
           items:
             type: string
-        disabled_at:
-          description: When the account was disabled; null while enabled
-          type:
-            - string
-            - "null"
-          format: date-time
         created_at:
           type: string
           format: date-time
@@ -1283,9 +1289,6 @@ components:
           minLength: 2
           maxLength: 255
           pattern: "^/[^\\s:]+$"
-        disabled:
-          description: Disables or enables the account
-          type: boolean
       additionalProperties: false
     GroupResource:
       type: object
@@ -1391,7 +1394,7 @@ components:
         Why a session ended. `close_requested` and `terminate_requested` follow a request;
         `logout` the user logged out; `disconnected_timeout`, `no_client_timeout` and
         `max_lifetime` a time limit passed; `display_exit` and `helper_lost` the session failed;
-        `open_failed` it never opened; `user_disabled` its Linux user was disabled;
+        `open_failed` it never opened; `access_revoked` its user may no longer log in;
         `machine_restarted` the machine restarted; `unknown` the machine no longer reports it.
       type: string
       enum:
@@ -1404,7 +1407,7 @@ components:
         - display_exit
         - helper_lost
         - open_failed
-        - user_disabled
+        - access_revoked
         - machine_restarted
         - unknown
     SessionResource:

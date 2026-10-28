@@ -31,11 +31,13 @@ option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/machine/v1
 // machine but missing from it has ended, and a changed boot_id means every
 // earlier session ended. Nothing is replayed after a reconnect.
 //
-// Directory. Platform users reach a machine through the directory of its
-// project, as through a domain: accounts and groups whose ids the service
-// allocates, the same on every machine of the project. The service sends each
-// machine its copy with SetDirectory, which says for every account whether it
-// may log in to this machine and become root through sudo. The daemon answers
+// Directory. Every platform user has one account, with the same name and uid
+// on every machine of every project (after Google Cloud OS Login), and each
+// project has its groups; the service allocates their ids. The service sends
+// each machine its copy with SetDirectory: the accounts of the project's
+// members and the project's groups, with for every account whether it may
+// log in to this machine, whether it may become root through sudo and the SSH
+// keys it logs in with. The daemon answers
 // name service (NSS) lookups and PAM from that copy, and asks
 // GetAccountAccess when an account logs in or elevates, so that withdrawn
 // access ends at once; while the service is unreachable it decides from its
@@ -109,9 +111,11 @@ service MachineService {
   //   - its name, uid, primary group (its own group of the same name and
   //     id), GECOS name, home directory and shell resolve whatever its
   //     access, so that the files it owns keep their owner;
-  //   - PAM admits it only while login_allowed is set and disabled is not;
-  //     an account that loses either has its sessions terminated, which end
-  //     with SESSION_CLOSE_REASON_USER_DISABLED;
+  //   - PAM admits it only while login_allowed is set; an account that loses
+  //     it has its sessions terminated, which end with
+  //     SESSION_CLOSE_REASON_ACCESS_REVOKED;
+  //   - sshd(8) accepts its ssh_public_keys, through an
+  //     AuthorizedKeysCommand, only while login_allowed is set;
   //   - sudo(8) lets it become root only while admin is set as well;
   //   - its home directory is created on its first session, owned by it, and
   //     never deleted.
@@ -255,8 +259,8 @@ enum SessionCloseReason {
   SESSION_CLOSE_REASON_HELPER_LOST = 8;
   // Opening failed and was undone.
   SESSION_CLOSE_REASON_OPEN_FAILED = 9;
-  // The account was disabled or may no longer log in to the machine.
-  SESSION_CLOSE_REASON_USER_DISABLED = 10;
+  // The account may no longer log in to the machine.
+  SESSION_CLOSE_REASON_ACCESS_REVOKED = 10;
 }
 
 // Timeouts and limits of a session, which the daemon enforces even while the
@@ -379,6 +383,9 @@ message Account {
   string user_id = 7;
   // What the account may do on this machine.
   AccountAccess access = 8;
+  // The SSH public keys the account logs in with, each an authorized_keys(5)
+  // key without options, such as "ssh-ed25519 AAAAC3Nz...".
+  repeated string ssh_public_keys = 9;
 }
 
 // What an account may do on one machine.
@@ -387,8 +394,6 @@ message AccountAccess {
   bool login_allowed = 1;
   // The account may become root through sudo(8).
   bool admin = 2;
-  // The account is disabled: no login and no sudo, whatever the others say.
-  bool disabled = 3;
 }
 
 // A directory group (group(5)).
