@@ -44,7 +44,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // service calls the methods of a feature only while the machine reports it
 // available (leaflow.fleet.machine.v1). When a connection drops, its calls in
 // flight end with UNAVAILABLE and reason CONNECTION_LOST and are never
-// replayed.
+// replayed. A result larger than the connection's max_message_size is not
+// sent: the call fails with RESOURCE_EXHAUSTED and reason RESULT_TOO_LARGE
+// instead.
 //
 // Signaling. Viewers and session processes send transport.v1 Signal and
 // Migration. The service takes the sender from the connection a message
