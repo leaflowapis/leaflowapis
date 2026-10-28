@@ -12,7 +12,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/session/v1;sessionv
 // together, and its rules follow how a viewer acts, not who it is. A session
 // needs no desktop: its domains are those of the features the machine has,
 // such as terminals (leaflow.fleet.terminal.v1) or a desktop
-// (leaflow.virtualdesktop.*).
+// (leaflow.fleet.virtualdesktop.*).
 //
 // Channel type "leaflow.fleet.session.v1", lane "metadata": the viewer opens it
 // first, right after the transport Hello, and opens no other channel before

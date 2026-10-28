@@ -35,7 +35,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/machine/v1;machinev
 // Features. A machine offers the features of the packages it serves, each
 // named by that package, such as "leaflow.fleet.directory.v1" (logins of the
 // project's directory accounts), "leaflow.fleet.command.v1" (remote
-// commands) and "leaflow.virtualdesktop.host.v1" (desktop sessions). The
+// commands) and "leaflow.fleet.virtualdesktop.host.v1" (desktop sessions). The
 // service calls the methods of a feature only while the machine reports it
 // AVAILABLE.
 //

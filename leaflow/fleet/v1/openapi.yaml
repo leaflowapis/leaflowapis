@@ -62,9 +62,9 @@ info:
     - `leaflow.fleet.command.v1`: running commands;
     - `leaflow.fleet.host.v1`: sessions, with terminals, programs, files, ports and privilege
       approvals;
-    - `leaflow.virtualdesktop.host.v1`: sessions with a desktop.
+    - `leaflow.fleet.virtualdesktop.host.v1`: sessions with a desktop.
 
-    A machine installed without a desktop does not offer `leaflow.virtualdesktop.host.v1`. A
+    A machine installed without a desktop does not offer `leaflow.fleet.virtualdesktop.host.v1`. A
     request that needs a feature the machine does not report available fails with
     `FEATURE_UNAVAILABLE`, whose `metadata.feature` names the feature.
 
@@ -1610,7 +1610,7 @@ components:
           $ref: "#/components/schemas/DesktopOptions"
       additionalProperties: false
     DesktopOptions:
-      description: A desktop for the session, on a machine that offers `leaflow.virtualdesktop.host.v1`
+      description: A desktop for the session, on a machine that offers `leaflow.fleet.virtualdesktop.host.v1`
       type: object
       required:
         - mode
@@ -1632,7 +1632,7 @@ components:
         session_desktop:
           description: |-
             In `desktop` mode, the desktop environment to start: a detail of the machine's
-            `leaflow.virtualdesktop.host.v1` feature without its `desktop.` prefix, such as `XFCE`;
+            `leaflow.fleet.virtualdesktop.host.v1` feature without its `desktop.` prefix, such as `XFCE`;
             the machine's default when omitted
           type: string
           maxLength: 128

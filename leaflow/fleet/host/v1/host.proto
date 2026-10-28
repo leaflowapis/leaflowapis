@@ -19,7 +19,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 // Kinds. A session without options has no desktop: its viewers use the
 // domains of the session layer, such as terminals, programs, files, ports and
 // approvals (leaflow.fleet.terminal.v1 and its siblings). Options add a
-// feature, such as a desktop (leaflow.virtualdesktop.host.v1 DesktopOptions);
+// feature, such as a desktop (leaflow.fleet.virtualdesktop.host.v1 DesktopOptions);
 // the session then also offers that feature's domains.
 //
 // Reconciliation. The daemon reports every session with ReportSessions after
@@ -136,7 +136,7 @@ message Session {
   // Plain text for logs about close_reason, at most 1024 bytes.
   string reason_phrase = 11;
   // The state of what its options added, at most one of each type, such as
-  // leaflow.virtualdesktop.host.v1 DesktopState. A type the service does not
+  // leaflow.fleet.virtualdesktop.host.v1 DesktopState. A type the service does not
   // know is ignored.
   repeated google.protobuf.Any details = 12;
 }
@@ -229,7 +229,7 @@ message OpenSessionRequest {
   // Timeouts and limits.
   SessionPolicy policy = 5;
   // What the session has besides the session layer, at most one of each
-  // type, such as leaflow.virtualdesktop.host.v1 DesktopOptions. None: a
+  // type, such as leaflow.fleet.virtualdesktop.host.v1 DesktopOptions. None: a
   // session without a desktop.
   repeated google.protobuf.Any options = 6;
 }
