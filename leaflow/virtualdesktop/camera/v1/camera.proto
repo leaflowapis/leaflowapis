@@ -2,57 +2,62 @@ syntax = "proto3";
 
 package leaflow.virtualdesktop.camera.v1;
 
+import "google/protobuf/duration.proto";
+import "leaflow/virtualdesktop/device/v1/device.proto";
+
 option go_package = "github.com/leaflowapis/leaflow-go/leaflow/virtualdesktop/camera/v1;camerav1";
 
 // The viewer's camera as the session's video capture device (after
-// MS-RDPECAM). The session decodes the frames and feeds them to its virtual
-// capture device.
+// MS-RDPECAM). The session decodes the frames and feeds the pixels to the
+// private capture device of the session's user. Paths and handles of the
+// viewer's devices never travel.
 //
 // Channel types:
 //   - "leaflow.virtualdesktop.camera.v1", lane "metadata": opened by the
-//     viewer that provides the camera (see the device package). The viewer
-//     sends ClientHello, the session ServerHello. The session closes the
-//     channel with NO_ERROR when no application captures anymore.
+//     viewer that provides the camera (see the device package), only while
+//     its demand is ACTIVE and after its person agreed. The viewer sends one
+//     CameraRequest; the session sends CameraServerMessage: the grant, key
+//     frame requests, and the end when it stops the stream. Closing the
+//     channel stops the camera at once.
 //   - "leaflow.virtualdesktop.camera.v1.frame", lane "media": opened by the
-//     viewer, one per frame. It carries one CameraFrame, then closes. The
-//     viewer may abandon a frame that a newer one has overtaken by closing
-//     its channel with CANCELLED.
+//     viewer, one per frame, after the grant. It carries one CameraFrame,
+//     then closes. The viewer abandons a frame that a newer one overtook by
+//     closing its channel with CANCELLED; nothing of an incomplete frame
+//     reaches the capture device.
 
-// A message from the viewer.
-message ClientMessage {
-  // The message.
-  oneof message {
-    // The formats the viewer can produce. The first message of the camera
-    // channel.
-    ClientHello client_hello = 1;
-    // On a frame channel: the frame.
-    CameraFrame frame = 2;
-  }
-}
-
-// A message from the session on the camera channel.
-message ServerMessage {
-  // The message.
-  oneof message {
-    // The format to send. The first message of the session.
-    ServerHello server_hello = 1;
-    // Asks for a key frame.
-    KeyFrameRequest key_frame_request = 2;
-  }
-}
-
-// The formats the viewer can produce.
-message ClientHello {
-  // Most preferred first, at most 8.
+// Asks to provide the camera.
+message CameraRequest {
+  // The formats the viewer can produce, most preferred first, at most 8.
   repeated CameraFormat formats = 1;
 }
 
-// The format to send, fixed until the channel closes.
-message ServerHello {
-  // One of ClientHello.formats, possibly with a lower size or frame rate.
+// A message from the session on the camera channel.
+message CameraServerMessage {
+  // The message.
+  oneof message {
+    // The session accepts the stream. The first message.
+    CameraGrant grant = 1;
+    // Asks for a key frame.
+    KeyFrameRequest key_frame_request = 2;
+    // The session ends the stream. The last message.
+    leaflow.virtualdesktop.device.v1.CaptureEnd end = 3;
+  }
+}
+
+// The session accepts a camera stream, within limits fixed until the channel
+// closes. A change of format needs a new channel.
+message CameraGrant {
+  // One of CameraRequest.formats, within the effective CameraLimits.
   CameraFormat format = 1;
-  // The largest CameraFrame.data the session accepts.
+  // The largest CameraFrame.data.
   uint32 max_frame_size_bytes = 2;
+  // The most frames in flight, at most 2.
+  uint32 max_queued_frames = 3;
+  // The oldest a frame in flight may get, at most 200 milliseconds.
+  google.protobuf.Duration max_queue_time = 4;
+  // The viewer stops capturing after this long; the session ends the stream
+  // with DEADLINE_EXCEEDED then.
+  google.protobuf.Duration max_capture_duration = 5;
 }
 
 // A format of camera frames.
@@ -63,21 +68,27 @@ message CameraFormat {
   uint32 width = 2;
   // The frame height in pixels.
   uint32 height = 3;
-  // The most frames per second.
-  double frame_rate = 4;
-  // H264 only: the WebCodecs codec string, such as "avc1.42E01F".
-  string codec = 5;
-  // H264 only: the WebCodecs VideoDecoderConfig.description (an
-  // AVCDecoderConfigurationRecord).
-  bytes description = 6;
+  // The most frames per second, as a fraction: frame_rate_numerator divided
+  // by frame_rate_denominator, such as 10/1. Sources may deliver fewer.
+  uint32 frame_rate_numerator = 4;
+  // See frame_rate_numerator. Not 0.
+  uint32 frame_rate_denominator = 5;
+  // JPEG: "image/jpeg". H264: the WebCodecs codec string, such as
+  // "avc1.42E01F".
+  string codec = 6;
+  // H264 only: the AVCDecoderConfigurationRecord (WebCodecs
+  // VideoDecoderConfig.description).
+  bytes description = 7;
 }
 
 // How camera frames are encoded.
 enum CameraEncoding {
   CAMERA_ENCODING_UNSPECIFIED = 0;
-  // Every frame is a JPEG (ISO/IEC 10918-1).
+  // Every frame is one complete JPEG (ISO/IEC 10918-1), as a browser makes
+  // it from a captured VideoFrame.
   CAMERA_ENCODING_JPEG = 1;
-  // H.264 access units in AVC format, one per frame.
+  // H.264, one complete access unit in AVC format per frame. Offered only
+  // when the viewer can encode it.
   CAMERA_ENCODING_H264 = 2;
 }
 
@@ -88,12 +99,19 @@ message CameraFrame {
   uint64 sequence = 1;
   // The capture time in microseconds, on the viewer's media clock.
   int64 timestamp_us = 2;
-  // The frame decodes on its own. Always true for JPEG.
-  bool key_frame = 3;
-  // The encoded frame.
-  bytes data = 4;
+  // Its duration in microseconds. 0 when unknown.
+  uint32 duration_us = 3;
+  // The frame decodes on its own: always for JPEG; for H264 an IDR frame of
+  // the granted configuration.
+  bool key_frame = 4;
+  // The encoded frame, at most CameraGrant.max_frame_size_bytes.
+  bytes data = 5;
 }
 
-// Asks for a key frame, after a frame could not be decoded or was lost. The
-// session drops H264 frames until the next key frame.
-message KeyFrameRequest {}
+// Asks for a key frame after a frame was lost, abandoned or not decodable.
+// The session drops H264 frames until a key frame; the viewer sends one
+// soon, or the session ends the stream.
+message KeyFrameRequest {
+  // The last frame the session used.
+  uint64 after_sequence = 1;
+}
