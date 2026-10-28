@@ -44,9 +44,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // service calls the methods of a feature only while the machine reports it
 // available (leaflow.fleet.machine.v1). When a connection drops, its calls in
 // flight end with UNAVAILABLE and reason CONNECTION_LOST and are never
-// replayed. A result larger than the connection's max_message_size is not
-// sent: the call fails with RESOURCE_EXHAUSTED and reason RESULT_TOO_LARGE
-// instead.
+// replayed. A payload larger than 256 KiB travels in pieces, and one larger
+// than 16 MiB fails its call with RESOURCE_EXHAUSTED and reason
+// RESULT_TOO_LARGE or CALL_TOO_LARGE (leaflow.fleet.rpc.v1).
 //
 // Signaling. Viewers and session processes send transport.v1 Signal and
 // Migration. The service takes the sender from the connection a message
@@ -155,7 +155,8 @@ message ServerHello {
   // How long either side waits without receiving anything before it closes
   // the connection.
   google.protobuf.Duration idle_timeout = 4;
-  // The largest message, in bytes, either end may send.
+  // The largest message, in bytes, either end may send. At least 512 KiB, so
+  // that a piece of a call's payload (leaflow.fleet.rpc.v1) always fits.
   uint32 max_message_size = 5;
 }
 

@@ -30,6 +30,23 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/rpc/v1;rpcv1";
 // the method, and whose domain is "fleet.leaflow.cloud". A reason a receiver
 // does not know is handled by the canonical code of the status.
 //
+// Pieces. A payload larger than 256 KiB travels in pieces, so that no message
+// of a carrier comes near its largest message: several Call or CallResult
+// messages with the same request_id, each with the next at most 256 KiB of
+// the payload, in order, and with more set on every one but the last. Only
+// the first piece of a Call carries method and timeout. The receiver joins
+// the payloads before it acts on them. Messages of other calls, and a
+// CallCancel, may come between the pieces of a call. A failed result carries
+// error and is never split.
+//
+// A payload is at most 16 MiB, and a method may set a lower limit for its
+// own messages. A callee whose result would be larger fails the call with
+// RESOURCE_EXHAUSTED and reason RESULT_TOO_LARGE instead. A callee that
+// receives more of a call's payload answers with RESOURCE_EXHAUSTED and reason
+// CALL_TOO_LARGE, and a caller that receives more of a result fails the call
+// with RESOURCE_EXHAUSTED and reason RESULT_TOO_LARGE; either drops the rest of
+// the pieces.
+//
 // Execution. The ErrorInfo of a failed call that acts on the session carries
 // the metadata key "executionState" with an ExecutionState name, telling the
 // caller whether retrying is safe. A missing key means
@@ -52,6 +69,9 @@ message Call {
   // passes the result is DEADLINE_EXCEEDED. Unset: the default the method
   // documents.
   google.protobuf.Duration timeout = 4;
+  // Set on every piece of the payload but the last (see Pieces). Method and
+  // timeout are only on the first piece.
+  bool more = 5;
 }
 
 // The result of a Call. Exactly one CallResult answers every Call, including
@@ -67,6 +87,8 @@ message CallResult {
     // Why the call failed.
     google.rpc.Status error = 3;
   }
+  // Set on every piece of the payload but the last (see Pieces).
+  bool more = 4;
 }
 
 // Asks the callee to stop working on a call. The CallResult still follows:
