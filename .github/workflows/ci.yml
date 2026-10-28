@@ -41,3 +41,5 @@ jobs:
           PY
       - name: Check SWAS contract
         run: python3 tests/test_swas_contract.py .
+      - name: Check Fleet contract
+        run: python3 tests/test_fleet_contract.py .

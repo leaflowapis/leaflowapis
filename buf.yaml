@@ -1,6 +1,6 @@
-# Protobuf contracts in this repository: the VirtualDesktop protocol spoken by
-# the Agent, viewers and the VirtualDesktop service. The OpenAPI contracts are
-# not part of this module.
+# Protobuf contracts in this repository: the Fleet protocol spoken by the
+# Leaflow Fleet Agent, viewers and the Fleet service, and its desktop feature,
+# VirtualDesktop. The OpenAPI contracts are not part of this module.
 version: v2
 modules:
   - path: .

@@ -9,7 +9,7 @@ leaflow/<service>/<sub-package>/<version>/openapi.yaml
 
 Each `openapi.yaml` is a complete API entry point. Larger contracts, such as Billing, use resource files alongside the entry point and compose them with standard `$ref` references.
 
-The [VirtualDesktop protocol](leaflow/virtualdesktop/), spoken by the Leaflow Agent, viewers and the VirtualDesktop service, is defined in Protocol Buffers and checked with `buf`.
+The [Fleet protocol](leaflow/fleet/), spoken by the Leaflow Fleet Agent, viewers and the Fleet service, and its desktop feature, the [VirtualDesktop protocol](leaflow/virtualdesktop/), are defined in Protocol Buffers and checked with `buf`.
 
 ## SDKs
 

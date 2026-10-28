@@ -1,0 +1,1940 @@
+openapi: 3.2.1
+info:
+  title: Leaflow Fleet API
+  version: 1.0.0
+  description: |-
+    Machines that run the Leaflow Fleet Agent (`leaflow-fleet-agent`): adding machines, the
+    project's directory of accounts and groups, running commands, opening and closing sessions,
+    with or without a desktop, and admitting viewers to them.
+
+    ## What this API sees
+
+    This API coordinates. It admits viewers to sessions and passes the signaling of their
+    connections, but everything a session shows or receives — terminals, files, the screen,
+    input, the clipboard, printing and privilege approvals — travels end to end between the viewer
+    and the session, encrypted with keys that never leave them. The platform sees which machine,
+    which session and who is connected, and nothing of what happens inside.
+
+    Commands are the exception: the platform passes a command and its output between the caller
+    and the machine, and sees both.
+
+    ## Authentication
+
+    Every request carries a scoped token; see the `bearerAuth` security scheme.
+
+    **Neither the path nor the headers carry a `project_id`**: the current project is determined by
+    the token.
+
+    ## Adding a machine
+
+    1. Install the Agent and run `leaflow-fleet-agent daemon enroll` on the machine. The
+       command carries no secret. The machine shows a pairing code such as `7K2QM-9XWTD`.
+    2. Find the request with `GET /api/v1/enrollments:find?pairing_code=…`. Compare its `hostname`
+       and `source_address` with the machine in front of you: the pairing code is not a secret,
+       and anyone can request enrollment.
+    3. Approve it with `POST /api/v1/enrollments/{enrollmentId}:approve`. The machine joins the
+       current project within its next polling interval.
+
+    ## Trusting a machine's key
+
+    Each machine has an Ed25519 key that it generates itself and that never leaves it. Viewers
+    verify that key end to end before they exchange any data with a session, so a client must
+    decide which key belongs to a machine without relying on any party in between:
+
+    - When approving an enrollment, recompute the pairing code from `public_key` and compare it
+      with the code the machine shows. The code is derived as documented for
+      `EnrollMachineResponse.pairing_code` in `leaflow/fleet/machine/v1/machine.proto`.
+      Approve only when they match, and remember the key for the machine.
+    - On any other client, remember the key the first time it connects to the machine, and
+      refuse to continue whenever the machine later proves a different key. The fingerprint can
+      be compared with the one the Agent prints on the machine.
+
+    A machine that is reinstalled enrolls again as a new machine with a new key.
+
+    ## Features
+
+    A machine reports what it offers in `features`, each named after the protocol package that
+    defines it:
+
+    - `leaflow.fleet.directory.v1`: the project's accounts and groups exist on the machine, and
+      its PAM services, sudo included, admit only the members who may log in;
+    - `leaflow.fleet.command.v1`: running commands;
+    - `leaflow.fleet.host.v1`: sessions, with terminals, programs, files, ports and privilege
+      approvals;
+    - `leaflow.virtualdesktop.host.v1`: sessions with a desktop.
+
+    A machine installed without a desktop does not offer `leaflow.virtualdesktop.host.v1`. A
+    request that needs a feature the machine does not report available fails with
+    `FEATURE_UNAVAILABLE`, whose `metadata.feature` names the feature.
+
+    ## Directory
+
+    The project has a directory, as a domain has. Every member who may log in to one of the
+    project's machines gets an account, with a username and a uid that are the same on every
+    machine, and the project can define groups. Accounts are created automatically, the first time
+    a member may log in to a machine of the project or opens a session; the username comes from the
+    member's email address and can be changed. **Accounts are never deleted**: a member who leaves
+    the project, or whose account is disabled, can no longer log in, and files keep their owner.
+
+    Who may log in to which machines, and who may become root there through sudo, are permissions
+    of the project's roles: `fleet:machines.login` and `fleet:machines.admin`, each for all
+    machines or for chosen ones. Changes reach the machines within about a minute, and every login
+    and elevation is checked against the current permissions while the machine is connected. Elevation through sudo is approved by a person on a viewer, never by a password.
+
+    Machines resolve directory accounts and groups themselves and never write them into their local
+    account files. A local account or group that already uses a name or id of the directory keeps
+    it, and the machine reports the conflict in `directory_conflicts`.
+
+    ## Running commands
+
+    `POST /api/v1/machines/{machineId}:runCommand` runs one command line on the machine as one of
+    its accounts, as `ssh machine 'command'` would, but without SSH: the machine needs no open
+    port, no distributed key and no address the caller can reach. It requires
+    `fleet:commands.run` for the machine. A command may run as any account of the machine, root
+    included, so grant the permission as you would root access.
+
+    ## Viewing a session
+
+    1. Register the client's device key once: `POST /api/v1/client-challenges`, sign the
+       challenge, then `POST /api/v1/clients`. The private key must never leave the client; in a
+       browser, use a non-extractable WebCrypto key.
+    2. For each connection, create a ticket with
+       `POST /api/v1/sessions/{sessionId}/viewer-tickets`. It is valid for 60 seconds and once.
+    3. Open a WebSocket to the returned `url` with the subprotocol
+       `leaflow.fleet.control.v1` and follow `leaflow/fleet/control/v1/control.proto`.
+       The ticket travels inside the protocol and never in a URL.
+
+    What a viewer may do in a session is decided when its ticket is created, from the caller's
+    permissions, and does not change during the connection.
+servers:
+  - url: https://fleet.leaflow.cloud
+    description: Machines, accounts, commands, sessions and viewers
+security:
+  - bearerAuth: []
+tags:
+  - name: Machine
+  - name: Enrollment
+  - name: Command
+  - name: Account
+  - name: Group
+  - name: Session
+  - name: Viewer
+  - name: Client
+paths:
+  /api/v1/machines:
+    get:
+      summary: List machines
+      description: Returns the machines of the current project, newest first.
+      operationId: list-machines
+      tags:
+        - Machine
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: keyword
+          in: query
+          description: Match the machine name or host name, case-insensitively
+          explode: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}:
+    get:
+      summary: Get a machine
+      operationId: get-machine
+      tags:
+        - Machine
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      summary: Update a machine
+      description: Changes the machine's name. Requires `fleet:machines.manage`.
+      operationId: update-machine
+      tags:
+        - Machine
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMachineRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Remove a machine
+      description: |-
+        Removes the machine from the project. Every viewer of its sessions is disconnected at once
+        and the Agent is refused from then on; to use the machine again, enroll it again. Sessions
+        still open on the machine can no longer be reached and end according to their own
+        timeouts. Nothing on the machine is deleted.
+
+        Requires `fleet:machines.manage`.
+      operationId: delete-machine
+      tags:
+        - Machine
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      responses:
+        "204":
+          description: Removed
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}:runCommand:
+    post:
+      summary: Run a command
+      description: |-
+        Runs one command line on the machine with the login shell of an account and returns once
+        it exited or was killed, with its exit status and what it wrote. Pipes, redirection and
+        `&&` work; there is no terminal and no standard input. The machine admits the account
+        through PAM as for a login, so disabled and expired accounts, and directory accounts that
+        may not log in, are refused. A command that fails is still a successful request: its exit
+        status is its result.
+
+        The request is held until the command ends, at most `timeout_seconds` and a few seconds
+        more. Neither the command nor its output is hidden from the platform: do not put secrets
+        into either.
+
+        Requires `fleet:commands.run` for the machine.
+
+        Fails with:
+        - `MACHINE_OFFLINE` when the machine is not connected;
+        - `FEATURE_UNAVAILABLE` when the machine does not offer `leaflow.fleet.command.v1`;
+        - `ACCOUNT_NOT_FOUND` when the machine has no such account;
+        - `ACCOUNT_NOT_ALLOWED` when the machine refuses the account, with the machine's message
+          in `metadata.pamMessage`;
+        - `COMMAND_START_FAILED` when the shell could not start; nothing ran;
+        - `MACHINE_TIMEOUT` when the machine did not answer in time. The command may have run.
+      operationId: run-machine-command
+      tags:
+        - Command
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RunCommandRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunCommandResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/enrollments:find:
+    get:
+      summary: Find an enrollment request by its pairing code
+      description: |-
+        Returns the pending enrollment request whose pairing code matches, or no enrollment when
+        none does. Mistyped codes are expected and are not an error. Letters are matched
+        case-insensitively, `I` and `L` are read as `1`, `O` as `0`, and spaces and hyphens are
+        ignored.
+
+        Only requests that are still pending are found. A request is pending while its machine
+        keeps polling; one it stops polling expires after a few hours.
+
+        Requires `fleet:machines.manage`.
+      operationId: find-enrollment-by-pairing-code
+      tags:
+        - Enrollment
+      parameters:
+        - name: pairing_code
+          in: query
+          required: true
+          description: The code the machine shows, such as `7K2QM-9XWTD`
+          explode: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 32
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FindEnrollmentResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/enrollments/{enrollmentId}:approve:
+    post:
+      summary: Approve an enrollment request
+      description: |-
+        Adds the machine to the current project under the given name and returns it. The Agent
+        learns the decision the next time it polls.
+
+        A request that is no longer pending is rejected with `ENROLLMENT_NOT_PENDING`.
+
+        Requires `fleet:machines.manage`.
+      operationId: approve-enrollment
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/EnrollmentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApproveEnrollmentRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/enrollments/{enrollmentId}:deny:
+    post:
+      summary: Deny an enrollment request
+      description: |-
+        Refuses the request. The decision is final for the machine's key: the Agent stops
+        polling and reports that it was denied.
+
+        A request that is no longer pending is rejected with `ENROLLMENT_NOT_PENDING`.
+
+        Requires `fleet:machines.manage`.
+      operationId: deny-enrollment
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/EnrollmentId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrollmentResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/accounts:
+    get:
+      summary: List accounts
+      description: Returns the accounts of the project's directory, ordered by username.
+      operationId: list-accounts
+      tags:
+        - Account
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: keyword
+          in: query
+          description: Match the username or the display name, case-insensitively
+          explode: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/accounts/{accountId}:
+    get:
+      summary: Get an account
+      operationId: get-account
+      tags:
+        - Account
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      summary: Update an account
+      description: |-
+        Changes only the fields present in the request. A new username takes effect on the
+        machines within about a minute; the uid stays, so files keep their owner. Disabling ends the
+        account's sessions on every machine and refuses new logins.
+
+        Fails with `DIRECTORY_NAME_TAKEN` when the username is already an account or a group of the
+        project.
+
+        Requires `fleet:directory.manage`.
+      operationId: update-account
+      tags:
+        - Account
+      parameters:
+        - $ref: "#/components/parameters/AccountId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/groups:
+    get:
+      summary: List groups
+      description: Returns the groups of the project's directory, ordered by name.
+      operationId: list-groups
+      tags:
+        - Group
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Create a group
+      description: |-
+        Creates a group in the project's directory. It reaches the machines within about a minute.
+
+        Fails with `DIRECTORY_NAME_TAKEN` when the name is already an account or a group of the
+        project.
+
+        Requires `fleet:directory.manage`.
+      operationId: create-group
+      tags:
+        - Group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/groups/{groupId}:
+    get:
+      summary: Get a group
+      operationId: get-group
+      tags:
+        - Group
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      summary: Rename a group
+      description: |-
+        The gid stays, so files keep their group. Fails with `DIRECTORY_NAME_TAKEN` as for creating
+        a group.
+
+        Requires `fleet:directory.manage`.
+      operationId: update-group
+      tags:
+        - Group
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateGroupRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Delete a group
+      description: |-
+        Removes the group from the directory. Machines stop resolving it within about a minute;
+        files keep its gid.
+
+        Requires `fleet:directory.manage`.
+      operationId: delete-group
+      tags:
+        - Group
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      responses:
+        "204":
+          description: Deleted
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/groups/{groupId}/members:
+    get:
+      summary: List the members of a group
+      description: Returns the accounts in the group, ordered by username.
+      operationId: list-group-members
+      tags:
+        - Group
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Add an account to a group
+      description: |-
+        Fails with `GROUP_MEMBER_EXISTS` when the account is already in the group.
+
+        Requires `fleet:directory.manage`.
+      operationId: create-group-member
+      tags:
+        - Group
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateGroupMemberRequest"
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/groups/{groupId}/members/{accountId}:
+    delete:
+      summary: Remove an account from a group
+      description: |-
+        Removing an account that is not in the group succeeds.
+
+        Requires `fleet:directory.manage`.
+      operationId: delete-group-member
+      tags:
+        - Group
+      parameters:
+        - $ref: "#/components/parameters/GroupId"
+        - $ref: "#/components/parameters/AccountId"
+      responses:
+        "204":
+          description: Removed
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions:
+    get:
+      summary: List sessions
+      description: |-
+        Returns the sessions of the current project's machines, newest first. Closed sessions are
+        omitted unless `include_closed` is true.
+      operationId: list-sessions
+      tags:
+        - Session
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: machine_id
+          in: query
+          description: Return only the sessions of this machine
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          description: Return only the sessions of this member
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: include_closed
+          in: query
+          description: Include closed sessions; defaults to false
+          explode: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Open a session
+      description: |-
+        Opens a session for the caller on a machine, as the caller's account, and returns once it
+        is ready. With `desktop` the session has a desktop; without, it offers terminals, programs,
+        files, ports and privilege approvals. The account is created if the caller has none yet.
+        Requires `fleet:machines.login` on the machine.
+
+        Fails with:
+        - `ACCOUNT_DISABLED` when the caller's account is disabled;
+        - `MACHINE_OFFLINE` when the machine is not connected;
+        - `FEATURE_UNAVAILABLE` when the machine does not offer sessions, or with `desktop`,
+          desktops;
+        - `USER_HAS_SESSION` when the account already has a session on the machine, which
+          `metadata.sessionId` names; connect to it instead;
+        - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
+          the machine refuses the account, such as while it has not received the account yet or a
+          local account uses its name; `PAM_PERMISSION_DENIED` carries the machine's message in
+          `metadata.pamMessage`;
+        - `SESSION_CONFLICT` with `desktop` when the account has a graphical session on the
+          machine that Fleet did not open;
+        - `DISPLAY_UNAVAILABLE` or `SESSION_START_FAILED` when the machine could not start it;
+        - `MACHINE_TIMEOUT` when the machine did not answer in time. The session may still open;
+          list the sessions before trying again.
+      operationId: create-session
+      tags:
+        - Session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}:
+    get:
+      summary: Get a session
+      operationId: get-session
+      tags:
+        - Session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}:close:
+    post:
+      summary: Close a session
+      description: |-
+        Ends the session in order: its applications are asked to exit and get a grace period
+        before the session is terminated. Returns once the session is closed. Closing a closed
+        session succeeds.
+
+        The owner may close their own session; closing another member's requires
+        `fleet:sessions.manage`. Fails with `MACHINE_OFFLINE` or `MACHINE_TIMEOUT` as
+        for opening a session.
+      operationId: close-session
+      tags:
+        - Session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}:terminate:
+    post:
+      summary: Terminate a session
+      description: |-
+        Ends the session at once, killing every process in it. Returns once the session is
+        closed. Terminating a closed session succeeds.
+
+        The owner may terminate their own session; terminating another member's requires
+        `fleet:sessions.manage`. Fails with `MACHINE_OFFLINE` or `MACHINE_TIMEOUT` as
+        for opening a session.
+      operationId: terminate-session
+      tags:
+        - Session
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/viewers:
+    get:
+      summary: List the viewers of a session
+      description: Returns the viewers connected to the session, in the order they connected.
+      operationId: list-session-viewers
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/viewers/{connectionId}:
+    delete:
+      summary: Disconnect a viewer
+      description: |-
+        Disconnects the viewer from the session; the session goes on. The viewer can connect
+        again only with a new ticket.
+
+        The owner of the session may disconnect its viewers; otherwise this requires
+        `fleet:sessions.manage`.
+      operationId: delete-viewer
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: connectionId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        "204":
+          description: Disconnected
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/viewer-tickets:
+    post:
+      summary: Create a viewer ticket
+      description: |-
+        Issues a single-use ticket that admits one viewer connection of the given client to the
+        session. It is valid for 60 seconds.
+
+        The owner of a session may operate it. Viewing another member's session requires
+        `fleet:sessions.view`, which admits watching only, or
+        `fleet:sessions.control`, which also admits operating it. Each further capability
+        of the session — file transfer, the clipboard, terminals and programs, port forwarding,
+        devices and audio, printing, SSH agent forwarding, approving privilege requests and
+        reading logs — is granted only with its permission; a viewer that may only watch gets
+        none of them.
+
+        A request made by a browser binds the ticket to its `Origin`, which the WebSocket
+        connection must carry too.
+
+        Fails with:
+        - `SESSION_CLOSED` when the session has ended;
+        - `SESSION_ACCESS_DENIED` when the caller may not view the session;
+        - `CLIENT_NOT_FOUND` when the client is not one of the caller's registered clients.
+      operationId: create-viewer-ticket
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateViewerTicketRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerTicketResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/client-challenges:
+    post:
+      summary: Create a client challenge
+      description: |-
+        Returns a random challenge for registering a device key. It is valid for 5 minutes and
+        once, and only for the caller.
+      operationId: create-client-challenge
+      tags:
+        - Client
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientChallengeResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/clients:
+    get:
+      summary: List clients
+      description: |-
+        Returns the caller's registered clients, newest first. Clients belong to the caller and
+        are the same in every project.
+      operationId: list-clients
+      tags:
+        - Client
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Register a client
+      description: |-
+        Registers a device key for the caller. `signature` proves that the client holds the
+        private key: it is the Ed25519 signature (RFC 8032) by the key over the ASCII bytes
+        `leaflow.fleet.v1.ClientChallenge`, one zero byte and the challenge's 32 bytes.
+
+        A client that acts on its own, such as an assistant, must be registered as `automation`:
+        sessions apply their automation rules to it.
+
+        Fails with:
+        - `CLIENT_CHALLENGE_INVALID` when the challenge is unknown, used, expired or issued to
+          someone else;
+        - `CLIENT_SIGNATURE_INVALID` when the signature does not verify;
+        - `CLIENT_KEY_REGISTERED` when the key is already registered.
+      operationId: create-client
+      tags:
+        - Client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/clients/{clientId}:
+    delete:
+      summary: Revoke a client
+      description: |-
+        Revokes one of the caller's clients. Its tickets are refused from then on and its viewers
+        are disconnected at once. The key cannot be registered again.
+      operationId: delete-client
+      tags:
+        - Client
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Revoked
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  parameters:
+    MachineId:
+      name: machineId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    EnrollmentId:
+      name: enrollmentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    GroupId:
+      name: groupId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 40
+        pattern: "^[a-z0-9-]+$"
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    NamedIdentity:
+      $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
+    PublicKey:
+      description: An Ed25519 public key (RFC 8032), 32 bytes in standard Base64 (RFC 4648)
+      type: string
+      pattern: "^[A-Za-z0-9+/]{43}=$"
+    OperatingSystem:
+      description: The operating system, from the machine's /etc/os-release
+      type: object
+      required:
+        - id
+        - version_id
+        - pretty_name
+      properties:
+        id:
+          description: ID=, such as `debian`
+          type: string
+        version_id:
+          description: VERSION_ID=, such as `13`
+          type: string
+        pretty_name:
+          description: PRETTY_NAME=, such as `Debian GNU/Linux 13 (trixie)`
+          type: string
+      additionalProperties: false
+    MachineResource:
+      type: object
+      required:
+        - id
+        - name
+        - hostname
+        - public_key
+        - online
+        - operating_system
+        - kernel_release
+        - architecture
+        - features
+        - agent_version
+        - directory_synced
+        - directory_conflicts
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 128
+        hostname:
+          description: The host name the machine last reported
+          type: string
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
+        online:
+          description: The machine's Agent is connected
+          type: boolean
+        operating_system:
+          description: Null until the machine has reported once
+          oneOf:
+            - $ref: "#/components/schemas/OperatingSystem"
+            - type: "null"
+        kernel_release:
+          description: Such as `6.12.43+deb13-amd64`; empty until the machine has reported once
+          type: string
+        architecture:
+          description: Such as `x86_64`; empty until the machine has reported once
+          type: string
+        features:
+          description: What the machine offers; empty until the machine has reported once
+          type: array
+          items:
+            $ref: "#/components/schemas/MachineFeature"
+        agent_version:
+          description: The Agent software the machine last connected with
+          type: string
+        directory_synced:
+          description: The machine serves the project's current directory
+          type: boolean
+        directory_conflicts:
+          description: The accounts and groups of the directory the machine does not serve, because a local account or group uses their name or id
+          type: array
+          items:
+            $ref: "#/components/schemas/DirectoryConflict"
+        created_at:
+          description: When the machine was added to the project
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    FeatureState:
+      description: "`available` can be used now. `unavailable` is installed but cannot be used, as `reason` says."
+      type: string
+      enum:
+        - available
+        - unavailable
+    MachineFeature:
+      type: object
+      required:
+        - name
+        - state
+        - reason
+        - details
+      properties:
+        name:
+          description: The protocol package that defines the feature, such as `leaflow.fleet.command.v1`
+          type: string
+        state:
+          $ref: "#/components/schemas/FeatureState"
+        reason:
+          description: Why it cannot be used, such as `Xvfb is not installed`; empty while available
+          type: string
+        details:
+          description: What it can do on this machine, as the dotted names its package defines, such as `audio.pipewire`
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    DirectoryConflict:
+      type: object
+      required:
+        - type
+        - name
+      properties:
+        type:
+          type: string
+          enum:
+            - account
+            - group
+        name:
+          type: string
+      additionalProperties: false
+    MachineList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MachineResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    UpdateMachineRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      additionalProperties: false
+    EnrollmentState:
+      description: |-
+        `pending` waits for a decision. `approved` added the machine to a project. `denied` is
+        final for the machine's key.
+      type: string
+      enum:
+        - pending
+        - approved
+        - denied
+    EnrollmentResource:
+      type: object
+      required:
+        - id
+        - pairing_code
+        - public_key
+        - hostname
+        - source_address
+        - state
+        - created_at
+        - last_seen_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        pairing_code:
+          description: The code the machine shows, `XXXXX-XXXXX`
+          type: string
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
+        hostname:
+          description: The host name the machine reported; chosen by whoever runs the machine
+          type: string
+        source_address:
+          description: The IP address the request came from
+          type: string
+        state:
+          $ref: "#/components/schemas/EnrollmentState"
+        machine_id:
+          description: The machine, once the request is approved
+          type:
+            - string
+            - "null"
+          format: uuid
+        created_at:
+          description: When the machine first asked to enroll
+          type: string
+          format: date-time
+        last_seen_at:
+          description: When the machine last polled
+          type: string
+          format: date-time
+      additionalProperties: false
+    FindEnrollmentResponse:
+      description: "`enrollment` is the pending request with that pairing code, absent when there is none."
+      type: object
+      properties:
+        enrollment:
+          $ref: "#/components/schemas/EnrollmentResource"
+      additionalProperties: false
+    ApproveEnrollmentRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          description: The name of the machine in the project
+          type: string
+          minLength: 1
+          maxLength: 128
+      additionalProperties: false
+    DirectoryName:
+      description: A username or a group name, as useradd(8) and groupadd(8) accept it
+      type: string
+      minLength: 1
+      maxLength: 32
+      pattern: "^[a-z_][a-z0-9_-]*$"
+    AccountResource:
+      type: object
+      required:
+        - id
+        - user
+        - username
+        - uid
+        - gid
+        - display_name
+        - home_directory
+        - shell
+        - groups
+        - disabled_at
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        user:
+          $ref: "#/components/schemas/NamedIdentity"
+        username:
+          description: The login name on every machine of the project
+          type: string
+        uid:
+          description: The user id on every machine of the project
+          type: integer
+          format: int64
+        gid:
+          description: The id of the account's own group, which has its username as name
+          type: integer
+          format: int64
+        display_name:
+          description: The full name on the machines
+          type: string
+        home_directory:
+          type: string
+        shell:
+          type: string
+        groups:
+          description: The names of the groups the account is in, besides its own
+          type: array
+          items:
+            type: string
+        disabled_at:
+          description: When the account was disabled; null while enabled
+          type:
+            - string
+            - "null"
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    AccountList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    UpdateAccountRequest:
+      type: object
+      properties:
+        username:
+          $ref: "#/components/schemas/DirectoryName"
+        shell:
+          description: An absolute path, such as `/bin/bash`
+          type: string
+          minLength: 2
+          maxLength: 255
+          pattern: "^/[^\\s:]+$"
+        disabled:
+          description: Disables or enables the account
+          type: boolean
+      additionalProperties: false
+    GroupResource:
+      type: object
+      required:
+        - id
+        - name
+        - gid
+        - member_count
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        gid:
+          description: The group id on every machine of the project
+          type: integer
+          format: int64
+        member_count:
+          type: integer
+          format: int64
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    GroupList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateGroupRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          $ref: "#/components/schemas/DirectoryName"
+      additionalProperties: false
+    UpdateGroupRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          $ref: "#/components/schemas/DirectoryName"
+      additionalProperties: false
+    CreateGroupMemberRequest:
+      type: object
+      required:
+        - account_id
+      properties:
+        account_id:
+          type: string
+          format: uuid
+      additionalProperties: false
+    SessionMode:
+      description: |-
+        `desktop` runs a desktop environment and shows it as one canvas. `seamless` shows every
+        application window on its own.
+      type: string
+      enum:
+        - desktop
+        - seamless
+    SessionState:
+      description: |-
+        `opening` starts; `online` is logged in but not in the foreground; `active` runs;
+        `closing` is ending; `closed` has ended.
+      type: string
+      enum:
+        - opening
+        - online
+        - active
+        - closing
+        - closed
+    SessionCloseReason:
+      description: |-
+        Why a session ended. `close_requested` and `terminate_requested` follow a request;
+        `logout` the user logged out; `disconnected_timeout`, `no_client_timeout` and
+        `max_lifetime` a time limit passed; `display_exit` and `helper_lost` the session failed;
+        `open_failed` it never opened; `user_disabled` its account may no longer log in;
+        `machine_restarted` the machine restarted; `unknown` the machine no longer reports it.
+      type: string
+      enum:
+        - close_requested
+        - terminate_requested
+        - logout
+        - disconnected_timeout
+        - no_client_timeout
+        - max_lifetime
+        - display_exit
+        - helper_lost
+        - open_failed
+        - user_disabled
+        - machine_restarted
+        - unknown
+    SessionResource:
+      type: object
+      required:
+        - id
+        - machine_id
+        - user
+        - username
+        - state
+        - desktop
+        - process_running
+        - last_input_at
+        - close_reason
+        - created_at
+        - closed_at
+      properties:
+        id:
+          type: string
+        machine_id:
+          type: string
+          format: uuid
+        user:
+          $ref: "#/components/schemas/NamedIdentity"
+        username:
+          description: The Linux user the session runs as; `user` is the project member who owns the session
+          type: string
+        state:
+          $ref: "#/components/schemas/SessionState"
+        desktop:
+          description: The session's desktop; null for a session without one
+          oneOf:
+            - $ref: "#/components/schemas/DesktopState"
+            - type: "null"
+        process_running:
+          description: |-
+            The session can admit viewers. False while its process restarts; viewers are then
+            asked to connect again shortly.
+          type: boolean
+        last_input_at:
+          description: The last input of a person in the session
+          type:
+            - string
+            - "null"
+          format: date-time
+        close_reason:
+          description: Null until the session is closed
+          anyOf:
+            - $ref: "#/components/schemas/SessionCloseReason"
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+        closed_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+      additionalProperties: false
+    SessionList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SessionResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateSessionRequest:
+      type: object
+      required:
+        - machine_id
+      properties:
+        machine_id:
+          type: string
+          format: uuid
+        desktop:
+          $ref: "#/components/schemas/DesktopOptions"
+      additionalProperties: false
+    DesktopOptions:
+      description: A desktop for the session, on a machine that offers `leaflow.virtualdesktop.host.v1`
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          $ref: "#/components/schemas/SessionMode"
+        width:
+          description: The first width of the canvas, normally the viewer's; the machine's default when omitted
+          type: integer
+          format: int64
+          minimum: 320
+          maximum: 16384
+        height:
+          description: The first height of the canvas; given together with `width`
+          type: integer
+          format: int64
+          minimum: 200
+          maximum: 16384
+        session_desktop:
+          description: |-
+            In `desktop` mode, the desktop environment to start: a detail of the machine's
+            `leaflow.virtualdesktop.host.v1` feature without its `desktop.` prefix, such as `XFCE`;
+            the machine's default when omitted
+          type: string
+          maxLength: 128
+      additionalProperties: false
+    DesktopState:
+      type: object
+      required:
+        - mode
+        - display
+      properties:
+        mode:
+          $ref: "#/components/schemas/SessionMode"
+        display:
+          description: The X display, such as `:100`
+          type: string
+      additionalProperties: false
+    RunCommandRequest:
+      type: object
+      required:
+        - username
+        - command
+      properties:
+        username:
+          description: The account to run as, a local account of the machine such as `root` or an account of the project's directory
+          type: string
+          minLength: 1
+          maxLength: 32
+        command:
+          description: The command line, which the account's login shell runs with `-c`; at most 65536 bytes and no NUL
+          type: string
+          minLength: 1
+          maxLength: 65536
+        timeout_seconds:
+          description: Kills the command, and every process it started, this long after it started
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 300
+          default: 60
+      additionalProperties: false
+    RunCommandResponse:
+      type: object
+      required:
+        - exit_status
+        - signal
+        - timed_out
+        - stdout
+        - stdout_truncated
+        - stderr
+        - stderr_truncated
+      properties:
+        exit_status:
+          description: The status it exited with, 0 being success; null when a signal ended it
+          type:
+            - integer
+            - "null"
+          format: int32
+        signal:
+          description: The signal that ended it, such as 9 when the timeout killed it; null when it exited
+          type:
+            - integer
+            - "null"
+          format: int32
+        timed_out:
+          description: The timeout ended it
+          type: boolean
+        stdout:
+          description: What it wrote to standard output, at most 1 MiB, in standard Base64
+          type: string
+          contentEncoding: base64
+        stdout_truncated:
+          description: "`stdout` is cut short"
+          type: boolean
+        stderr:
+          description: What it wrote to standard error, at most 1 MiB, in standard Base64
+          type: string
+          contentEncoding: base64
+        stderr_truncated:
+          description: "`stderr` is cut short"
+          type: boolean
+      additionalProperties: false
+    ViewerType:
+      description: |-
+        `human` is a person on a browser or the desktop app. `automation` is a client that acts on
+        its own, to which sessions apply their automation rules.
+      type: string
+      enum:
+        - human
+        - automation
+    ClientSummary:
+      type: object
+      required:
+        - id
+        - name
+        - type
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: "#/components/schemas/ViewerType"
+      additionalProperties: false
+    ViewerResource:
+      type: object
+      required:
+        - connection_id
+        - user
+        - client
+        - read_only
+        - policies
+        - remote_address
+        - created_at
+      properties:
+        connection_id:
+          description: The viewer's connection
+          type: integer
+          format: int64
+        user:
+          $ref: "#/components/schemas/NamedIdentity"
+        client:
+          $ref: "#/components/schemas/ClientSummary"
+        read_only:
+          description: The viewer may only watch
+          type: boolean
+        policies:
+          description: |-
+            The capabilities granted to the viewer, as the full names of their policy messages,
+            such as `leaflow.fleet.filetransfer.v1.FileTransferPolicy`
+          type: array
+          items:
+            type: string
+        remote_address:
+          description: The IP address the viewer connected from
+          type: string
+        created_at:
+          description: When the viewer connected
+          type: string
+          format: date-time
+      additionalProperties: false
+    ViewerList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ViewerResource"
+      additionalProperties: false
+    CreateViewerTicketRequest:
+      type: object
+      required:
+        - client_id
+      properties:
+        client_id:
+          description: The caller's registered client that will connect
+          type: string
+          format: uuid
+      additionalProperties: false
+    ViewerTicketResource:
+      type: object
+      required:
+        - ticket
+        - url
+        - expires_at
+      properties:
+        ticket:
+          description: The ticket to send in `ViewerCredential.ticket`. Never put it in a URL.
+          type: string
+        url:
+          description: The WebSocket URL of the control connection
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ClientChallengeResource:
+      type: object
+      required:
+        - id
+        - challenge
+        - expires_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        challenge:
+          description: 32 random bytes in standard Base64
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    ClientResource:
+      type: object
+      required:
+        - id
+        - type
+        - name
+        - public_key
+        - created_at
+        - last_used_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          $ref: "#/components/schemas/ViewerType"
+        name:
+          type: string
+          maxLength: 128
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
+        created_at:
+          type: string
+          format: date-time
+        last_used_at:
+          description: When a viewer of the client last connected; null if never
+          type:
+            - string
+            - "null"
+          format: date-time
+      additionalProperties: false
+    ClientList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ClientResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateClientRequest:
+      type: object
+      required:
+        - type
+        - name
+        - public_key
+        - challenge_id
+        - signature
+      properties:
+        type:
+          $ref: "#/components/schemas/ViewerType"
+        name:
+          description: A name the caller recognizes, such as the browser and computer
+          type: string
+          minLength: 1
+          maxLength: 128
+        public_key:
+          $ref: "#/components/schemas/PublicKey"
+        challenge_id:
+          type: string
+          format: uuid
+        signature:
+          description: The Ed25519 signature, 64 bytes in standard Base64
+          type: string
+          pattern: "^[A-Za-z0-9+/]{86}==$"
+      additionalProperties: false

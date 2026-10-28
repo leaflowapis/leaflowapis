@@ -1,0 +1,162 @@
+syntax = "proto3";
+
+package leaflow.virtualdesktop.lease.v1;
+
+import "google/protobuf/timestamp.proto";
+import "leaflow/fleet/session/v1/session.proto";
+
+option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/lease/v1;leasev1";
+
+// Who operates a desktop session: the input lease, handoffs to people, and
+// the rules automation clients act under.
+//
+// Channel types:
+//   - "leaflow.virtualdesktop.lease.v1", lane "metadata": opened by the
+//     viewer right after the session channel (leaflow.fleet.session.v1), one
+//     per connection. The session sends ServerMessage: the InputLease and
+//     every pending Handoff, SnapshotEnd, then changes.
+//   - "leaflow.virtualdesktop.lease.v1.HandoffService", lane "interactive":
+//     opened by viewers that are not read-only.
+//
+// Revisions. The session numbers what it observes changing in its windows,
+// pixels and accessibility trees with one logical clock, the revision, which
+// starts at 1 and only grows (after the etcd revision). Automation calls that
+// act on the session return the revision at which their action took effect,
+// and calls that read state return the revision the state belongs to; every
+// change observed later has a larger revision. Revisions order observations
+// across channels, which the channels themselves do not.
+//
+// Input lease. One viewer at a time gives input: the holder of the input
+// lease. A viewer that is not read-only takes it with its input while nobody
+// holds it, and keeps it until it has been idle until expires_at. Input of a
+// person takes the lease at once, also from an automation client. While a
+// handoff is pending the lease stays with people.
+//
+// Automation. Automation clients act on the session through the service
+// channels of the domain packages. Every call that injects input, activates
+// or changes windows, or acts on applications through accessibility, the
+// tray, notifications or drops needs the input lease, and the session
+// refuses it, before doing anything, with:
+//   - PERMISSION_DENIED and reason READ_ONLY for a read-only viewer;
+//   - UNAVAILABLE and reason HUMAN_IN_CONTROL, with a google.rpc.RetryInfo,
+//     while a person holds the lease, a handoff is pending (metadata
+//     "handoffId") or a privilege request waits for a person (metadata
+//     "authenticationPending" "true");
+//   - PERMISSION_DENIED and reason PROTECTED_WINDOW for a window that shows a
+//     password field, which only people may type into (metadata "windowId");
+//   - FAILED_PRECONDITION and reason BLOCKED_BY_MODAL for a window a modal
+//     window blocks (metadata "windowId" and "modalWindowId");
+//   - UNAVAILABLE and reason INPUT_BUSY, with a google.rpc.RetryInfo, while
+//     another such call of the session is still running or another
+//     automation client holds the lease.
+// Failed calls tell whether they had an effect (rpc ExecutionState). For
+// automation clients the session also blacks out password fields in
+// captures and withholds their text.
+//
+
+// A message from the session.
+message ServerMessage {
+  // The message.
+  oneof message {
+    // Who holds the input lease.
+    InputLease input_lease = 1;
+    // A handoff as it is now, in full: new when the viewer does not know its
+    // handoff_id, otherwise replacing it.
+    Handoff handoff = 2;
+    // A handoff ended.
+    HandoffRemoved handoff_removed = 3;
+    // Ends the snapshot.
+    SnapshotEnd snapshot_end = 4;
+  }
+}
+
+// Who holds the input lease. Sent in the snapshot and whenever it changes,
+// so that people see when an automation client operates the session.
+message InputLease {
+  // The connection that holds it. 0: nobody; the next input takes it.
+  uint64 holder_connection_id = 1;
+  // What kind of viewer holds it.
+  leaflow.fleet.session.v1.ViewerType holder_type = 2;
+  // The platform user of the holder.
+  string holder_user_id = 3;
+  // When the holder took it.
+  google.protobuf.Timestamp acquired_at = 4;
+  // When it ends if its holder gives no more input, on the session's clock.
+  // Unset when nobody holds it and while a handoff keeps it with people.
+  google.protobuf.Timestamp expires_at = 5;
+  // The pending handoffs. While any is pending, automation input is refused.
+  repeated string handoff_ids = 6;
+}
+
+// A request for a person to operate the session, such as to sign in or to
+// solve a challenge. While it is pending people keep the input lease.
+message Handoff {
+  // Chosen by the session, unique in it.
+  string handoff_id = 1;
+  // Why a person is needed.
+  HandoffReason reason = 2;
+  // The window the person should look at. 0: the whole session.
+  uint64 window_id = 3;
+  // What the person should do, plain text: the automation client's request,
+  // or a note that the window shows a password field.
+  string message = 4;
+  // REQUESTED only: the connection of the automation client that asked.
+  uint64 requester_connection_id = 5;
+  // When it was created.
+  google.protobuf.Timestamp created_at = 6;
+}
+
+// Why a handoff was created.
+enum HandoffReason {
+  HANDOFF_REASON_UNSPECIFIED = 0;
+  // An automation client asked with CreateHandoff.
+  HANDOFF_REASON_REQUESTED = 1;
+  // A window shows a password field (AT-SPI2 ROLE_PASSWORD_TEXT). The
+  // session creates it and ends it when the field goes away.
+  HANDOFF_REASON_PROTECTED_WINDOW = 2;
+}
+
+// A handoff ended.
+message HandoffRemoved {
+  // Handoff.handoff_id.
+  string handoff_id = 1;
+}
+
+// Ends the snapshot of this channel: the InputLease and every pending
+// Handoff have been sent.
+message SnapshotEnd {}
+
+// Hands the session over to people.
+service HandoffService {
+  // Asks people to operate the session. Automation clients only: people fail
+  // with PERMISSION_DENIED and reason AUTOMATION_ONLY.
+  rpc CreateHandoff(CreateHandoffRequest) returns (CreateHandoffResponse);
+  // Ends a handoff. An automation client ends only those it asked for, others
+  // failing with PERMISSION_DENIED and reason NOT_REQUESTER; people end any,
+  // PROTECTED_WINDOW ones before the field goes away included. An unknown one
+  // fails with NOT_FOUND and reason HANDOFF_NOT_FOUND (metadata "handoffId").
+  rpc DeleteHandoff(DeleteHandoffRequest) returns (DeleteHandoffResponse);
+}
+
+// The request of CreateHandoff.
+message CreateHandoffRequest {
+  // The window the person should look at. 0: the whole session.
+  uint64 window_id = 1;
+  // What the person should do, plain text, at most 1024 bytes.
+  string message = 2;
+}
+
+// The response of CreateHandoff.
+message CreateHandoffResponse {
+  // The handoff.
+  Handoff handoff = 1;
+}
+
+// The request of DeleteHandoff.
+message DeleteHandoffRequest {
+  // The handoff.
+  string handoff_id = 1;
+}
+
+// The response of DeleteHandoff.
+message DeleteHandoffResponse {}

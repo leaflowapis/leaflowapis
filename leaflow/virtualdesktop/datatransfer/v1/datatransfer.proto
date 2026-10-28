@@ -4,7 +4,7 @@ package leaflow.virtualdesktop.datatransfer.v1;
 
 import "google/protobuf/duration.proto";
 import "google/rpc/status.proto";
-import "leaflow/virtualdesktop/filetransfer/v1/filetransfer.proto";
+import "leaflow/fleet/filetransfer/v1/filetransfer.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/virtualdesktop/datatransfer/v1;datatransferv1";
 
@@ -162,7 +162,7 @@ message ClipboardFormatList {
   // Files copied. The receiver fetches them as for any offer, with
   // FileTransferRequest.clipboard set, and puts verified local copies on its
   // clipboard; paths of the source never travel.
-  leaflow.virtualdesktop.filetransfer.v1.FileTransferOffer file_offer = 5;
+  leaflow.fleet.filetransfer.v1.FileTransferOffer file_offer = 5;
 }
 
 // The receiver of a format list applied it (MS-RDPECLIP Format List Response
@@ -292,7 +292,7 @@ message DragStart {
   uint64 input_seq = 5;
   // The files dragged, as names, types and sizes. Unset when no files are
   // dragged or they are provided only when read.
-  leaflow.virtualdesktop.filetransfer.v1.FileTransferOffer file_offer = 6;
+  leaflow.fleet.filetransfer.v1.FileTransferOffer file_offer = 6;
   // Files are dragged whose offer the target reads with DataRequest.files,
   // such as from a browser that learns them only at the drop.
   bool files_available = 7;
@@ -448,7 +448,7 @@ message DataResponse {
     DataEnd end = 3;
     // The answer to a files read: the files, fetched as for any offer. The
     // only message.
-    leaflow.virtualdesktop.filetransfer.v1.FileTransferOffer file_offer = 4;
+    leaflow.fleet.filetransfer.v1.FileTransferOffer file_offer = 4;
     // The read failed; the reader discards what it received. NOT_FOUND when
     // the format is not offered or the application refused it,
     // RESOURCE_EXHAUSTED when storage ran out, PERMISSION_DENIED when the

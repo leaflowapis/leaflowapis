@@ -49,6 +49,8 @@ message ClientMessage {
     FrameAcknowledge frame_acknowledge = 2;
     // Asks for a full repaint of a window.
     WindowRefresh window_refresh = 3;
+    // Stops or resumes frames to this viewer.
+    SuppressOutput suppress_output = 4;
   }
 }
 
@@ -243,4 +245,14 @@ message FrameAcknowledge {
 message WindowRefresh {
   // The window. 0: every window.
   uint64 window_id = 1;
+}
+
+// Stops or resumes the frames sent to this viewer, such as while its window
+// is hidden (MS-RDPBCGR §2.2.11.3 Suppress Output PDU). While stopped the
+// session keeps the damage and sends one update covering it when frames
+// resume. Nothing but frames is affected. Frames are allowed when the
+// connection starts.
+message SuppressOutput {
+  // false stops frames, true resumes them.
+  bool allow_display_updates = 1;
 }
