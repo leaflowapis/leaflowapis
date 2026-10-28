@@ -45,8 +45,8 @@ info:
        the current project under the given name and returns its `machine_id` and a `token`. The
        token is returned only in this response.
     2. Give the token to the machine in a file that only root can read, and run
-       `leaflow-fleet-agent daemon enroll --token-file <path>`. The machine joins the current
-       project as `machine_id` at once, and the Agent deletes the file.
+       `leaflow-fleet-agent daemon enroll --url <control endpoint> --token-file <path>`. The
+       machine joins the current project as `machine_id` at once, and the Agent deletes the file.
 
     A token enrolls one machine once, and only until the registration expires. Anyone who reads
     the token before the machine uses it can enroll a key of their own instead, so pass it only
