@@ -501,8 +501,8 @@ message ReadClipboardResponse {
   // The formats available, most preferred first. Empty: the selection has no
   // owner.
   repeated string mime_types = 1;
-  // The data of the format asked for. Data larger than 16 MiB fails with
-  // RESOURCE_EXHAUSTED.
+  // The data of the format asked for. Data larger than 960 KiB, what fits a
+  // channel message, fails with RESOURCE_EXHAUSTED.
   DataTransferItem item = 2;
 }
 
@@ -510,9 +510,10 @@ message ReadClipboardResponse {
 message WriteClipboardRequest {
   // The selection. Unset: CLIPBOARD.
   Selection selection = 1;
-  // The data, one item per format, at most 16 MiB in total. Files of the
+  // The data, one item per format, at most 960 KiB in total. Files of the
   // session are written as "text/uri-list" with file URIs. Empty: clears the
-  // selection.
+  // selection. The session holds the content itself, so it stays after the
+  // client left.
   repeated DataTransferItem items = 2;
 }
 
@@ -552,7 +553,7 @@ message DropDataRequest {
   sint32 x = 2;
   // See x.
   sint32 y = 3;
-  // The data, one item per format, at most 16 MiB in total. Files of the
+  // The data, one item per format, at most 960 KiB in total. Files of the
   // session are dropped as "text/uri-list" with file URIs.
   repeated DataTransferItem items = 4;
   // The action to propose.
