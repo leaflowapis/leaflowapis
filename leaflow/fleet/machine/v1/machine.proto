@@ -50,8 +50,20 @@ service MachineRegistryService {
   // returns the decision on it. Only on a connection with an enrollment
   // credential; calling again with the same key continues the same request.
   //
-  // Fails with UNAVAILABLE and reason ENROLLMENT_UNAVAILABLE when the
-  // service cannot record the request now; call again with backoff.
+  // With a registration_token the key is approved at once into the machine
+  // the token was created for, and the response is APPROVED with that
+  // machine_id. Calling again with the same key and the same token returns
+  // the same answer, so a daemon that stopped before keeping its identity can
+  // call again.
+  //
+  // Fails with:
+  //   - UNAVAILABLE and reason ENROLLMENT_UNAVAILABLE when the service cannot
+  //     record the request now; call again with backoff;
+  //   - PERMISSION_DENIED and reason REGISTRATION_TOKEN_INVALID when the
+  //     registration token is unknown, expired, revoked or used by another
+  //     key, or the key already belongs to a machine or was denied. Nothing
+  //     is recorded and no request is left pending: the daemon stops and says
+  //     so. Without the token the daemon can ask for approval by pairing code.
   rpc EnrollMachine(EnrollMachineRequest) returns (EnrollMachineResponse) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -80,6 +92,12 @@ service MachineRegistryService {
 message EnrollMachineRequest {
   // The host name (uname(2) nodename), the machine's first name.
   string hostname = 1;
+  // A registration token created on the platform for this machine, or empty
+  // to wait for approval by pairing code. A bearer secret that enrolls once:
+  // send it only on a control connection whose certificate was verified, read
+  // it only from a file that only root can read, never log it, and delete it
+  // once the machine is enrolled.
+  string registration_token = 2;
 }
 
 // The decision on an enrollment.

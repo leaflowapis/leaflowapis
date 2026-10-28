@@ -36,6 +36,24 @@ info:
     3. Approve it with `POST /api/v1/enrollments/{enrollmentId}:approve`. The machine joins the
        current project within its next polling interval.
 
+    ## Adding a machine without interaction
+
+    A machine that is set up unattended, such as by cloud-init on first boot, joins with a
+    registration token instead of a pairing code:
+
+    1. Create a registration with `POST /api/v1/machine-registrations`. It reserves a machine in
+       the current project under the given name and returns its `machine_id` and a `token`. The
+       token is returned only in this response.
+    2. Give the token to the machine in a file that only root can read, and run
+       `leaflow-fleet-agent daemon enroll --token-file <path>`. The machine joins the current
+       project as `machine_id` at once, and the Agent deletes the file.
+
+    A token enrolls one machine once, and only until the registration expires. Anyone who reads
+    the token before the machine uses it can enroll a key of their own instead, so pass it only
+    to the machine, keep its lifetime short, and compare the `public_key` of the used
+    registration with the key the machine shows when that matters. Revoke a registration that
+    will not be used with `DELETE /api/v1/machine-registrations/{registrationId}`.
+
     ## Trusting a machine's key
 
     Each machine has an Ed25519 key that it generates itself and that never leaves it. Viewers
@@ -594,6 +612,109 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnrollmentResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machine-registrations:
+    get:
+      summary: List machine registrations
+      description: |-
+        Returns the registrations of the current project, newest first. Registrations are kept
+        for 30 days.
+
+        Requires `fleet:machines.manage`.
+      operationId: list-machine-registrations
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineRegistrationList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Create a machine registration
+      description: |-
+        Reserves a machine in the current project under the given name and returns the
+        registration with a one-time token. A machine that presents the token when it enrolls
+        joins the project as `registration.machine_id` without approval. The token is returned
+        only in this response and cannot be read again.
+
+        Requires `fleet:machines.manage`.
+      operationId: create-machine-registration
+      tags:
+        - Enrollment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateMachineRegistrationRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateMachineRegistrationResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machine-registrations/{registrationId}:
+    get:
+      summary: Get a machine registration
+      description: Requires `fleet:machines.manage`.
+      operationId: get-machine-registration
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/RegistrationId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MachineRegistrationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Revoke a machine registration
+      description: |-
+        Revokes the registration: its token no longer enrolls a machine. Revoking a registration
+        that is already revoked or expired succeeds and changes nothing else. A registration that
+        a machine has used is rejected with `MACHINE_REGISTRATION_USED`; to remove that machine,
+        delete the machine.
+
+        Requires `fleet:machines.manage`.
+      operationId: delete-machine-registration
+      tags:
+        - Enrollment
+      parameters:
+        - $ref: "#/components/parameters/RegistrationId"
+      responses:
+        "204":
+          description: Revoked
         default:
           description: Error
           content:
@@ -1184,6 +1305,13 @@ components:
       schema:
         type: string
         format: uuid
+    RegistrationId:
+      name: registrationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     AccountId:
       name: accountId
       in: path
@@ -1499,6 +1627,123 @@ components:
           type: string
           minLength: 1
           maxLength: 128
+      additionalProperties: false
+    MachineRegistrationState:
+      description: |-
+        `pending` waits for a machine to use the token; `used` enrolled a machine; `expired` was not
+        used in time; `revoked` was revoked before it was used.
+      type: string
+      enum:
+        - pending
+        - used
+        - expired
+        - revoked
+    MachineRegistrationResource:
+      type: object
+      required:
+        - id
+        - machine_id
+        - name
+        - state
+        - created_at
+        - expires_at
+        - used_at
+        - public_key
+        - source_address
+      properties:
+        id:
+          type: string
+          format: uuid
+        machine_id:
+          description: The machine that the registration's token enrolls
+          type: string
+          format: uuid
+        name:
+          description: The name of the machine in the project
+          type: string
+        state:
+          $ref: "#/components/schemas/MachineRegistrationState"
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          description: When the token stops enrolling a machine
+          type: string
+          format: date-time
+        used_at:
+          description: When a machine used the token; null until then
+          type:
+            - string
+            - "null"
+          format: date-time
+        public_key:
+          description: The key of the machine that used the token; null until then
+          oneOf:
+            - $ref: "#/components/schemas/PublicKey"
+            - type: "null"
+        source_address:
+          description: The IP address the machine used the token from; null until then
+          type:
+            - string
+            - "null"
+      additionalProperties: false
+    MachineRegistrationList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MachineRegistrationResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
+      additionalProperties: false
+    CreateMachineRegistrationRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          description: The name of the machine in the project
+          type: string
+          minLength: 1
+          maxLength: 128
+        expires_in_seconds:
+          description: How long the token can be used, from now
+          type: integer
+          format: int64
+          minimum: 60
+          maximum: 86400
+          default: 3600
+      additionalProperties: false
+    CreateMachineRegistrationResponse:
+      type: object
+      required:
+        - registration
+        - token
+      properties:
+        registration:
+          $ref: "#/components/schemas/MachineRegistrationResource"
+        token:
+          description: |-
+            The token to give to the machine, returned only in this response. A secret: anyone who
+            has it can enroll a machine into the current project until it is used, expires or is
+            revoked. Never put it in a URL.
+          type: string
       additionalProperties: false
     DirectoryName:
       description: A username or a group name, as useradd(8) and groupadd(8) accept it
