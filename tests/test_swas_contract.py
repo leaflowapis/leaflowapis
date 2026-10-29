@@ -93,7 +93,7 @@ def require_multi_period_contract(doc):
 class SWASContract(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
-  if not SPEC.is_file(): raise FileNotFoundError('SWAS public contract missing: '+str(SPEC))
+  if not SPEC.is_file(): raise FileNotFoundError('SWAS contract missing: '+str(SPEC))
   cls.doc=load(SPEC);cls.schemas=cls.doc['components']['schemas']
  def test_service_endpoint(self): self.assertEqual(self.doc['servers'],[{'url':'https://swas.leaflow.cloud','description':'SWAS API'}])
  def test_routes_and_operation_ids(self): require_contract(self.doc)

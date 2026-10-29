@@ -1,9 +1,3 @@
-# Keep the Apifox projects in sync with the contracts in this repository.
-#
-# Required repository/organization settings:
-#   secret   APIFOX_ACCESS_TOKEN  Apifox API access token
-#   variable APIFOX_TEAM_ID       Team in which missing projects are created
-
 name: sync-to-apifox
 
 on:
@@ -68,9 +62,6 @@ jobs:
           trap 'rm -rf "${tmp_dir}"' EXIT
 
           while IFS= read -r spec; do
-            # leaflow/<service>[/<subpackage>]/<version>/openapi.yaml. The subpackage is part of
-            # the name: billing/catalog and billing/account are separate contracts, and a name
-            # cut at the first segment would give both the same temporary files.
             service="$(dirname "$(dirname "${spec#leaflow/}")")"
             service="${service//\//-}"
             project_name="$(

@@ -1,7 +1,3 @@
-# 契约仓库只校验契约本身。
-#
-# 「这份契约能不能生成出合法的代码」不在这里，在各语言仓库——那件事要装那门语言的工具链，而这个
-# 仓库不该知道有哪些语言。这里只回答一个更基本的问题：**它还是不是一份合法的 OpenAPI**。
 name: ci
 
 on:
@@ -19,22 +15,19 @@ jobs:
           python3 - <<'PY'
           import pathlib, sys, yaml
           bad = []
-          # 子包比服务多一层：leaflow/<服务>/<子包>/<版本>/openapi.yaml。
           specs = sorted(pathlib.Path(".").glob("leaflow/**/openapi.yaml"))
           if not specs:
-              sys.exit("一份契约都没有——目录结构应为 leaflow/<服务>[/<子包>]/<版本>/openapi.yaml")
+              sys.exit("No contracts found. Expected layout: leaflow/<service>[/<subpackage>]/<version>/openapi.yaml")
           for spec in specs:
               try:
                   doc = yaml.safe_load(spec.read_text(encoding="utf-8"))
               except yaml.YAMLError as err:
-                  bad.append(f"{spec}: 解析失败 {err}")
+                  bad.append(f"{spec}: failed to parse: {err}")
                   continue
-              # 只查几样「错了会让生成器给出莫名其妙的结果」的：没有 openapi 版本号时
-              # oapi-codegen 报的是一句关于某个 schema 的话，指不到真正的原因。
               for key in ("openapi", "info", "paths"):
                   if key not in doc:
-                      bad.append(f"{spec}: 缺 {key}")
-              print(f"{spec}  {len(doc.get('paths') or {})} 条路径")
+                      bad.append(f"{spec}: missing {key}")
+              print(f"{spec}  {len(doc.get('paths') or {})} paths")
           if bad:
               print("\n".join(bad), file=sys.stderr)
               sys.exit(1)

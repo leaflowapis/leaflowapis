@@ -1,24 +1,3 @@
-# Push contracts to the CLI when they change, so it can grow the new commands.
-#
-# The CLI (LeaflowNET/leaflow) generates its commands from these contracts: one
-# operationId is one command. Adding an operation here adds a command there;
-# removing one removes a command, which breaks whatever was scripted against it.
-#
-# So this only pushes a branch. It never touches that repository's main: the CLI
-# builds and tests the result itself, then opens a pull request stating which
-# commands appear and disappear, for a person to approve.
-#
-# Both main and tags trigger it. Contracts currently land as commits on main
-# (`chore(compute): sync openapi from …`) and this repository has no tagging
-# convention yet, so listening only for tags would never fire on a real change.
-# The CLI side does nothing when the contracts are unchanged, which makes extra
-# triggers harmless.
-#
-# The credential is a deploy key (secret: LEAFLOW_CLI_DEPLOY_KEY) with write
-# access to LeaflowNET/leaflow and nothing else. It belongs to no personal
-# account and carries no API rights, so rotating it, or someone leaving, affects
-# nothing else.
-
 name: publish-to-cli
 
 on:
@@ -38,7 +17,7 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.LEAFLOW_CLI_DEPLOY_KEY }}
 
-      - name: push contracts to the CLI repository
+      - name: Push contracts to the CLI repository
         run: |
           set -euo pipefail
 
@@ -46,22 +25,12 @@ jobs:
           cd cli
           git checkout -B contracts/sync
 
-          # The whole directory is replaced rather than copied over file by
-          # file, so that a service deleted here disappears there too. Otherwise
-          # the CLI keeps a contract that no longer exists and keeps generating
-          # commands for it.
           rm -rf apis/leaflow
           cp -R ../leaflow apis/leaflow
 
           git config user.name "leaflow-contracts"
           git config user.email "contracts@leaflow.net"
 
-          # Staged before the question is asked, because no form of `git diff`
-          # reports an untracked file. Asked as `git diff -- apis/`, a change that
-          # only *adds* a contract — the first version of a new service — reads as
-          # "nothing to do", and the CLI never grows that service's commands. The
-          # deletion and edit cases were reported correctly, which is what makes
-          # this the kind that goes unnoticed.
           git add -A apis/
 
           if git diff --cached --quiet -- apis/; then
@@ -71,9 +40,6 @@ jobs:
 
           git commit -m "chore: sync API contracts from ${GITHUB_REF_NAME}"
 
-          # Force-pushed: this branch means "the latest sync" and nothing else.
-          # Its history is this repository's history and does not need to
-          # accumulate a second copy over there.
           git push -f origin contracts/sync
 
           echo "Pushed contracts/sync."
