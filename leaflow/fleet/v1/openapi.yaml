@@ -80,7 +80,7 @@ info:
       exist on the machine; members log in over SSH with their keys and become root through sudo
       as their permissions allow;
     - `leaflow.fleet.command.v1`: running commands;
-    - `leaflow.fleet.host.v1`: sessions, with terminals, programs, files, ports, sound, devices,
+    - `leaflow.fleet.host.v1`: terminal sessions, with programs, files, ports, sound, devices,
       printers and privilege approvals;
     - `leaflow.fleet.virtualdesktop.host.v1`: sessions with a desktop.
 
@@ -1133,9 +1133,12 @@ paths:
       summary: Open a session
       description: |-
         Opens a session for the caller on a machine, as the caller's account, and returns once it
-        is ready. With `desktop` the session has a desktop; without, it offers terminals, programs,
-        files, ports, sound, devices, printers and privilege approvals. The account is created if
-        the caller has none yet. Requires `fleet:machines.login` on the machine.
+        is ready. With `desktop` the session has a desktop. Without, it is a terminal session: its
+        one terminal runs the caller's login shell from the start, every participant attaches to
+        that terminal, and the session ends when the shell exits; a caller who wants another
+        terminal opens another session. Either kind also offers programs, files, ports, sound,
+        devices, printers and privilege approvals. The account is created if the caller has none
+        yet. Requires `fleet:machines.login` on the machine.
 
         On a machine an account has at most one session with a desktop and at most 8 sessions in
         all. Sessions without a desktop run side by side, such as one for a program and one for a
@@ -2313,9 +2316,10 @@ components:
     SessionCloseReason:
       description: |-
         Why a session ended. `close_requested` and `terminate_requested` follow a request;
-        `logout` the user logged out; `disconnected_timeout`, `no_participant_timeout` and
-        `max_lifetime` a time limit passed; `display_exit` and `process_lost` the session failed;
-        `open_failed` it never opened; `access_revoked` its user may no longer log in;
+        `logout` the user logged out, such as when the shell of a terminal session exited;
+        `disconnected_timeout`, `no_participant_timeout` and `max_lifetime` a time limit passed;
+        `display_exit` and `process_lost` the session failed; `open_failed` it never opened;
+        `access_revoked` its user may no longer log in;
         `machine_restarted` the machine restarted; `unknown` the machine no longer reports it.
       type: string
       enum:

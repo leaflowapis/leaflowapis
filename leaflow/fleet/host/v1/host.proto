@@ -16,12 +16,14 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 // and fails there with the reasons of each method in a google.rpc.ErrorInfo
 // of the domain "fleet.leaflow.cloud".
 //
-// Kinds. A session without options has no desktop: its participants use the
-// domains of the session layer, such as terminals, programs, files, ports,
-// sound, devices, printers and approvals (leaflow.fleet.terminal.v1 and its
-// siblings). Options add a feature, such as a desktop
-// (leaflow.fleet.virtualdesktop.host.v1 DesktopOptions); the session then
-// also offers that feature's domains.
+// Kinds. A session without options is a terminal session: it has one
+// terminal, whose login shell starts when the session opens and whose exit
+// ends the session (leaflow.fleet.terminal.v1), and its participants also use
+// the other domains of the session layer, such as programs, files, ports,
+// sound, devices, printers and approvals. Options add a feature, such as a
+// desktop (leaflow.fleet.virtualdesktop.host.v1 DesktopOptions); the session
+// then offers that feature's domains with those of the session layer, but no
+// terminal.
 //
 // Reconciliation. The daemon reports every session with ReportSessions after
 // every connect and whenever its list of sessions changes, and each change of
@@ -177,7 +179,8 @@ enum SessionCloseReason {
   SESSION_CLOSE_REASON_CLOSE_REQUESTED = 1;
   // TerminateSession was called.
   SESSION_CLOSE_REASON_TERMINATE_REQUESTED = 2;
-  // The user logged out.
+  // The user logged out, such as when the shell of a terminal session
+  // exited.
   SESSION_CLOSE_REASON_LOGOUT = 3;
   // SessionPolicy.disconnected_timeout passed.
   SESSION_CLOSE_REASON_DISCONNECTED_TIMEOUT = 4;
