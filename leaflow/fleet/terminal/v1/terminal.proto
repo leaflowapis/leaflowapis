@@ -18,14 +18,16 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/terminal/v1;termina
 // programs on the desktop.
 //
 // The shell starts at 80 columns and 24 rows, with TERM "xterm-256color" and
-// the session's terminal modes. When it cannot start, the session does not
-// open (leaflow.fleet.host.v1 OpenSession, SESSION_START_FAILED).
+// UTF-8 input. When it cannot start, the session ends as when it exits.
 //
 // The terminal belongs to the session and outlives the connections that show
 // it: its output is one byte stream numbered from 0, of which the session keeps
 // the last 1 to 4 MiB, so that a participant that attaches again continues
 // where it left off, and one that attaches later from 0 reads what the shell
-// wrote before, as far as it is kept. Client input is never replayed.
+// wrote before, as far as it is kept. Client input is never replayed. The
+// stream belongs to the session process (transport Hello.instance_id): when
+// that process restarts, the shell starts again and so does the stream, and a
+// participant connected to the new process attaches from 0.
 //
 // Channel type "leaflow.fleet.terminal.v1", lane "interactive": opened by the
 // participant, one per view of the terminal. The participant sends
