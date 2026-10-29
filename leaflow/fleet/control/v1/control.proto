@@ -135,8 +135,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // renewing it extends its lease and the leases of its PeerConnections, and
 // replaces the Authorization with UpdateParticipantAuthorization before it
 // expires; deleting it, or letting its lease run out, detaches it with
-// DetachParticipant. Rights never change on a participant: to change them,
-// the service detaches it, and the participant creates another.
+// DetachParticipant. What a participant may do never changes: to change it,
+// the service detaches the participant, and its client creates another.
 //
 // Liveness. The endpoint sends Ping when it has sent nothing for
 // ServerHello.ping_interval. Either side may Ping, and the other answers at
@@ -651,9 +651,9 @@ enum ParticipantEndReason {
   PARTICIPANT_END_REASON_SESSION_ENDED = 4;
   // The session's process did not connect again within Welcome.resume_grace.
   PARTICIPANT_END_REASON_SESSION_PROCESS_LOST = 5;
-  // Its user's permissions no longer grant what it holds, or the user left
-  // the project.
-  PARTICIPANT_END_REASON_RIGHTS_CHANGED = 6;
+  // A permission it was created with was revoked from its user: what the
+  // user is granted in the machine's project no longer covers what it may do.
+  PARTICIPANT_END_REASON_PERMISSION_REVOKED = 6;
   // Its machine was removed from the project.
   PARTICIPANT_END_REASON_MACHINE_REMOVED = 7;
   // The key that signed its authorization was revoked.
@@ -661,4 +661,12 @@ enum ParticipantEndReason {
   // Its first PeerConnection did not start, so it was never handed to its
   // client.
   PARTICIPANT_END_REASON_NOT_ADMITTED = 9;
+  // Its user is no longer a member of the machine's project: the user left
+  // or was removed.
+  PARTICIPANT_END_REASON_MEMBERSHIP_ENDED = 10;
+  // Its user's account is no longer active: it was suspended or banned, or
+  // its deletion was requested.
+  PARTICIPANT_END_REASON_USER_INACTIVE = 11;
+  // Deletion of the machine's project was requested.
+  PARTICIPANT_END_REASON_PROJECT_DELETION_REQUESTED = 12;
 }
