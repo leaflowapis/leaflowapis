@@ -60,8 +60,21 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // and sessions (leaflow.fleet.host.v1), travel on its daemon's connection; the
 // service calls the methods of a feature only while the machine reports it
 // available (leaflow.fleet.machine.v1), and on a new connection only after
-// its first ReportMachineStatus. When a connection drops, its calls in flight
-// end with UNAVAILABLE and reason CONNECTION_LOST and are never replayed.
+// its first ReportMachineStatus.
+//
+// Disconnection. A call the service made on a connection that drops goes on
+// once the endpoint received it: the endpoint finishes it and, within
+// Welcome.resume_grace, sends its CallResult with the Call's resume_token on
+// its next connection, before anything else after Welcome. The service waits
+// for it until the call's timeout, whichever of its addresses the endpoint
+// connects to. A call the service had not yet sent ends at once with
+// UNAVAILABLE and reason CONNECTION_LOST. Calls are never sent again, so each
+// runs at most once, and a result that no one waits for any more is dropped.
+// The calls an endpoint made to the service end with UNAVAILABLE and reason
+// CONNECTION_LOST, and the endpoint repeats them on its next connection as
+// Retries allows. While an endpoint connects again, within its presence or
+// its Welcome.resume_grace, the service's calls to it wait for it until their
+// timeout instead of failing.
 //
 // Concurrency. A callee may work on several calls of a connection at once and
 // answer them in any order; a caller that needs one call to take effect
@@ -122,9 +135,12 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // long as it takes, unless the close ends it (below): updates of the service
 // close every connection, and an outage may last long, such as while the
 // service is attacked. Before each attempt it waits a random time between
-// zero and the smaller of 60 seconds and 1 second times 2 to the number of
-// attempts since its last connection that lasted 5 minutes, and at least the
-// retry_delay of the Close it received. What ends it:
+// zero and the smaller of its cap and 1 second times 2 to the number of
+// attempts since its last connection that received Welcome and lasted 10
+// seconds, and at least the retry_delay of the Close it received. The cap is
+// 60 seconds for a daemon and 30 seconds for a session process, so that it
+// comes back within Welcome.resume_grace; the first attempt after a connection
+// that lasted therefore follows within a second. What ends it:
 //   - for a daemon, AUTHENTICATION_FAILED for its machine credential (the
 //     machine enrolls again), PERMISSION_DENIED (the machine was removed)
 //     and an enrollment DENIED (leaflow.fleet.machine.v1);
@@ -343,8 +359,9 @@ message Welcome {
   string session_id = 3;
   // The keys the service signs with.
   SigningKeys signing_keys = 4;
-  // How long the service keeps the session's participants when this connection
-  // drops. Session processes only.
+  // How long, after this connection drops, the service waits for the results
+  // of the calls the endpoint received on it (see Disconnection) and, for a
+  // session process, keeps the session's participants.
   google.protobuf.Duration resume_grace = 5;
   // The session process connected again within resume_grace and kept its
   // participants. Session processes only.
