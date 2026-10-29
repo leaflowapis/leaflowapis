@@ -48,9 +48,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // the endpoint answers with ClientHello; the service answers with Welcome or
 // Close. Before Welcome both sides close on any other message, and the service
 // sends nothing else on a connection until it sent Welcome. A service that
-// cannot take a connection now, such as under load or because its address
-// opens connections too fast, refuses the WebSocket upgrade with HTTP status
-// 503 and a Retry-After header (RFC 9110 §10.2.3).
+// cannot take a connection now, such as under load, refuses the WebSocket
+// upgrade with HTTP status 503 and a Retry-After header (RFC 9110 §10.2.3); a
+// proxy in front of it that limits how fast an address connects may refuse it
+// with 429. The endpoint counts either as a failed attempt (see Reconnection)
+// and waits at least Retry-After when given.
 //
 // Calls. Both ends call methods of each other with leaflow.fleet.rpc.v1
 // frames. Each service says who serves it on which connections; a call of any

@@ -39,10 +39,14 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/privilege/v1;privil
 //
 // The daemon asks for every PAM authentication of a directory account, at the
 // same time as it shows the request to the participants of the session the
-// process belongs to, if any. The first decision counts: the daemon cancels
-// this call (CallCancel) once a participant decides, and stops showing the
-// request once this call answers. A decision of the platform is not signed; the
-// daemon trusts it as it trusts the service for the directory.
+// process belongs to, if any. The first decision counts. When a participant
+// decides first, the daemon asks again with the same request and
+// participant_decision, so that the platform records who decided; both calls
+// then answer the decision the platform recorded first. The daemon cancels
+// this call (CallCancel) only when the asking program gives up, and stops
+// showing the request once this call answers. A decision of the platform is
+// not signed; the daemon trusts it as it trusts the service for the
+// directory.
 //
 // Unlike a participant, the platform keeps the request's claims with the
 // request and shows them to the account's owner: at most the first 4 KiB of
@@ -57,13 +61,17 @@ service PrivilegeService {
   // Asking again with the request_id of a request the machine asked about
   // before continues that request: after its connection dropped, the daemon
   // asks again with the same PrivilegeRequest and gets the decision on it.
+  // Asking with participant_decision records that participant's decision,
+  // unless the request was decided already, and answers it.
   //
   // Fails with:
   //   - NOT_FOUND and reason ACCOUNT_NOT_FOUND when the username of the
   //     authentication is not an account of the machine's directory;
   //   - PERMISSION_DENIED and reason PRIVILEGE_NOT_ALLOWED when the account
   //     may not become root on the machine (Account.admin), or the operation
-  //     is not a PAM authentication.
+  //     is not a PAM authentication;
+  //   - INVALID_ARGUMENT and reason PARTICIPANT_NOT_IN_SESSION when
+  //     participant_decision names no participant of the request's session.
   rpc DecidePrivilegeRequest(DecidePrivilegeRequestRequest) returns (DecidePrivilegeRequestResponse) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -73,6 +81,16 @@ service PrivilegeService {
 message DecidePrivilegeRequestRequest {
   // The request, as the daemon shows it to participants.
   PrivilegeRequest request = 1;
+  // Set when a participant of the request's session decided it first.
+  ParticipantDecision participant_decision = 2;
+}
+
+// A decision of a participant, as the daemon accepted it.
+message ParticipantDecision {
+  // The participant (leaflow.fleet.control.v1 Authorization.participant_id).
+  uint64 participant_id = 1;
+  // The person approved the request. False: denied.
+  bool approved = 2;
 }
 
 // The response of DecidePrivilegeRequest.

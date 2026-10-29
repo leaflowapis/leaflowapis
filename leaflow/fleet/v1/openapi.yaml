@@ -126,8 +126,8 @@ info:
     applies:
 
     - inside a command run through this API, by the request itself;
-    - at once, while the user has set the machine to approve without asking, for a while or for
-      good (`PUT /api/v1/machines/{machineId}/privilege-approval`);
+    - at once, while the user has approved their requests on the machine without asking, for a
+      while or until removed (`PUT /api/v1/machines/{machineId}/privilege-auto-approval`);
     - by the user, on any of their devices, for a request listed by `GET /api/v1/privilege-requests`
       (`POST …:approve` or `…:deny`), or on a participant of the session the asking process belongs
       to. A request nobody decides expires, and sudo fails.
@@ -162,7 +162,8 @@ info:
     - Enrollment requests are made only by machines.
     - A machine registration cannot be changed; revoke it and create another.
     - Machine events are a log: they are listed, never changed, and kept for 30 days.
-    - A privilege request is decided only by the user whose account asks.
+    - A privilege request is decided only by the user whose account asks, or on a participant of
+      the session it comes from.
 
     ## Joining a session
 
@@ -404,13 +405,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/machines/{machineId}/privilege-approval:
+  /api/v1/machines/{machineId}/privilege-auto-approval:
     get:
-      summary: Get the caller's privilege approval setting for a machine
+      summary: Get the caller's automatic approval for a machine
       description: |-
-        Returns whether the caller's elevations on the machine are approved without asking. A
-        caller who never set it gets `never`.
-      operationId: get-privilege-approval
+        Returns the caller's automatic approval of their privilege requests on the machine. Fails
+        with `PRIVILEGE_AUTO_APPROVAL_NOT_FOUND` while the caller is asked every time, including
+        after its `expires_at` has passed.
+      operationId: get-privilege-auto-approval
       tags:
         - Privilege
       parameters:
@@ -421,7 +423,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PrivilegeApproval"
+                $ref: "#/components/schemas/PrivilegeAutoApprovalResource"
         default:
           description: Error
           content:
@@ -429,14 +431,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
     put:
-      summary: Set the caller's privilege approval setting for a machine
+      summary: Approve the caller's privilege requests on a machine without asking
       description: |-
-        Sets whether the caller's elevations on the machine are approved without asking: `never`
-        asks every time, `until` approves without asking until `auto_approve_until`, `forever`
-        always does. It applies to the caller's own account only, and only while they may become
-        root on the machine. Fails with `INVALID_ARGUMENT` when `auto_approve_until` is missing
-        or past for `until`, or present otherwise.
-      operationId: update-privilege-approval
+        Approves the caller's privilege requests on the machine at once, until `expires_at`, or
+        until removed when `expires_at` is null, replacing any earlier automatic approval. It
+        applies to the caller's own account only, which is created if the caller has none yet,
+        and only while they may become root on the machine. Fails with `INVALID_ARGUMENT` when
+        `expires_at` has passed.
+      operationId: update-privilege-auto-approval
       tags:
         - Privilege
       parameters:
@@ -446,28 +448,46 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/PrivilegeApproval"
+              $ref: "#/components/schemas/UpdatePrivilegeAutoApprovalRequest"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PrivilegeApproval"
+                $ref: "#/components/schemas/PrivilegeAutoApprovalResource"
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/privilege-approvals:
-    get:
-      summary: List the caller's privilege approval settings
+    delete:
+      summary: Remove the caller's automatic approval for a machine
       description: |-
-        Returns the machines of the current project on which the caller has set privilege requests
-        to be approved without asking, with the setting of each, the most recently set first. A
-        machine whose setting is `never`, or whose `until` has passed, is not listed.
-      operationId: list-privilege-approvals
+        Removes it: the caller is asked about every later privilege request on the machine.
+        Removing one that does not exist succeeds.
+      operationId: delete-privilege-auto-approval
+      tags:
+        - Privilege
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      responses:
+        "204":
+          description: Removed
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/privilege-auto-approvals:
+    get:
+      summary: List the caller's automatic approvals
+      description: |-
+        Returns the caller's automatic approvals on the machines of the current project that are
+        in effect, the most recently set first.
+      operationId: list-privilege-auto-approvals
       tags:
         - Privilege
       parameters:
@@ -479,7 +499,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PrivilegeApprovalList"
+                $ref: "#/components/schemas/PrivilegeAutoApprovalList"
         default:
           description: Error
           content:
@@ -2546,46 +2566,47 @@ components:
           description: "`stderr` is cut short"
           type: boolean
       additionalProperties: false
-    PrivilegeApproval:
+    UpdatePrivilegeAutoApprovalRequest:
       type: object
       required:
-        - auto_approve
+        - expires_at
       properties:
-        auto_approve:
-          description: |-
-            `never` asks every time; `until` approves without asking until `auto_approve_until`;
-            `forever` always approves without asking.
-          type: string
-          enum:
-            - never
-            - until
-            - forever
-        auto_approve_until:
-          description: Only with `until`. A setting whose time has passed reads as `never`.
-          type: string
+        expires_at:
+          description: When the automatic approval ends; null for one that lasts until removed
+          type:
+            - string
+            - "null"
           format: date-time
       additionalProperties: false
-    PrivilegeApprovalResource:
+    PrivilegeAutoApprovalResource:
       type: object
       required:
+        - id
         - machine_id
-        - auto_approve
+        - expires_at
+        - created_at
+        - updated_at
       properties:
+        id:
+          type: string
+          format: uuid
         machine_id:
           type: string
           format: uuid
-        auto_approve:
-          description: "`until` or `forever`; see PrivilegeApproval."
+        expires_at:
+          description: When the automatic approval ends; null for one that lasts until removed
+          type:
+            - string
+            - "null"
+          format: date-time
+        created_at:
           type: string
-          enum:
-            - until
-            - forever
-        auto_approve_until:
-          description: Only with `until`.
+          format: date-time
+        updated_at:
           type: string
           format: date-time
       additionalProperties: false
-    PrivilegeApprovalList:
+    PrivilegeAutoApprovalList:
       type: object
       required:
         - items
@@ -2596,7 +2617,7 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/PrivilegeApprovalResource"
+            $ref: "#/components/schemas/PrivilegeAutoApprovalResource"
         total_count:
           type: integer
           format: int64
@@ -2610,11 +2631,20 @@ components:
           format: int64
           minimum: 1
       additionalProperties: false
+    PrivilegeDecider:
+      description: |-
+        Who decided a request: `user` on the platform, `auto_approval` at once by the user's
+        automatic approval for the machine, or `participant` a participant of the session.
+      type: string
+      enum:
+        - user
+        - auto_approval
+        - participant
     PrivilegeRequestState:
       description: |-
-        `pending` waits for a decision; `approved` and `denied` were decided by the user, a
-        participant or the user's setting; `expired` was not decided in time; `cancelled` ended
-        because the asking program gave up or a participant decided it.
+        `pending` waits for a decision; `approved` and `denied` were decided, as `decided_by`
+        tells; `expired` was not decided in time; `cancelled` ended because the asking program
+        gave up.
       type: string
       enum:
         - pending
@@ -2627,13 +2657,15 @@ components:
       required:
         - id
         - machine_id
+        - session_id
         - username
-        - service
+        - pam_service
         - command_line
         - remote_host
         - tty
         - state
-        - approved_without_asking
+        - decided_by
+        - participant_id
         - created_at
         - expires_at
         - decided_at
@@ -2644,10 +2676,18 @@ components:
         machine_id:
           type: string
           format: uuid
+        session_id:
+          description: |-
+            The session the asking program runs in; null when it runs in none, such as after an
+            SSH login
+          type:
+            - string
+            - "null"
+          maxLength: 40
         username:
           description: The account that asks to become root
           type: string
-        service:
+        pam_service:
           description: The PAM service that asks, such as `sudo`
           type: string
         command_line:
@@ -2663,9 +2703,17 @@ components:
           type: string
         state:
           $ref: "#/components/schemas/PrivilegeRequestState"
-        approved_without_asking:
-          description: The request was approved at once by the user's setting for the machine
-          type: boolean
+        decided_by:
+          description: Who decided an `approved` or `denied` request; null in any other state
+          anyOf:
+            - $ref: "#/components/schemas/PrivilegeDecider"
+            - type: "null"
+        participant_id:
+          description: The participant that decided, with `decided_by` `participant`; null otherwise
+          type:
+            - integer
+            - "null"
+          format: int64
         created_at:
           type: string
           format: date-time
