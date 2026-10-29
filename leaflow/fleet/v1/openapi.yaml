@@ -5,15 +5,16 @@ info:
   description: |-
     Machines that run the Leaflow Fleet Agent (`leaflow-fleet-agent`): adding machines, the
     accounts and groups that log in to them, running commands, opening and closing sessions, with
-    or without a desktop, and admitting viewers to them.
+    or without a desktop, and admitting participants to them.
 
     ## What this API sees
 
-    This API coordinates. It admits viewers to sessions and passes the signaling of their
-    connections, but everything a session shows or receives — terminals, files, the screen,
-    input, the clipboard, printing and privilege approvals on a viewer — travels end to end
-    between the viewer and the session, encrypted with keys that never leave them. The platform
-    sees which machine, which session and who is connected, and nothing of what happens inside.
+    This API coordinates. It admits participants to sessions and passes the signaling of their
+    PeerConnections, but everything a session shows or receives — terminals, files, the screen,
+    input, the clipboard, printing and privilege approvals on a participant — travels end to end
+    between the participant and the session, encrypted with keys that never leave them. The
+    platform sees which machine, which session and who is connected, and nothing of what happens
+    inside.
 
     Commands and privilege requests decided on the platform are the exception: the platform passes
     a command and its output between the caller and the machine, and keeps the command line of a
@@ -56,7 +57,7 @@ info:
 
     ## Trusting a machine's key
 
-    Each machine has an Ed25519 key that it generates itself and that never leaves it. Viewers
+    Each machine has an Ed25519 key that it generates itself and that never leaves it. Participants
     verify that key end to end before they exchange any data with a session, so a client must
     decide which key belongs to a machine without relying on any party in between:
 
@@ -127,9 +128,9 @@ info:
     - inside a command run through this API, by the request itself;
     - at once, while the user has set the machine to approve without asking, for a while or for
       good (`PUT /api/v1/machines/{machineId}/privilege-approval`);
-    - by the user, on any of their devices, for a request listed by
-      `GET /api/v1/privilege-requests` (`POST …:approve` or `…:deny`), or on a viewer of the session
-      the asking process belongs to. A request nobody decides expires, and sudo fails.
+    - by the user, on any of their devices, for a request listed by `GET /api/v1/privilege-requests`
+      (`POST …:approve` or `…:deny`), or on a participant of the session the asking process belongs
+      to. A request nobody decides expires, and sudo fails.
 
     Requests reach the user's devices as they happen through EventBus: the event
     `leaflow.fleet.privilege.requested` when one is waiting and `leaflow.fleet.privilege.decided`
@@ -148,34 +149,40 @@ info:
     - Machine events are a log: they are listed, never changed, and kept for 30 days.
     - A privilege request is decided only by the user whose account asks.
 
-    ## Viewing a session
+    ## Joining a session
 
-    1. Have an Ed25519 key, for as long as the client wants: one per viewer connection or one kept
-       by the client. The private key must never leave the client; in a browser, use a
+    1. Have an Ed25519 key, for as long as the client wants: one per participant or one kept by
+       the client. The private key must never leave the client; in a browser, use a
        non-extractable WebCrypto key.
-    2. Create a viewer connection for the public key with
-       `POST /api/v1/sessions/{sessionId}/viewers`. The answer carries the viewer's signed
-       authorization, the ICE servers, the keys the service signs with and a signaling ticket.
-    3. To start a PeerConnection, open a WebSocket to the ticket's `url` with the subprotocol
-       `leaflow.fleet.control.v1` and follow `leaflow/fleet/control/v1/control.proto` and
-       `leaflow/fleet/transport/v1/transport.proto`. The ticket travels inside the protocol and
-       never in a URL, and serves once within 60 seconds; for a later PeerConnection, such as
-       after a path failed, ask for another with
-       `POST /api/v1/sessions/{sessionId}/viewers/{connectionId}/signaling-tickets`. The
-       WebSocket may be closed once the PeerConnection carries data.
-    4. Renew the viewer connection with `POST …/viewers/{connectionId}:renew` well before
+    2. Get the ICE servers with `GET /api/v1/sessions/{sessionId}/rtc-configuration`, create a
+       PeerConnection with them and its data channels (`leaflow/fleet/transport/v1/transport.proto`)
+       and make an offer. Wait briefly for ICE candidates, such as until gathering completes or
+       one second has passed, so that the offer carries them.
+    3. Join with `POST /api/v1/sessions/{sessionId}/participants`, sending the public key and the
+       offer. The answer carries the participant's signed authorization, the keys the service
+       signs with, and the attempt: the session's SDP answer, its ICE candidates and the signed
+       PeerAuthorization. Pass candidates gathered later with
+       `POST …/participants/{connectionId}/attempts/{attemptId}/candidates`.
+    4. Renew the participant with `POST …/participants/{connectionId}:renew` well before
        `lease_expires_at`, every 15 seconds, presenting the PeerAuthorization of each
-       PeerConnection; the answer renews them. A viewer connection whose lease runs out ends,
-       and its PeerConnections stop within 30 seconds of their last lease.
-    5. Leave with `DELETE …/viewers/{connectionId}`.
+       PeerConnection; the answer renews them. A participant whose lease runs out ends, and its
+       PeerConnections stop within 30 seconds of their last lease.
+    5. When a path fails, start another PeerConnection with
+       `POST …/participants/{connectionId}/attempts` and move the connection to it with
+       `:prepare-migration` and `:commit-migration`. Abandon an attempt with
+       `DELETE …/attempts/{attemptId}`.
+    6. Leave with `DELETE …/participants/{connectionId}`.
 
-    What a viewer may do in a session is decided when its viewer connection is created, from the
-    caller's permissions and what the request asks for, and does not change afterwards. Viewers
-    are not told apart by kind: a person in a browser and a program that operates the session are
-    both viewers, named by the `client_id` label they choose, and either can be disconnected.
+    Signaling travels only through these requests; a participant holds no other connection to
+    the service.
 
-    Every viewer connection that ends, including through `DELETE`, is announced through EventBus as
-    `leaflow.fleet.viewer.closed`, addressed to its user in the current project, with its
+    What a participant may do in a session is decided when it is created, from the caller's
+    permissions and what the request asks for, and does not change afterwards. Participants are not
+    told apart by kind: a person in a browser and a program that operates the session are both
+    participants, named by the `client_id` label they choose, and either can be disconnected.
+
+    Every participant that ends, including through `DELETE`, is announced through EventBus as
+    `leaflow.fleet.participant.closed`, addressed to its user in the current project, with its
     `session_id`, `connection_id` (a decimal string) and `reason`: the name of the
     `CloseReason` of `leaflow/fleet/control/v1/control.proto` in lower case without its prefix,
     such as `detach_request` when it was ended through `DELETE`, `ping_timeout` when its lease
@@ -183,7 +190,7 @@ info:
     did not come back in time, or `permission_denied` when its rights were withdrawn.
 servers:
   - url: https://fleet.leaflow.cloud
-    description: Machines, accounts, commands, sessions and viewers
+    description: Machines, accounts, commands, sessions and participants
 security:
   - bearerAuth: []
 tags:
@@ -193,7 +200,7 @@ tags:
   - name: Account
   - name: Group
   - name: Session
-  - name: Viewer
+  - name: Participant
   - name: Privilege
 paths:
   /api/v1/machines:
@@ -277,9 +284,9 @@ paths:
     delete:
       summary: Remove a machine
       description: |-
-        Removes the machine from the project. Every viewer of its sessions is disconnected at once
-        and the Agent is refused from then on; to use the machine again, enroll it again. Sessions
-        still open on the machine can no longer be reached and end according to their own
+        Removes the machine from the project. Every participant of its sessions is disconnected at
+        once and the Agent is refused from then on; to use the machine again, enroll it again.
+        Sessions still open on the machine can no longer be reached and end according to their own
         timeouts. Nothing on the machine is deleted.
 
         Requires `fleet:machines.manage`.
@@ -1131,7 +1138,7 @@ paths:
 
         On a machine an account has at most one session with a desktop and at most 8 sessions in
         all. Sessions without a desktop run side by side, such as one for a program and one for a
-        person; several viewers can also share one session.
+        person; several participants can also share one session.
 
         Fails with:
         - `MACHINE_OFFLINE` when the machine is not connected;
@@ -1250,32 +1257,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/viewers:
-    post:
-      summary: Create a viewer connection
+  /api/v1/sessions/{sessionId}/rtc-configuration:
+    get:
+      summary: Get the ICE servers for a session
       description: |-
-        Admits one viewer with the given public key to the session: signs its authorization,
-        has the session accept it, and returns it with a first signaling ticket. The viewer
-        connection lasts while it is renewed.
+        Returns the STUN and TURN servers for the PeerConnections the caller starts to the session,
+        with TURN credentials of its own, and the policy for using them. Ask again once
+        `expires_at` has passed; the credentials of a PeerConnection already relayed last longer.
 
-        The owner of a session may operate it. Viewing another member's session requires
+        Requires that the caller may join the session, as for `create-participant`.
+
+        Fails with:
+        - `SESSION_CLOSED` when the session has ended;
+        - `SESSION_ACCESS_DENIED` when the caller may not join the session.
+      operationId: get-session-rtc-configuration
+      tags:
+        - Participant
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RtcConfiguration"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/participants:
+    post:
+      summary: Join a session
+      description: |-
+        Admits one participant with the given public key to the session: signs its authorization,
+        has the session accept it, and starts its first PeerConnection with the offer. The answer
+        carries the participant, its authorization and the attempt with the session's answer. The
+        participant lasts while it is renewed.
+
+        The owner of a session may operate it. Joining another member's session requires
         `fleet:sessions.view`, which admits watching only, or
         `fleet:sessions.control`, which also admits operating it. Each further capability
         of the session — file transfer, the clipboard, terminals and programs, port forwarding,
         devices and audio, printing, SSH agent forwarding, approving privilege requests and
-        reading logs — is granted only with its permission; a viewer that may only watch gets
+        reading logs — is granted only with its permission; a participant that may only watch gets
         none of them. A request may ask for less: to watch only, or for some of the capabilities.
 
-        Fails with:
+        Fails with the following, and then no participant was created:
         - `SESSION_CLOSED` when the session has ended;
-        - `SESSION_ACCESS_DENIED` when the caller may not view the session;
-        - `SESSION_UNAVAILABLE` when the session's process is not connected, such as while it
-          restarts; try again after the error's `retry_delay`;
-        - `VIEWER_LIMIT_REACHED` when the session has as many viewers as it admits;
-        - `VIEWER_REFUSED` when the session refused the viewer.
-      operationId: create-viewer
+        - `SESSION_ACCESS_DENIED` when the caller may not join the session;
+        - `OFFER_INVALID` when the offer is not an SDP offer that names a SHA-256 DTLS fingerprint;
+        - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
+          time, such as while it restarts; try again after the error's `retry_delay`;
+        - `PARTICIPANT_LIMIT_REACHED` when the session has as many participants as it admits;
+        - `PARTICIPANT_REFUSED` when the session refused the participant;
+        - `ATTEMPT_ABORTED` when the session gave up the PeerConnection; try again with a new
+          offer.
+      operationId: create-participant
       tags:
-        - Viewer
+        - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
       requestBody:
@@ -1283,14 +1325,14 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateViewerRequest"
+              $ref: "#/components/schemas/CreateParticipantRequest"
       responses:
         "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ViewerConnection"
+                $ref: "#/components/schemas/ParticipantConnection"
         default:
           description: Error
           content:
@@ -1298,11 +1340,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
     get:
-      summary: List the viewers of a session
-      description: Returns the viewers connected to the session, in the order they connected.
-      operationId: list-session-viewers
+      summary: List the participants of a session
+      description: Returns the participants of the session, in the order they joined.
+      operationId: list-session-participants
       tags:
-        - Viewer
+        - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
       responses:
@@ -1311,32 +1353,32 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ViewerList"
+                $ref: "#/components/schemas/ParticipantList"
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/viewers/{connectionId}:renew:
+  /api/v1/sessions/{sessionId}/participants/{connectionId}:renew:
     post:
-      summary: Renew a viewer connection
+      summary: Renew a participant
       description: |-
-        Extends the viewer connection's lease and returns renewed PeerAuthorizations for the
+        Extends the participant's lease and returns renewed PeerAuthorizations for the
         PeerConnections whose current ones the request presents; the session receives them too.
-        A presented authorization that the service did not sign for this viewer connection, or
-        whose attempt has ended, is left out of the answer. When the viewer's authorization nears
+        A presented authorization that the service did not sign for this participant, or whose
+        attempt has ended, is left out of the answer. When the participant's authorization nears
         its end, the answer carries a renewed one, which the session already holds.
 
-        Only the viewer connection's user may renew it.
+        Only the participant's user may renew it.
 
         Fails with:
-        - `VIEWER_NOT_FOUND` when the viewer connection has ended; create another;
-        - `VIEWER_RIGHTS_CHANGED` when the caller's permissions no longer grant what the viewer
-          connection holds; it has ended, and another can be created with the current rights.
-      operationId: renew-viewer
+        - `PARTICIPANT_NOT_FOUND` when the participant has ended; create another;
+        - `PARTICIPANT_RIGHTS_CHANGED` when the caller's permissions no longer grant what the
+          participant holds; it has ended, and another can be created with the current rights.
+      operationId: renew-participant
       tags:
-        - Viewer
+        - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/ConnectionId"
@@ -1345,54 +1387,213 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/RenewViewerRequest"
+              $ref: "#/components/schemas/RenewParticipantRequest"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/RenewViewerResponse"
+                $ref: "#/components/schemas/RenewParticipantResponse"
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/viewers/{connectionId}/signaling-tickets:
+  /api/v1/sessions/{sessionId}/participants/{connectionId}:prepare-migration:
     post:
-      summary: Create a signaling ticket
+      summary: Prepare a migration
       description: |-
-        Issues a single-use ticket for one signaling WebSocket of the viewer connection, valid for
-        60 seconds. Only the viewer connection's user may ask for one.
+        Passes the participant's checkpoint for the next epoch to the session and returns the
+        session's checkpoint for it: the `prepare` and `prepared` steps of `Migration` in
+        `leaflow/fleet/transport/v1/transport.proto`. Repeating the step returns the same answer.
 
-        Fails with `VIEWER_NOT_FOUND` when the viewer connection has ended.
-      operationId: create-signaling-ticket
+        Only the participant's user may migrate it.
+
+        Fails with:
+        - `PARTICIPANT_NOT_FOUND` when the participant has ended;
+        - `CHECKPOINT_INVALID` when the checkpoint is not a serialized `Checkpoint`;
+        - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
+          time; try again after the error's `retry_delay`.
+      operationId: prepare-participant-migration
       tags:
-        - Viewer
+        - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/ConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MigrationStep"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigrationStep"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/participants/{connectionId}:commit-migration:
+    post:
+      summary: Commit a migration
+      description: |-
+        Commits the epoch the participant prepared and returns the session's checkpoint once it
+        committed it: the `commit` and `committed` steps of `Migration` in
+        `leaflow/fleet/transport/v1/transport.proto`. Repeating the step returns the same answer.
+
+        Only the participant's user may migrate it.
+
+        Fails with:
+        - `PARTICIPANT_NOT_FOUND` when the participant has ended;
+        - `CHECKPOINT_INVALID` when the checkpoint is not a serialized `Checkpoint`;
+        - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
+          time; try again after the error's `retry_delay`.
+      operationId: commit-participant-migration
+      tags:
+        - Participant
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MigrationStep"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigrationStep"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/participants/{connectionId}/attempts:
+    post:
+      summary: Start a PeerConnection
+      description: |-
+        Starts another PeerConnection of the participant with the offer, such as after a path
+        failed, and returns the session's answer, its ICE candidates and the signed
+        PeerAuthorization. Move the connection to it with `prepare-participant-migration` and
+        `commit-participant-migration`.
+
+        Only the participant's user may start one.
+
+        Fails with:
+        - `PARTICIPANT_NOT_FOUND` when the participant has ended;
+        - `OFFER_INVALID` when the offer is not an SDP offer that names a SHA-256 DTLS fingerprint;
+        - `TOO_MANY_ATTEMPTS` when the participant started too many PeerConnections in the last
+          minute; try again after the error's `retry_delay`;
+        - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
+          time; try again after the error's `retry_delay`;
+        - `ATTEMPT_ABORTED` when the session gave up the PeerConnection; start another.
+      operationId: create-attempt
+      tags:
+        - Participant
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAttemptRequest"
       responses:
         "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SignalingTicket"
+                $ref: "#/components/schemas/Attempt"
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/viewers/{connectionId}:
-    get:
-      summary: Get a viewer of a session
-      description: Returns a viewer connected to the session.
-      operationId: get-viewer
+  /api/v1/sessions/{sessionId}/participants/{connectionId}/attempts/{attemptId}:
+    delete:
+      summary: Abandon a PeerConnection
+      description: |-
+        Tells the session to give up the attempt and close its PeerConnection. Abandoning an
+        attempt that has ended succeeds.
+
+        Only the participant's user may abandon it.
+
+        Fails with `PARTICIPANT_NOT_FOUND` when the participant has ended.
+      operationId: delete-attempt
       tags:
-        - Viewer
+        - Participant
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ConnectionId"
+        - $ref: "#/components/parameters/AttemptId"
+      responses:
+        "204":
+          description: Abandoned
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/participants/{connectionId}/attempts/{attemptId}/candidates:
+    post:
+      summary: Add ICE candidates to a PeerConnection
+      description: |-
+        Passes the ICE candidates the participant gathered after its offer to the session, and with
+        `end_of_candidates`, that it has gathered all (RFC 8838). The session ignores those of an
+        attempt that has ended.
+
+        Only the participant's user may add them.
+
+        Fails with:
+        - `PARTICIPANT_NOT_FOUND` when the participant has ended;
+        - `SESSION_UNAVAILABLE` when the session's process is not connected; try again after the
+          error's `retry_delay`.
+      operationId: create-attempt-candidates
+      tags:
+        - Participant
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ConnectionId"
+        - $ref: "#/components/parameters/AttemptId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateAttemptCandidatesRequest"
+      responses:
+        "204":
+          description: Passed on
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/participants/{connectionId}:
+    get:
+      summary: Get a participant of a session
+      description: Returns a participant of the session.
+      operationId: get-participant
+      tags:
+        - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/ConnectionId"
@@ -1402,7 +1603,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ViewerResource"
+                $ref: "#/components/schemas/ParticipantResource"
         default:
           description: Error
           content:
@@ -1410,17 +1611,16 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
     delete:
-      summary: End a viewer connection
+      summary: End a participant
       description: |-
-        Ends the viewer connection: the session detaches the viewer and closes its
-        PeerConnections, and the session goes on. A viewer leaves this way; others are
-        disconnected this way.
+        Ends the participant: the session detaches it and closes its PeerConnections, and the
+        session goes on. A participant leaves this way; others are disconnected this way.
 
-        The viewer connection's user and the owner of the session may end it; otherwise this
+        The participant's user and the owner of the session may end it; otherwise this
         requires `fleet:sessions.manage`.
-      operationId: delete-viewer
+      operationId: delete-participant
       tags:
-        - Viewer
+        - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
         - $ref: "#/components/parameters/ConnectionId"
@@ -1488,6 +1688,13 @@ components:
         type: integer
         format: int64
         minimum: 1
+    AttemptId:
+      name: attemptId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     SessionId:
       name: sessionId
       in: path
@@ -2147,8 +2354,8 @@ components:
             - type: "null"
         process_running:
           description: |-
-            The session can admit viewers. False while its process restarts; viewers are then
-            asked to connect again shortly.
+            The session can admit participants. False while its process restarts; requests that
+            signal are then answered with `SESSION_UNAVAILABLE` and succeed again shortly.
           type: boolean
         last_input_at:
           description: The last input of a person in the session
@@ -2215,7 +2422,7 @@ components:
         mode:
           $ref: "#/components/schemas/SessionMode"
         width:
-          description: The first width of the canvas, normally the viewer's; the machine's default when omitted
+          description: The first width of the canvas, normally the participant's; the machine's default when omitted
           type: integer
           format: int64
           minimum: 320
@@ -2372,8 +2579,8 @@ components:
     PrivilegeRequestState:
       description: |-
         `pending` waits for a decision; `approved` and `denied` were decided by the user, a
-        viewer or the user's setting; `expired` was not decided in time; `cancelled` ended
-        because the asking program gave up or a viewer decided it.
+        participant or the user's setting; `expired` was not decided in time; `cancelled` ended
+        because the asking program gave up or a participant decided it.
       type: string
       enum:
         - pending
@@ -2463,7 +2670,7 @@ components:
           format: int64
           minimum: 1
       additionalProperties: false
-    ViewerResource:
+    ParticipantResource:
       type: object
       required:
         - connection_id
@@ -2475,33 +2682,33 @@ components:
         - created_at
       properties:
         connection_id:
-          description: The viewer's connection
+          description: The participant's connection
           type: integer
           format: int64
         user:
           $ref: "#/components/schemas/NamedIdentity"
         client_id:
-          description: The label the viewer's client chose, such as `console` or `assistant`; neither unique nor verified
+          description: The label the participant's client chose, such as `console` or `assistant`; neither unique nor verified
           type: string
         read_only:
-          description: The viewer may only watch
+          description: The participant may only watch
           type: boolean
         policies:
           description: |-
-            The capabilities granted to the viewer, as the full names of their policy messages,
+            The capabilities granted to the participant, as the full names of their policy messages,
             such as `leaflow.fleet.filetransfer.v1.FileTransferPolicy`
           type: array
           items:
             type: string
         remote_address:
-          description: The IP address the viewer connected from
+          description: The IP address the participant joined from
           type: string
         created_at:
-          description: When the viewer connected
+          description: When the participant joined
           type: string
           format: date-time
       additionalProperties: false
-    ViewerList:
+    ParticipantList:
       type: object
       required:
         - items
@@ -2509,25 +2716,7 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/ViewerResource"
-      additionalProperties: false
-    SignalingTicket:
-      type: object
-      required:
-        - ticket
-        - url
-        - expires_at
-      properties:
-        ticket:
-          description: The ticket to send in `ViewerCredential.ticket`. Never put it in a URL.
-          type: string
-        url:
-          description: The WebSocket URL of the control connection
-          type: string
-          format: uri
-        expires_at:
-          type: string
-          format: date-time
+            $ref: "#/components/schemas/ParticipantResource"
       additionalProperties: false
     Signed:
       description: |-
@@ -2580,7 +2769,7 @@ components:
           type: string
       additionalProperties: false
     RtcConfiguration:
-      description: The ICE servers for the PeerConnections the viewer starts
+      description: The ICE servers for the PeerConnections the caller starts, as W3C RTCConfiguration
       type: object
       required:
         - ice_servers
@@ -2601,36 +2790,86 @@ components:
           type: string
           format: date-time
       additionalProperties: false
-    ViewerConnection:
+    IceCandidate:
+      description: An ICE candidate (RFC 8445), as W3C RTCIceCandidateInit
       type: object
       required:
-        - viewer
+        - candidate
+      properties:
+        candidate:
+          description: The candidate attribute; it names network addresses, so never log it
+          type: string
+          maxLength: 4096
+        sdp_mid:
+          description: The media stream identification tag of the candidate (RFC 5888)
+          type: string
+          maxLength: 64
+      additionalProperties: false
+    Attempt:
+      description: |-
+        One PeerConnection of a participant, as the session answered it. Set the answer as the
+        remote description, add the candidates, and verify the authorization before sending
+        application data; its SHA-256 goes into `Hello.authorization_sha256`.
+      type: object
+      required:
+        - attempt_id
+        - answer
+        - candidates
+        - authorization
+      properties:
+        attempt_id:
+          description: The attempt, as `attempt_id` of the transport protocol in its 16 bytes
+          type: string
+          format: uuid
+        answer:
+          description: The session's SDP answer (RFC 8866); it holds ICE credentials, so never log it
+          type: string
+        candidates:
+          description: |-
+            The session's ICE candidates gathered until it reported the end of its candidates, or
+            until 2 seconds after its answer
+          type: array
+          items:
+            $ref: "#/components/schemas/IceCandidate"
+        authorization:
+          description: The signed `PeerAuthorization` of the attempt, the same one the session holds
+          allOf:
+            - $ref: "#/components/schemas/Signed"
+      additionalProperties: false
+    ParticipantConnection:
+      type: object
+      required:
+        - participant
         - authorization
         - rtc_configuration
         - service_keys
-        - signaling
         - lease_expires_at
+        - attempt
       properties:
-        viewer:
-          $ref: "#/components/schemas/ViewerResource"
+        participant:
+          $ref: "#/components/schemas/ParticipantResource"
         authorization:
-          description: The viewer's signed `Authorization`, the same one the session holds
+          description: The participant's signed `Authorization`, the same one the session holds
           allOf:
             - $ref: "#/components/schemas/Signed"
         rtc_configuration:
-          $ref: "#/components/schemas/RtcConfiguration"
+          description: The ICE servers for later PeerConnections of the participant
+          allOf:
+            - $ref: "#/components/schemas/RtcConfiguration"
         service_keys:
           type: array
           items:
             $ref: "#/components/schemas/ServiceKey"
-        signaling:
-          $ref: "#/components/schemas/SignalingTicket"
         lease_expires_at:
-          description: When the viewer connection ends unless renewed
+          description: When the participant ends unless renewed
           type: string
           format: date-time
+        attempt:
+          description: The first PeerConnection, started with the request's offer
+          allOf:
+            - $ref: "#/components/schemas/Attempt"
       additionalProperties: false
-    RenewViewerRequest:
+    RenewParticipantRequest:
       type: object
       properties:
         peer_authorizations:
@@ -2640,7 +2879,7 @@ components:
           items:
             $ref: "#/components/schemas/Signed"
       additionalProperties: false
-    RenewViewerResponse:
+    RenewParticipantResponse:
       type: object
       required:
         - lease_expires_at
@@ -2667,23 +2906,24 @@ components:
           items:
             $ref: "#/components/schemas/ServiceKey"
       additionalProperties: false
-    CreateViewerRequest:
+    CreateParticipantRequest:
       type: object
       required:
         - public_key
+        - offer
       properties:
         public_key:
           $ref: "#/components/schemas/PublicKey"
         client_id:
-          description: A label for the client that connects, such as `console` or `assistant`, shown to the other viewers. It is neither unique nor verified.
+          description: A label for the client that joins, such as `console` or `assistant`, shown to the other participants. It is neither unique nor verified.
           type: string
           maxLength: 64
         read_only:
-          description: The viewer only watches, even if the caller may operate the session
+          description: The participant only watches, even if the caller may operate the session
           type: boolean
         permissions:
           description: |-
-            The capabilities the viewer may use, as permission names such as
+            The capabilities the participant may use, as permission names such as
             `fleet:files.transfer`; when omitted, every capability the caller holds. A
             capability the caller does not hold is not granted.
           type: array
@@ -2700,4 +2940,45 @@ components:
               - fleet:ssh_agent.use
               - fleet:privilege.approve
               - fleet:logs.read
+        offer:
+          description: |-
+            The SDP offer (RFC 8866) of the first PeerConnection, with the ICE candidates gathered
+            so far; it holds ICE credentials, so never log it
+          type: string
+          maxLength: 65536
+      additionalProperties: false
+    CreateAttemptRequest:
+      type: object
+      required:
+        - offer
+      properties:
+        offer:
+          description: |-
+            The SDP offer (RFC 8866) of the PeerConnection, with the ICE candidates gathered so
+            far; it holds ICE credentials, so never log it
+          type: string
+          maxLength: 65536
+      additionalProperties: false
+    CreateAttemptCandidatesRequest:
+      type: object
+      properties:
+        candidates:
+          type: array
+          maxItems: 64
+          items:
+            $ref: "#/components/schemas/IceCandidate"
+        end_of_candidates:
+          description: The participant has gathered all its candidates
+          type: boolean
+      additionalProperties: false
+    MigrationStep:
+      type: object
+      required:
+        - checkpoint
+      properties:
+        checkpoint:
+          description: A serialized `Checkpoint` of `leaflow/fleet/transport/v1/transport.proto`
+          type: string
+          format: byte
+          maxLength: 262144
       additionalProperties: false

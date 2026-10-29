@@ -9,14 +9,14 @@ import "google/protobuf/timestamp.proto";
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 
 // The sessions a machine hosts: logins of the project's directory accounts
-// (leaflow.fleet.directory.v1) that viewers reach end to end through a
+// (leaflow.fleet.directory.v1) that participants reach end to end through a
 // session process (leaflow.fleet.session.v1). The Fleet service asks the
 // machine's Agent to open and end them, and the Agent reports them. Every
 // call travels on the daemon's control connection (leaflow.fleet.control.v1)
 // and fails there with the reasons of each method in a google.rpc.ErrorInfo
 // of the domain "fleet.leaflow.cloud".
 //
-// Kinds. A session without options has no desktop: its viewers use the
+// Kinds. A session without options has no desktop: its participants use the
 // domains of the session layer, such as terminals, programs, files, ports,
 // sound, devices, printers and approvals (leaflow.fleet.terminal.v1 and its
 // siblings). Options add a feature, such as a desktop
@@ -41,12 +41,13 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 // AVAILABLE while the Agent's session package is installed. Details, each
 // present when the machine has it:
 //   - "privilege.sudo", "privilege.polkit": elevations a person approves on
-//     a viewer (leaflow.fleet.privilege.v1);
-//   - "audio.pulseaudio", "audio.pipewire": sound and the viewer's
+//     a participant (leaflow.fleet.privilege.v1);
+//   - "audio.pulseaudio", "audio.pipewire": sound and the participant's
 //     microphone (leaflow.fleet.audio.v1);
-//   - "camera.v4l2loopback": the viewer's camera (leaflow.fleet.camera.v1);
-//   - "gamepad.uinput": the viewer's gamepads (leaflow.fleet.gamepad.v1);
-//   - "printing.cups": printers of the machine besides the viewer's
+//   - "camera.v4l2loopback": the participant's camera
+//     (leaflow.fleet.camera.v1);
+//   - "gamepad.uinput": the participant's gamepads (leaflow.fleet.gamepad.v1);
+//   - "printing.cups": printers of the machine besides the participant's
 //     (leaflow.fleet.printing.v1).
 
 // Opens and ends the sessions of a machine. Served by the daemon on its
@@ -153,8 +154,8 @@ message Session {
   // Plain text for logs about close_reason, at most 1024 bytes.
   string reason_phrase = 11;
   // The state of what its options added, at most one of each type, such as
-  // leaflow.fleet.virtualdesktop.host.v1 DesktopState. A type the service does not
-  // know is ignored.
+  // leaflow.fleet.virtualdesktop.host.v1 DesktopState. A type the service does
+  // not know is ignored.
   repeated google.protobuf.Any details = 12;
 }
 
@@ -204,12 +205,12 @@ enum SessionCloseReason {
 // Timeouts and limits of a session, which the daemon enforces even while the
 // service is unreachable. A timeout that is unset or zero is off.
 message SessionPolicy {
-  // Ends the session this long after its last viewer left (xrdp
+  // Ends the session this long after its last participant left (xrdp
   // DisconnectedTimeLimit).
   google.protobuf.Duration disconnected_timeout = 1;
   // Ends the session this long after it opened.
   google.protobuf.Duration max_lifetime = 2;
-  // Ends the session when no viewer came this long after it opened.
+  // Ends the session when no participant came this long after it opened.
   google.protobuf.Duration no_client_timeout = 3;
   // Limits on the user's resources.
   ResourceControl resource_control = 4;
@@ -239,7 +240,7 @@ message OpenSessionRequest {
   // The platform user's directory account. The daemon only checks that the
   // account may have a session.
   string username = 3;
-  // The address of the viewer that asked, for PAM_RHOST and logind's
+  // The address of the participant that asked, for PAM_RHOST and logind's
   // RemoteHost. Empty: the service's host name, so that the session is
   // always remote.
   string remote_host = 4;

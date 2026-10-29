@@ -7,20 +7,21 @@ import "google/rpc/status.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/transport/v1;transportv1";
 
-// The end-to-end connection between a viewer and a session, carried by a
-// WebRTC PeerConnection (W3C WebRTC; RFC 8831 data channels). The
-// Fleet service relays the signaling below over its control
-// connections and signs a PeerAuthorization for every attempt; it never
-// carries or sees the data that flows here.
+// The end-to-end connection between a participant and a session, carried by a
+// WebRTC PeerConnection (W3C WebRTC; RFC 8831 data channels). The Fleet
+// service relays the signaling below between the participant's requests to
+// the Fleet API and the session's control connection, and signs a
+// PeerAuthorization for every attempt; it never carries or sees the data that
+// flows here.
 //
 // Paths. One logical connection, named by connection_id, lives on one
-// PeerConnection at a time. Each PeerConnection is a path with its own epoch,
-// 1 for the first. When a path fails the viewer creates a new PeerConnection
-// and migrates the connection to it under the next epoch (Migration); only
-// envelopes the receiver had not admitted are sent again.
+// PeerConnection at a time. Each PeerConnection is a path with its own
+// epoch, 1 for the first. When a path fails the participant creates a new
+// PeerConnection and migrates the connection to it under the next epoch
+// (Migration); only envelopes the receiver had not admitted are sent again.
 //
-// Data channels. The viewer creates every data channel of a PeerConnection,
-// with protocol "leaflow.fleet.transport.v1" and these labels:
+// Data channels. The participant creates every data channel of a
+// PeerConnection, with protocol "leaflow.fleet.transport.v1" and these labels:
 //   binding              ordered, reliable    Hello, Checkpoint receipts, Close
 //   input                ordered, reliable
 //   metadata             ordered, reliable
@@ -33,16 +34,16 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/transport/v1;transp
 // lane its channel type names; where a lane has several data channels, the
 // channel uses the one at index (channel_id / 2) modulo their count.
 //
-// Opening. The viewer sends Hello on "binding" as soon as it opens; the
-// session sends its own once the viewer's arrived, with the same epoch, and
-// each end answers the other's challenge with a second Hello. Nothing else
+// Opening. The participant sends Hello on "binding" as soon as it opens; the
+// session sends its own once the participant's arrived, with the same epoch,
+// and each end answers the other's challenge with a second Hello. Nothing else
 // is sent until both answers have verified.
 //
 // Channels. Logical channels follow the SSH connection protocol (RFC 4254 §5)
-// with absolute credit as in QUIC (RFC 9000 §4.1). A channel carries the
-// varint length-delimited messages of its channel type as a byte stream, cut
-// into data envelopes of any size. The viewer allocates even channel ids from
-// 2, the session odd ids from 1; ids are never reused on a connection.
+// with absolute credit as in QUIC (RFC 9000 §4.1). A channel carries the varint
+// length-delimited messages of its channel type as a byte stream, cut into data
+// envelopes of any size. The participant allocates even channel ids from 2, the
+// session odd ids from 1; ids are never reused on a connection.
 //
 // Messages. Each channel type names the message type each of its ends sends.
 // Where an end sends several kinds of message, that type has a oneof, and a
@@ -79,29 +80,31 @@ message Hello {
   bytes attempt_id = 1;
   // The logical connection.
   uint64 connection_id = 2;
-  // The epoch of this path, chosen by the viewer: 1 for the first attempt of
-  // the connection, then one more than the committed epoch, since the
-  // session may have taken an earlier attempt that the viewer did not. The
-  // session accepts one more than its committed epoch, or 1 while no path
-  // has carried the connection, and greets with the same epoch.
+  // The epoch of this path, chosen by the participant: 1 for the first attempt
+  // of the connection, then one more than the committed epoch, since the
+  // session may have taken an earlier attempt that the participant did not. The
+  // session accepts one more than its committed epoch, or 1 while no path has
+  // carried the connection, and greets with the same epoch.
   uint64 epoch = 3;
   // 32 unpredictable bytes.
   bytes challenge = 4;
   // The peer's challenge. Empty in the first Hello.
   bytes response = 5;
-  // SHA-256 of the PeerAuthorization bytes signed for this attempt.
+  // SHA-256 of the bytes of the first PeerAuthorization the service signed
+  // for this attempt (SignedPeerAuthorization.authorization). Renewed ones do
+  // not change it.
   bytes authorization_sha256 = 6;
   // The Ed25519 public key (RFC 8032) that vouches for the sender's DTLS
-  // certificate: the machine key of the Agent, the viewer key of the viewer.
-  // The viewer refuses an Agent key other than the one it pinned for the
-  // machine; the session refuses a viewer key other than the one in the
-  // viewer's authorization.
+  // certificate: the machine key for the Agent, the participant's own key for
+  // the participant. The participant refuses an Agent key other than the one
+  // it pinned for the machine; the session refuses a participant key other
+  // than the one in the participant's authorization.
   bytes public_key = 7;
   // Ed25519 signature by public_key over the UTF-8 string
   // "leaflow.fleet.transport.v1.Hello", one zero byte, attempt_id,
-  // connection_id as 8 big-endian bytes, one byte for the role of the sender
-  // (1 viewer, 2 Agent) and the SHA-256 fingerprint of the sender's own DTLS
-  // certificate (RFC 8122).
+  // connection_id as 8 big-endian bytes, one byte for the role of the
+  // sender (1 participant, 2 Agent) and the SHA-256 fingerprint of the
+  // sender's own DTLS certificate (RFC 8122).
   bytes dtls_attestation = 8;
   // The largest message, in bytes, the sender accepts in the byte stream of
   // one channel.
@@ -184,8 +187,8 @@ message ChannelOpenFailure {
 // Why a channel was refused. Values follow RFC 4254 §5.1.
 enum ChannelOpenFailureReason {
   CHANNEL_OPEN_FAILURE_REASON_UNSPECIFIED = 0;
-  // The viewer's authorization or the session's policy does not allow it, or
-  // the channel type allows one channel and one is open.
+  // The participant's authorization or the session's policy does not allow it,
+  // or the channel type allows one channel and one is open.
   CHANNEL_OPEN_FAILURE_REASON_ADMINISTRATIVELY_PROHIBITED = 1;
   // What the channel leads to cannot be reached, such as a TCP endpoint.
   CHANNEL_OPEN_FAILURE_REASON_CONNECT_FAILED = 2;
@@ -265,27 +268,28 @@ message RetiredRange {
 }
 
 // A two-phase migration of a connection to a new path; RFC 9000 §9 calls the
-// same move connection migration. It travels over the control connections,
-// which stay up while paths fail. The viewer coordinates: it sends prepare,
-// the session answers prepared, the viewer sends commit and the session
-// answers committed. Both ends stop admitting envelopes of the old epoch at
-// prepare. A repeated step is answered again and never applied twice.
+// same move connection migration. It does not depend on the failed path: the
+// participant sends its steps through the Fleet API and receives the
+// session's in the answers, and the session sends its own on its control
+// connection. The participant coordinates: it sends prepare, the session
+// answers prepared, the participant sends commit and the session answers
+// committed. Both ends stop admitting envelopes of the old epoch at prepare. A
+// repeated step is answered again and never applied twice. Only the
+// participant starts a migration: when the session's side of the path fails,
+// the participant's side fails too.
 message Migration {
   // The logical connection.
   uint64 connection_id = 1;
   // The step.
   oneof step {
-    // The viewer's checkpoint for the next epoch.
+    // The participant's checkpoint for the next epoch.
     Checkpoint prepare = 2;
     // The session's checkpoint for the same epoch.
     Checkpoint prepared = 3;
-    // The viewer commits the epoch.
+    // The participant commits the epoch.
     Checkpoint commit = 4;
     // The session committed it.
     Checkpoint committed = 5;
-    // The session asks the viewer to migrate, such as after its side of the
-    // path failed. Only the viewer starts a migration.
-    bool request = 6;
   }
 }
 
@@ -296,33 +300,40 @@ message Close {
 }
 
 // Signaling for one PeerConnection attempt (RFC 9429 JSEP; RFC 8838 trickle
-// ICE). It travels over the control connections of the viewer and the
-// session; the service derives the sender from the connection it came on and
-// passes it to the other end of the same connection_id.
+// ICE) between the session process and the service, which stands for the
+// participant: the participant sends its offer, its candidates and the end of
+// an attempt through the Fleet API, and receives the session's answer,
+// candidates and the PeerAuthorization in the answer of its request. The
+// service passes on the session's candidates that arrive until the session
+// sends end_of_candidates, and at most 2 seconds after the answer; the session
+// therefore sends end_of_candidates as soon as it gathered.
 message Signal {
-  // 16 random bytes the viewer chose for the attempt.
+  // 16 random bytes the service chose for the attempt: the attempt_id of the
+  // Fleet API, a UUID.
   bytes attempt_id = 1;
   // The logical connection.
   uint64 connection_id = 2;
   // Increases with every signal of one sender in the attempt.
   uint64 sequence = 3;
-  // The configuration the viewer was given for this attempt. Set by the
-  // service on the offer it passes to the session; never sent by a viewer.
+  // The ICE servers and policy for the session's end of the attempt. Set by
+  // the service on the offer.
   RtcConfiguration configuration = 4;
   // The signal.
   oneof signal {
-    // An offer from the viewer or an answer from the session.
+    // An offer from the participant or an answer from the session.
     SessionDescription description = 5;
     // A trickled ICE candidate.
     IceCandidate candidate = 6;
     // No more candidates from the sender (RFC 8838).
     bool end_of_candidates = 7;
-    // The sender gave up the attempt. The viewer starts another one at once.
+    // The sender gave up the attempt: the participant ended it through the
+    // Fleet API, or the session could not take it. The participant starts
+    // another one.
     bool abort = 8;
-    // The service's authorization of the attempt, sent to both ends before
-    // either may send application data. Renewed authorizations reach the
-    // session this way too, and the viewer in the answer of its renewal
-    // through the Fleet API.
+    // The service's authorization of the attempt, sent to the session this
+    // way and to the participant with the answer, before either may send
+    // application data. Renewed ones reach the session this way too, and the
+    // participant in the answer of its renewal through the Fleet API.
     SignedPeerAuthorization authorization = 9;
   }
 }
@@ -394,10 +405,10 @@ message SignedPeerAuthorization {
   bytes signature = 3;
 }
 
-// The service's statement that one attempt joins this viewer to this session
-// with these two DTLS certificates. Both ends check the signature, every
-// field and the lifetime before sending application data; DTLS alone does not
-// authorize.
+// The service's statement that one attempt joins this participant to this
+// session with these two DTLS certificates. Both ends check the signature,
+// every field and the lifetime before sending application data; DTLS alone does
+// not authorize.
 message PeerAuthorization {
   // The HTTPS origin of the service that signed it.
   string issuer = 1;
@@ -405,26 +416,26 @@ message PeerAuthorization {
   string machine_id = 2;
   // The session.
   string session_id = 3;
-  // The logical connection of the viewer.
+  // The logical connection of the participant.
   uint64 connection_id = 4;
   // The attempt.
   bytes attempt_id = 5;
-  // SHA-256 fingerprint of the viewer's DTLS certificate, from its offer.
-  bytes viewer_fingerprint_sha256 = 6;
+  // SHA-256 fingerprint of the participant's DTLS certificate, from its offer.
+  bytes participant_fingerprint_sha256 = 6;
   // SHA-256 fingerprint of the Agent's DTLS certificate, from its answer.
   bytes agent_fingerprint_sha256 = 7;
-  // SHA-256 of the viewer's authorization that both ends hold for the
+  // SHA-256 of the participant's authorization that both ends hold for the
   // connection: the exact serialized bytes the service signed. A renewal
-  // names the viewer's current authorization, which may be a renewed one
+  // names the participant's current authorization, which may be a renewed one
   // through the Fleet API.
-  bytes viewer_authorization_sha256 = 8;
+  bytes participant_authorization_sha256 = 8;
   // When the service signed it.
   google.protobuf.Timestamp issued_at = 9;
-  // The end of the attempt's authorization: the end of the viewer's current
-  // authorization.
+  // The end of the attempt's authorization: the end of the participant's
+  // current authorization.
   google.protobuf.Timestamp expires_at = 10;
   // The end of the current lease, at most 30 seconds after issued_at and no
-  // later than expires_at. The viewer renews it through the Fleet API with
+  // later than expires_at. The participant renews it through the Fleet API with
   // the PeerAuthorization it holds. Each end stops sending application data
   // when the lease runs out, and goes on once it holds a later one.
   google.protobuf.Timestamp lease_expires_at = 11;

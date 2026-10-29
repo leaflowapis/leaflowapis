@@ -6,46 +6,46 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/privilege/v1;privilegev1";
 
-// Approval of privileged operations by a person on a viewer device instead of
-// a password: privilege elevation through sudo or polkit, and access to the
+// Approval of privileged operations by a person on a participant device instead
+// of a password: privilege elevation through sudo or polkit, and access to the
 // user's keyring. The PAM stacks of sudo and polkit and the session's Secret
 // Service prompter ask the Agent's privileged daemon, which serializes a
-// PrivilegeRequest and has the session show it to its viewers. A viewer whose
-// authorization allows approving shows it to its person and returns their
-// decision signed with its viewer key, the key named in its authorization.
-// The daemon accepts a decision only for the exact bytes it produced, once,
-// before its own deadline. It checks the signature itself, and the viewer's
-// authorization too: signed by the service, current, for this session and
-// with a PrivilegePolicy that allows approving. The session only
-// carries the decision and the authorization. Every viewer that may approve is
-// asked, and the first valid decision counts. When none is connected the
-// daemon does not wait, and the program goes on to its next way of
+// PrivilegeRequest and has the session show it to its participants. A
+// participant whose authorization allows approving shows it to its person and
+// returns their decision signed with its participant key, the key named in its
+// authorization. The daemon accepts a decision only for the exact bytes it
+// produced, once, before its own deadline. It checks the signature itself, and
+// the participant's authorization too: signed by the service, current, for this
+// session and with a PrivilegePolicy that allows approving. The session only
+// carries the decision and the authorization. Every participant that may
+// approve is asked, and the first valid decision counts. When none is connected
+// the daemon does not wait, and the program goes on to its next way of
 // authenticating, such as a password.
 //
-// Channel type "leaflow.fleet.privilege.v1", lane "interactive":
-// opened by the viewer, one per connection. ServerHello first, then a snapshot
-// of one PrivilegePrompt per pending request, then SnapshotEnd, then prompts
-// and closings as they happen.
+// Channel type "leaflow.fleet.privilege.v1", lane "interactive": opened by the
+// participant, one per connection. ServerHello first, then a snapshot of one
+// PrivilegePrompt per pending request, then SnapshotEnd, then prompts and
+// closings as they happen.
 //
-// A request carries claims of the program that asked, such as its command
-// line. They may contain secrets: viewers show them to the person and never
+// A request carries claims of the program that asked, such as its command line.
+// They may contain secrets: participants show them to the person and never
 // store or log them.
 
 // Decides on the platform the PAM authentications of directory accounts
-// (leaflow.fleet.directory.v1), so that sudo works where no viewer can
+// (leaflow.fleet.directory.v1), so that sudo works where no participant can
 // approve, such as after an SSH login, and its owner can approve from any of
 // their devices. Served by the service on daemon connections
 // (leaflow.fleet.control.v1).
 //
-// The daemon asks for every PAM authentication of a directory account, at
-// the same time as it shows the request to the viewers of the session the
+// The daemon asks for every PAM authentication of a directory account, at the
+// same time as it shows the request to the participants of the session the
 // process belongs to, if any. The first decision counts: the daemon cancels
-// this call (CallCancel) once a viewer decides, and stops showing the request
-// once this call answers. A decision of the platform is not signed; the
+// this call (CallCancel) once a participant decides, and stops showing the
+// request once this call answers. A decision of the platform is not signed; the
 // daemon trusts it as it trusts the service for the directory.
 //
-// Unlike a viewer, the platform keeps the request's claims with the request
-// and shows them to the account's owner: at most the first 4 KiB of
+// Unlike a participant, the platform keeps the request's claims with the
+// request and shows them to the account's owner: at most the first 4 KiB of
 // command_line, and remote_host and tty.
 service PrivilegeService {
   // Decides a request. While the account's owner has set the machine to
@@ -71,7 +71,7 @@ service PrivilegeService {
 
 // The request of DecidePrivilegeRequest.
 message DecidePrivilegeRequestRequest {
-  // The request, as the daemon shows it to viewers.
+  // The request, as the daemon shows it to participants.
   PrivilegeRequest request = 1;
 }
 
@@ -81,7 +81,7 @@ message DecidePrivilegeRequestResponse {
   PrivilegeOutcome outcome = 1;
 }
 
-// A message from the viewer.
+// A message from the participant.
 message ClientMessage {
   // The message.
   oneof message {
@@ -94,7 +94,7 @@ message ClientMessage {
 message ServerMessage {
   // The message.
   oneof message {
-    // What this viewer may do. The first message.
+    // What this participant may do. The first message.
     ServerHello server_hello = 1;
     // A request is pending.
     PrivilegePrompt prompt = 2;
@@ -105,17 +105,17 @@ message ServerMessage {
   }
 }
 
-// What this viewer may do.
+// What this participant may do.
 message ServerHello {
-  // The viewer's authorization allows it to approve requests. Without it the
-  // viewer sees requests and cannot decide them.
+  // The participant's authorization allows it to approve requests. Without it
+  // the participant sees requests and cannot decide them.
   bool approve_allowed = 1;
 }
 
 // A pending request to show.
 message PrivilegePrompt {
   // A serialized PrivilegeRequest, exactly as the daemon produced it. The
-  // viewer shows the request decoded from these bytes and signs their
+  // participant shows the request decoded from these bytes and signs their
   // SHA-256.
   bytes request = 1;
 }
@@ -194,13 +194,13 @@ enum KeyringOperation {
   KEYRING_OPERATION_CREATE_COLLECTION = 2;
 }
 
-// A person's decision, signed by the viewer.
+// A person's decision, signed by the participant.
 message SignedPrivilegeDecision {
   // A serialized PrivilegeDecision.
   bytes decision = 1;
   // The Ed25519 signature (RFC 8032) over the ASCII bytes
   // "leaflow.fleet.privilege.v1.PrivilegeDecision", one zero byte
-  // and decision, by the viewer key of the connection's authorization.
+  // and decision, by the participant key of the connection's authorization.
   bytes signature = 2;
 }
 
@@ -238,10 +238,10 @@ enum PrivilegeOutcome {
 // Ends the snapshot.
 message SnapshotEnd {}
 
-// What a viewer may do with privilege requests. Carried in the viewer's
-// signed authorization; the service grants approve_allowed only to the
-// devices of the session's person.
+// What a participant may do with privilege requests. Carried in the
+// participant's signed authorization; the service grants approve_allowed only
+// to the devices of the session's person.
 message PrivilegePolicy {
-  // The viewer may approve or deny requests.
+  // The participant may approve or deny requests.
   bool approve_allowed = 1;
 }

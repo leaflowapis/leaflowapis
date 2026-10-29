@@ -6,15 +6,15 @@ import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/lease/v1;leasev1";
 
-// Who operates a desktop session: the input lease, and the rules for
-// operation calls. The session does not tell people and programs apart:
-// several viewers may operate it together, and the rules follow how a viewer
+// Who operates a desktop session: the input lease, and the rules for operation
+// calls. The session does not tell people and programs apart: several
+// participants may operate it together, and the rules follow how a participant
 // acts, not who it is.
 //
-// Channel type "leaflow.fleet.virtualdesktop.lease.v1", lane "metadata": opened by
-// the viewer right after the session channel (leaflow.fleet.session.v1), one
-// per connection. The session sends ServerMessage: the InputLease,
-// SnapshotEnd, then changes.
+// Channel type "leaflow.fleet.virtualdesktop.lease.v1", lane "metadata": opened
+// by the participant right after the session channel
+// (leaflow.fleet.session.v1), one per connection. The session sends
+// ServerMessage: the InputLease, SnapshotEnd, then changes.
 //
 // Revisions. The session numbers what it observes changing in its windows,
 // pixels and accessibility trees with one logical clock, the revision, which
@@ -24,20 +24,20 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/leas
 // change observed later has a larger revision. Revisions order observations
 // across channels, which the channels themselves do not.
 //
-// Input lease. One viewer at a time gives input: the holder of the input
-// lease. A viewer that is not read-only takes it with its input while nobody
-// holds it, and keeps it until it has been idle until expires_at. Input on
-// the input channel takes the lease at once, from whoever holds it.
+// Input lease. One participant at a time gives input: the holder of the input
+// lease. A participant that is not read-only takes it with its input while
+// nobody holds it, and keeps it until it has been idle until expires_at. Input
+// on the input channel takes the lease at once, from whoever holds it.
 //
-// Operation calls. Viewers may also operate the session through the service
-// channels of the domain packages. Every call that injects input, activates
-// or changes windows, or acts on applications through accessibility, the
-// tray, notifications or drops needs the input lease, and the session
+// Operation calls. Participants may also operate the session through the
+// service channels of the domain packages. Every call that injects input,
+// activates or changes windows, or acts on applications through accessibility,
+// the tray, notifications or drops needs the input lease, and the session
 // refuses it, before doing anything, with:
-//   - PERMISSION_DENIED and reason READ_ONLY for a read-only viewer;
+//   - PERMISSION_DENIED and reason READ_ONLY for a read-only participant;
 //   - UNAVAILABLE and reason INPUT_BUSY, with a google.rpc.RetryInfo, while
-//     another viewer holds the lease or another such call of the session is
-//     still running;
+//     another participant holds the lease or another such call of the session
+//     is still running;
 //   - FAILED_PRECONDITION and reason BLOCKED_BY_MODAL for a window a modal
 //     window blocks (metadata "windowId" and "modalWindowId").
 // Failed calls tell whether they had an effect (leaflow.fleet.rpc.v1
@@ -55,7 +55,7 @@ message ServerMessage {
 }
 
 // Who holds the input lease. Sent in the snapshot and whenever it changes,
-// so that every viewer sees who operates the session.
+// so that every participant sees who operates the session.
 message InputLease {
   // The connection that holds it. 0: nobody; the next input takes it.
   uint64 holder_connection_id = 1;

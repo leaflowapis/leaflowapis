@@ -10,21 +10,20 @@ import "leaflow/fleet/transport/v1/transport.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv1";
 
-// The control connection between an endpoint and the Fleet service. The
-// service authenticates endpoints, calls the features of machines and passes
-// the signaling of the PeerConnections between viewers and sessions. It
-// carries no session data: that flows only between viewer and session
-// (leaflow.fleet.transport.v1).
+// The control connection between an endpoint of a machine and the Fleet
+// service. The service authenticates endpoints, calls the features of machines
+// and passes to sessions the signaling that participants send through the
+// Fleet API. It carries no session data: that flows only between participant
+// and session (leaflow.fleet.transport.v1).
 //
 // Endpoints. Each of these processes holds its own control connection:
 //   - the Agent's daemon, one per machine, with the machine key, or while
 //     the machine enrolls, with the key it generated;
 //   - the session process, one per session, with a key the machine key
-//     delegated to it;
-//   - a viewer, while it starts or migrates a PeerConnection, with the key
-//     of its viewer connection (see Viewers).
+//     delegated to it.
 // Every credential proves possession of an Ed25519 key (RFC 8032) by signing
-// the service's challenge; none is a bearer secret.
+// the service's challenge; none is a bearer secret. Participants hold no
+// control connection: they signal through the Fleet API (see Participants).
 //
 // Carriage. A WebSocket (RFC 6455) to the URL the service gives out. The
 // endpoint offers the subprotocols of the versions it speaks, this one being
@@ -47,7 +46,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 //
 // Handshake. The service sends ServerHello as soon as the WebSocket opens;
 // the endpoint answers with ClientHello; the service answers with Welcome or
-// Close. Before Welcome both sides close on any other message. A service that
+// Close. Before Welcome both sides close on any other message, and the service
+// sends nothing else on a connection until it sent Welcome. A service that
 // cannot take a connection now, such as under load or because its address
 // opens connections too fast, refuses the WebSocket upgrade with HTTP status
 // 503 and a Retry-After header (RFC 9110 §10.2.3).
@@ -86,25 +86,25 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // FAILED_PRECONDITION and reason CONNECTION_REPLACED, and applies none of
 // them.
 //
-// Signaling. Viewers and session processes send transport.v1 Signal and
-// Migration. The service takes the sender from the connection a message
-// came on and passes the message to the other end of its connection_id. It
-// drops one that names a viewer that has left. It closes with
-// POLICY_VIOLATION a connection that names a viewer never attached to its
-// session, and a daemon's connection that sends either.
+// Signaling. A participant signals through the Fleet API: the service passes
+// its offers, candidates, abandoned attempts and migration steps to the session
+// process as transport.v1 Signal and Migration, and answers the participant's
+// request with what the session sends back for the same connection_id and
+// attempt. The session process sends Signal and Migration on its control
+// connection. The service drops one that no request of the participant waits
+// for, such as a candidate that arrives after the answer was returned. It
+// closes with POLICY_VIOLATION a session process's connection that names a
+// participant never attached to its session, and a daemon's connection that
+// sends either.
 //
-// Viewers. A viewer connection is created and kept through the Fleet API
-// (leaflow/fleet/v1/openapi.yaml): creating it signs an Authorization for
-// the viewer's key and attaches it to the session with AttachViewer; renewing
-// it extends its lease and the leases of its PeerConnections, and replaces
-// the Authorization with UpdateViewerAuthorization before it expires;
-// deleting it, or letting its lease run out, detaches it with DetachViewer.
-// The viewer holds a control connection only to signal: it connects with a
-// ticket for its viewer connection when it starts or migrates a
-// PeerConnection, and may close it once the PeerConnection carries data; a
-// cut-off attempt is abandoned and the viewer starts another one. Rights
-// never change on a viewer connection: to change them, the service detaches
-// it, and the viewer creates another.
+// Participants. A participant is created and kept through the Fleet API
+// (leaflow/fleet/v1/openapi.yaml): creating it signs an Authorization for the
+// participant's key and attaches it to the session with AttachParticipant;
+// renewing it extends its lease and the leases of its PeerConnections, and
+// replaces the Authorization with UpdateParticipantAuthorization before it
+// expires; deleting it, or letting its lease run out, detaches it with
+// DetachParticipant. Rights never change on a participant: to change them,
+// the service detaches it, and the participant creates another.
 //
 // Liveness. The endpoint sends Ping when it has sent nothing for
 // ServerHello.ping_interval. Either side may Ping, and the other answers at
@@ -114,8 +114,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // Flow. Every WebSocket message an endpoint sends, Fragment, Ping and Pong
 // included, takes a token from a bucket that holds ServerHello.message_burst
 // tokens and refills at ServerHello.messages_per_second; the service closes a
-// connection that sends with the bucket empty with POLICY_VIOLATION. An endpoint reads what
-// the service sends as it arrives; the service closes with
+// connection that sends with the bucket empty with POLICY_VIOLATION. An
+// endpoint reads what the service sends as it arrives; the service closes with
 // ENDPOINT_TOO_SLOW a connection whose messages pile up unread.
 //
 // Reconnection. An endpoint whose connection ends connects again, for as
@@ -133,39 +133,37 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 //     on a copied disk. It connects again every 10 minutes and logs it;
 //   - for a session process, SESSION_NOT_FOUND and SESSION_EXIT; the
 //     process leaves its session running, and the service ends it if it
-//     should no longer run (leaflow.fleet.host.v1);
-//   - for a viewer, every close: it connects again only to signal, with a
-//     new ticket, while its viewer connection exists.
+//     should no longer run (leaflow.fleet.host.v1).
 //
 // Disconnected. A machine keeps working while its daemon is not connected:
 // the Agent serves its copy of the directory (leaflow.fleet.directory.v1),
 // sessions go on under their SessionPolicy (leaflow.fleet.host.v1), and
-// privilege requests go only to the session's viewers
+// privilege requests go only to the session's participants
 // (leaflow.fleet.privilege.v1). The service calls none of the machine's
-// features meanwhile. A viewer that cannot reach the service cannot renew
+// features meanwhile. A participant that cannot reach the service cannot renew
 // the leases of its PeerConnections, which stop sending application data
-// once a lease runs out and go on once the viewer renews it
+// once a lease runs out and go on once the participant renews it
 // (leaflow.fleet.transport.v1). After every connect the daemon reports the
 // machine, its sessions and its directory again.
 //
-// Resumption. When the control connection of a session process drops, or
-// the service closes it with SERVER_UPGRADE, the service keeps the session's
-// viewers for Welcome.resume_grace. A session process that connects again
-// within it with the same session key keeps them; it may connect at any
-// address of the service, since nothing ties it to the one it used before.
-// Nothing sent before is replayed: a PeerConnection attempt whose signaling
-// was cut off is abandoned, and the viewer starts another one. When the grace
-// passes, the service detaches the session's viewers, and their signaling
-// connections close with SESSION_RESTARTING.
+// Resumption. When the control connection of a session process drops, or the
+// service closes it with SERVER_UPGRADE, the service keeps the session's
+// participants for Welcome.resume_grace. A session process that connects again
+// within it with the same session key keeps them; it may connect at any address
+// of the service, since nothing ties it to the one it used before. Nothing sent
+// before is replayed: a PeerConnection attempt whose signaling was cut off is
+// abandoned, and the participant starts another one. When the grace passes, the
+// service ends the session's participants with SESSION_RESTARTING.
 //
 // Session lifetime. A session process sends Close with SESSION_EXIT just
-// before its session ends, and the service then ends the session's viewer
-// connections. A viewer that signals while the session's process is not
-// connected is closed with SESSION_RESTARTING and a retry_delay.
+// before its session ends, and the service then ends the session's
+// participants. While the session's process is not connected, the Fleet API
+// answers a participant that signals with SESSION_UNAVAILABLE and a
+// retry_delay.
 //
 // Keys. The service signs with the Ed25519 keys of ServiceKeys, which it
 // sends in Welcome and again on every connection whenever the set changes,
-// and which the Fleet API returns with what it signs for viewers. It
+// and which the Fleet API returns with what it signs for participants. It
 // adds a key at least 5 minutes before it signs with it, and removes one only
 // when nothing it signed with that key is still valid.
 //
@@ -191,9 +189,9 @@ message ClientMessage {
     leaflow.fleet.rpc.v1.CallResult call_result = 5;
     // Cancels a call of the endpoint.
     leaflow.fleet.rpc.v1.CallCancel call_cancel = 6;
-    // Signaling for a PeerConnection. Viewers and session processes only.
+    // Signaling for a PeerConnection. Session processes only.
     leaflow.fleet.transport.v1.Signal signal = 7;
-    // A step of a migration. Viewers and session processes only.
+    // A step of a migration. Session processes only.
     leaflow.fleet.transport.v1.Migration migration = 8;
     // The endpoint closes the connection.
     Close close = 9;
@@ -220,9 +218,11 @@ message ServerMessage {
     leaflow.fleet.rpc.v1.CallResult call_result = 6;
     // Cancels a call of the service.
     leaflow.fleet.rpc.v1.CallCancel call_cancel = 7;
-    // Signaling for a PeerConnection, from the other end of its connection.
+    // Signaling for a PeerConnection, from its participant through the Fleet
+    // API. To session processes only.
     leaflow.fleet.transport.v1.Signal signal = 8;
-    // A step of a migration, from the other end of its connection.
+    // A step of a migration, from its participant through the Fleet API. To
+    // session processes only.
     leaflow.fleet.transport.v1.Migration migration = 9;
     // The keys the service signs with, after they changed.
     ServiceKeys service_keys = 10;
@@ -269,12 +269,10 @@ message ClientHello {
     EnrollmentCredential enrollment = 2;
     // A session process.
     SessionCredential session = 3;
-    // A viewer.
-    ViewerCredential viewer = 4;
   }
-  // The endpoint software, such as "leaflow-fleet-agent/1.0.0" or the
-  // browser's User-Agent (RFC 9110 §10.1.5). For diagnostics only. A machine
-  // reports its Agent's version with leaflow.fleet.machine.v1.
+  // The endpoint software, such as "leaflow-fleet-agent/1.0.0". For
+  // diagnostics only. A machine reports its Agent's version with
+  // leaflow.fleet.machine.v1.
   string user_agent = 5;
 }
 
@@ -334,37 +332,21 @@ message SessionDelegation {
   google.protobuf.Timestamp expires_at = 5;
 }
 
-// A viewer, with its own key.
-message ViewerCredential {
-  // A single-use signaling ticket the Fleet API issued for one viewer
-  // connection, which names its key. Valid for at most 60 seconds. It
-  // authenticates nothing by itself: the signature below proves the key.
-  // Whoever asked for it, a browser through its console, a desktop client or
-  // a program, connects with it the same way. Never put into a URL.
-  string ticket = 1;
-  // The Ed25519 signature by the viewer key the ticket names over the ASCII
-  // bytes "leaflow.fleet.control.v1.ViewerCredential", one zero byte
-  // and ServerHello.challenge. The private key never leaves the client, such
-  // as a non-extractable WebCrypto key.
-  bytes signature = 3;
-}
-
 // The service accepted ClientHello.
 message Welcome {
-  // The connection. For a viewer, its viewer connection's connection_id,
-  // which its signaling, its PeerConnections and its authorization name.
+  // The connection.
   uint64 connection_id = 1;
   // The machine. Empty while enrolling.
   string machine_id = 2;
-  // The session. Session processes and viewers only.
+  // The session. Session processes only.
   string session_id = 3;
   // The keys the service signs with.
   ServiceKeys service_keys = 4;
-  // How long the service keeps the session's viewers when this connection
+  // How long the service keeps the session's participants when this connection
   // drops. Session processes only.
   google.protobuf.Duration resume_grace = 5;
   // The session process connected again within resume_grace and kept its
-  // viewers. Session processes only.
+  // participants. Session processes only.
   bool resumed = 6;
 }
 
@@ -385,9 +367,9 @@ message PublicKey {
   }
 }
 
-// The service's statement of what one viewer connection may do in one
-// session. The session takes who the viewer is and what it may do from here,
-// never from the viewer.
+// The service's statement of what one participant may do in one session. The
+// session takes who the participant is and what it may do from here, never from
+// the participant.
 message Authorization {
   // ServerHello.issuer of the service that signed it.
   string issuer = 1;
@@ -395,23 +377,23 @@ message Authorization {
   string machine_id = 2;
   // The session.
   string session_id = 3;
-  // The viewer's connection.
+  // The participant's connection.
   uint64 connection_id = 4;
-  // The platform user the viewer acts for.
+  // The platform user the participant acts for.
   string user_id = 5;
   // The user's name, plain text.
   string display_name = 6;
-  // The label the client gave itself when the ticket was issued, such as
-  // "console" or "assistant", at most 64 bytes. Neither unique nor verified:
-  // it lets people tell connections apart and grants nothing.
+  // The label the client gave itself when it created the participant, such
+  // as "console" or "assistant", at most 64 bytes. Neither unique nor
+  // verified: it lets people tell participants apart and grants nothing.
   string client_id = 7;
-  // The viewer's Ed25519 public key, 32 bytes. The viewer proved it with its
-  // credential, and the session accepts only a PeerConnection whose viewer
-  // Hello is signed with it.
-  bytes viewer_public_key = 9;
-  // The viewer may only watch, whatever policies say.
+  // The participant's Ed25519 public key, 32 bytes. The session accepts only
+  // a PeerConnection whose participant Hello is signed with it
+  // (leaflow.fleet.transport.v1).
+  bytes participant_public_key = 9;
+  // The participant may only watch, whatever policies say.
   bool read_only = 11;
-  // The policies of the domains the viewer may use, at most one of each
+  // The policies of the domains the participant may use, at most one of each
   // type, such as a leaflow.fleet.filetransfer.v1.FileTransferPolicy.
   // A domain whose policy is missing is denied. A type the session does not
   // know is ignored.
@@ -419,8 +401,8 @@ message Authorization {
   // When the service issued it. Refused when more than 5 minutes ahead of the
   // session's clock.
   google.protobuf.Timestamp issued_at = 13;
-  // When it ends. The session refuses it, and ends the viewer's connection,
-  // once this time and 5 more minutes have passed.
+  // When it ends. The session refuses it, and ends the participant's
+  // connection, once this time and 5 more minutes have passed.
   google.protobuf.Timestamp expires_at = 14;
 }
 
@@ -472,23 +454,24 @@ message Close {
   // Plain text for logs, at most 1024 bytes.
   string reason_phrase = 2;
   // How long to wait at least before connecting again (see Reconnection).
-  // Always set with OVERLOADED; set with SERVER_UPGRADE and
-  // SESSION_RESTARTING.
+  // Always set with OVERLOADED; set with SERVER_UPGRADE.
   google.protobuf.Duration retry_delay = 3;
 }
 
-// Why a control connection ends.
+// Why a control connection ends, and why a participant ends
+// (DetachParticipantRequest.reason).
 enum CloseReason {
   CLOSE_REASON_UNSPECIFIED = 0;
   // An ordinary close. Either side.
   CLOSE_REASON_DONE = 1;
-  // The endpoint goes away, such as a closed tab. Endpoint only.
+  // The endpoint goes away. Endpoint only.
   CLOSE_REASON_CLIENT_EXIT = 2;
   // The service shuts down. Service only.
   CLOSE_REASON_SERVER_SHUTDOWN = 3;
   // The service restarts; connect again after retry_delay. Service only.
   CLOSE_REASON_SERVER_UPGRADE = 4;
-  // Nothing arrived for idle_timeout. Either side.
+  // Nothing arrived for idle_timeout. Either side. For a participant, its
+  // lease ran out.
   CLOSE_REASON_PING_TIMEOUT = 5;
   // ClientHello did not arrive in time. Service only.
   CLOSE_REASON_HELLO_TIMEOUT = 6;
@@ -497,12 +480,12 @@ enum CloseReason {
   // A message larger than max_message_size, or one joined from fragments
   // larger than 16 MiB. Either side.
   CLOSE_REASON_MESSAGE_TOO_BIG = 8;
-  // The credential did not verify, or names an unknown machine, a used or
-  // expired ticket or another key. For a machine credential it is final: the
-  // daemon stops and its machine must enroll again. Service only.
+  // The credential did not verify, or names an unknown machine or another
+  // key. For a machine credential it is final: the daemon stops and its
+  // machine must enroll again. Service only.
   CLOSE_REASON_AUTHENTICATION_FAILED = 9;
   // The endpoint is known but not allowed, such as a removed machine or a
-  // viewer whose rights were withdrawn. Service only.
+  // participant whose rights were withdrawn. Service only.
   CLOSE_REASON_PERMISSION_DENIED = 10;
   // The session named by the credential does not exist or has ended.
   // Service only.
@@ -511,13 +494,14 @@ enum CloseReason {
   // daemon that connected again. Service only.
   CLOSE_REASON_NEW_CLIENT = 12;
   // The session ended. The session process before it ends, and the service
-  // to the session's viewers.
+  // for the session's participants.
   CLOSE_REASON_SESSION_EXIT = 13;
-  // The session exists but its process is not connected, such as while it
-  // restarts; connect again after retry_delay. Service only, to viewers.
+  // The session's process did not connect again within
+  // Welcome.resume_grace. Service only, for the session's participants.
   CLOSE_REASON_SESSION_RESTARTING = 14;
-  // The viewer was detached on request, such as by an administrator or to
-  // change its rights; the session goes on. Service only, to viewers.
+  // The participant was ended on request, such as when it left or another
+  // member disconnected it; the session goes on. Service only, for
+  // participants.
   CLOSE_REASON_DETACH_REQUEST = 15;
   // A rule or a rate limit was broken. Either side.
   CLOSE_REASON_POLICY_VIOLATION = 16;
@@ -531,71 +515,72 @@ enum CloseReason {
   CLOSE_REASON_ENDPOINT_TOO_SLOW = 19;
 }
 
-// Admits viewers to a session and ends them. Served by the session process
-// on its control connection; the service calls it when a viewer connection
+// Admits participants to a session and ends them. Served by the session process
+// on its control connection; the service calls it when a participant
 // is created, renewed or ends through the Fleet API.
-service ViewerService {
-  // Admits a viewer, before any of its signaling. The session verifies the
-  // signature with a key of ServiceKeys; that issuer, machine_id and
-  // session_id are its own; and the lifetime. It then accepts the
-  // PeerConnections of connection_id whose viewer Hello is signed with
-  // viewer_public_key. Attaching an attached viewer again with the same
-  // authorization succeeds.
+service ParticipantService {
+  // Admits a participant, before any of its signaling. The session verifies the
+  // signature with a key of ServiceKeys; that issuer, machine_id and session_id
+  // are its own; and the lifetime. It then accepts the PeerConnections of
+  // connection_id whose participant Hello is signed with
+  // participant_public_key. Attaching an attached participant again with the
+  // same authorization succeeds.
   //
   // Fails with PERMISSION_DENIED and reason AUTHORIZATION_INVALID when the
   // authorization does not verify.
-  rpc AttachViewer(AttachViewerRequest) returns (AttachViewerResponse) {
+  rpc AttachParticipant(AttachParticipantRequest) returns (AttachParticipantResponse) {
     option idempotency_level = IDEMPOTENT;
   }
-  // Replaces an attached viewer's authorization with a renewed one, verified
-  // as in AttachViewer. Replacing it with the one the viewer holds already
-  // succeeds.
+  // Replaces an attached participant's authorization with a renewed one,
+  // verified as in AttachParticipant. Replacing it with the one the participant
+  // holds already succeeds.
   //
   // Fails with:
-  //   - NOT_FOUND and reason VIEWER_NOT_FOUND for a viewer not attached;
+  //   - NOT_FOUND and reason PARTICIPANT_NOT_FOUND for a participant not
+  //     attached;
   //   - PERMISSION_DENIED and reason AUTHORIZATION_INVALID when it does not
   //     verify;
   //   - FAILED_PRECONDITION and reason AUTHORIZATION_CHANGED when it differs
   //     from the current one in more than later issued_at and expires_at.
-  rpc UpdateViewerAuthorization(UpdateViewerAuthorizationRequest) returns (UpdateViewerAuthorizationResponse) {
+  rpc UpdateParticipantAuthorization(UpdateParticipantAuthorizationRequest) returns (UpdateParticipantAuthorizationResponse) {
     option idempotency_level = IDEMPOTENT;
   }
-  // Ends a viewer. The session closes its PeerConnections and releases what
-  // it held, such as pressed keys and the input lease, and answers once the
-  // viewer can do nothing more in the session. Detaching a viewer that is not
-  // attached succeeds.
-  rpc DetachViewer(DetachViewerRequest) returns (DetachViewerResponse) {
+  // Ends a participant. The session closes its PeerConnections and releases
+  // what it held, such as pressed keys and the input lease, and answers once
+  // the participant can do nothing more in the session. Detaching a participant
+  // that is not attached succeeds.
+  rpc DetachParticipant(DetachParticipantRequest) returns (DetachParticipantResponse) {
     option idempotency_level = IDEMPOTENT;
   }
 }
 
-// The request of AttachViewer.
-message AttachViewerRequest {
-  // The viewer's authorization, the same one the Fleet API returned for the
-  // viewer connection.
+// The request of AttachParticipant.
+message AttachParticipantRequest {
+  // The participant's authorization, the same one the Fleet API returned for
+  // the participant.
   SignedAuthorization authorization = 1;
 }
 
-// The response of AttachViewer.
-message AttachViewerResponse {}
+// The response of AttachParticipant.
+message AttachParticipantResponse {}
 
-// The request of UpdateViewerAuthorization.
-message UpdateViewerAuthorizationRequest {
+// The request of UpdateParticipantAuthorization.
+message UpdateParticipantAuthorizationRequest {
   // The renewed authorization.
   SignedAuthorization authorization = 1;
 }
 
-// The response of UpdateViewerAuthorization.
-message UpdateViewerAuthorizationResponse {}
+// The response of UpdateParticipantAuthorization.
+message UpdateParticipantAuthorizationResponse {}
 
-// The request of DetachViewer.
-message DetachViewerRequest {
-  // The viewer's connection.
+// The request of DetachParticipant.
+message DetachParticipantRequest {
+  // The participant's connection.
   uint64 connection_id = 1;
-  // Why it ends: the reason the service gave the viewer, or the one its
-  // connection ended with, such as CLIENT_EXIT.
+  // Why it ends, such as DETACH_REQUEST when it was ended through the Fleet
+  // API or PING_TIMEOUT when its lease ran out.
   CloseReason reason = 2;
 }
 
-// The response of DetachViewer.
-message DetachViewerResponse {}
+// The response of DetachParticipant.
+message DetachParticipantResponse {}

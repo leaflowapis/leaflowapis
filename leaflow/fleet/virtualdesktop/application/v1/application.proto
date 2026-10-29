@@ -13,24 +13,25 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/appl
 // applications menu from the installed desktop entries and, where the
 // machine has one, its menu definition (Desktop Menu Specification 1.1,
 // ${XDG_MENU_PREFIX}applications.menu), and the desktop from Home, File
-// System, Trash and the entries of XDG_DESKTOP_DIR. Viewers present them:
+// System, Trash and the entries of XDG_DESKTOP_DIR. Participants present them:
 // they group applications without a menu definition, such as by their
 // categories, and name Home, File System and Trash in their own language.
 //
 // Channel types:
-//   - "leaflow.fleet.virtualdesktop.application.v1", lane "metadata": opened by the
-//     viewer, one per connection. It starts with a snapshot: ApplicationMenu,
-//     one DesktopIcon per icon, then SnapshotEnd. Read-only viewers may open
-//     it, so that they see what the person sees.
+//   - "leaflow.fleet.virtualdesktop.application.v1", lane "metadata": opened by
+//     the participant, one per connection. It starts with a snapshot:
+//     ApplicationMenu, one DesktopIcon per icon, then SnapshotEnd. Read-only
+//     participants may open it, so that they see what the person sees.
 //   - "leaflow.fleet.virtualdesktop.application.v1.ApplicationService", lane
-//     "interactive": opened by the viewer to list, launch and open.
+//     "interactive": opened by the participant to list, launch and open.
 //
-// Viewers send only desktop file IDs and URIs, never command lines: the
+// Participants send only desktop file IDs and URIs, never command lines: the
 // session builds every command from the Exec key itself (Desktop Entry
-// Specification, "The Exec key"), so that a viewer cannot inject commands.
-// Names of applications, menus and launchers are localized for the language
-// of the session channel's ClientHello and are plain text. Icons are rendered at the viewer's device pixel ratio:
-// 16 or 24 pixels in menus, 48 to 64 on the desktop.
+// Specification, "The Exec key"), so that a participant cannot inject commands.
+// Names of applications, menus and launchers are localized for the language of
+// the session channel's ClientHello and are plain text. Icons are rendered at
+// the participant's device pixel ratio: 16 or 24 pixels in menus, 48 to 64 on
+// the desktop.
 
 // A message from the session on the application channel.
 message ServerMessage {
@@ -38,8 +39,8 @@ message ServerMessage {
   oneof message {
     // The applications menu, in full.
     ApplicationMenu application_menu = 1;
-    // A desktop icon as it is now, in full: new when the viewer does not know
-    // its uri, otherwise replacing what the viewer had.
+    // A desktop icon as it is now, in full: new when the participant does not
+    // know its uri, otherwise replacing what the participant had.
     DesktopIcon desktop_icon = 2;
     // A desktop icon is gone.
     DesktopIconRemoved desktop_icon_removed = 3;
@@ -134,7 +135,7 @@ message ApplicationAction {
   leaflow.fleet.virtualdesktop.display.v1.Icon icon = 3;
 }
 
-// An icon on the desktop. Hidden files are not shown. Viewers keep icon
+// An icon on the desktop. Hidden files are not shown. Participants keep icon
 // positions themselves, keyed by uri.
 message DesktopIcon {
   // Identifies the icon: file:///home/<user>, file:///, trash:/// or the
@@ -144,7 +145,7 @@ message DesktopIcon {
   // What it shows. Never changes for a uri.
   DesktopIconType type = 2;
   // Its label: the Name of a launcher, or the file name. Empty for Home, File
-  // System and Trash, which viewers name.
+  // System and Trash, which participants name.
   string display_name = 3;
   // Its icon: "user-home", "drive-harddisk", "user-trash" or
   // "user-trash-full", a launcher's Icon, or the icon of the file's media
@@ -187,8 +188,8 @@ message DesktopIconRemoved {
 message SnapshotEnd {}
 
 // Lists applications and their processes, launches and ends them. Launching,
-// opening and terminating need an ApplicationPolicy and a viewer that is not
-// read-only; otherwise they fail with PERMISSION_DENIED.
+// opening and terminating need an ApplicationPolicy and a participant that is
+// not read-only; otherwise they fail with PERMISSION_DENIED.
 service ApplicationService {
   // Lists the applications, NoDisplay ones included, a page at a time.
   rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse) {
@@ -232,7 +233,7 @@ message ListApplicationsResponse {
   // Empty on the last page.
   string next_page_token = 2;
   // ApplicationMenu.revision the page belongs to. When it changes between
-  // pages, the viewer starts again from the first page.
+  // pages, the participant starts again from the first page.
   uint64 revision = 3;
 }
 
@@ -272,7 +273,7 @@ message OpenUriRequest {
   string uri = 1;
   // How the person answered for an untrusted launcher. A launcher that is not
   // trusted fails with FAILED_PRECONDITION and reason UNTRUSTED_LAUNCHER,
-  // naming the launcher but not its Exec line; the viewer asks its person
+  // naming the launcher but not its Exec line; the participant asks its person
   // and, if they agree, calls again with their answer.
   LauncherConfirmation launcher_confirmation = 2;
 }
@@ -351,6 +352,6 @@ message TerminateProcessResponse {
   uint64 revision = 1;
 }
 
-// Allows a viewer to launch applications and open URIs. Carried in the
-// viewer's signed authorization; without it the viewer can only look.
+// Allows a participant to launch applications and open URIs. Carried in the
+// participant's signed authorization; without it the participant can only look.
 message ApplicationPolicy {}

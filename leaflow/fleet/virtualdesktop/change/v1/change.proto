@@ -23,9 +23,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/chan
 // applications that expose a tree.
 //
 // Channel type "leaflow.fleet.virtualdesktop.change.v1.ChangeService", lane
-// "interactive": opened by the viewer. Read-only viewers may use it. The
-// session records changes while at least one viewer has the channel open and
-// keeps them for at least 60 seconds.
+// "interactive": opened by the participant. Read-only participants may use it.
+// The session records changes while at least one participant has the channel
+// open and keeps them for at least 60 seconds.
 //
 // Revisions. Every change carries the session revision at which it was
 // observed. A client passes the revision its action returned, such as

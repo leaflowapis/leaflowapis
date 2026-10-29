@@ -6,26 +6,26 @@ import "google/rpc/status.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/gamepad/v1;gamepadv1";
 
-// The viewer's gamepads as input devices of the session's user. Names follow
-// the W3C Gamepad API.
+// The participant's gamepads as input devices of the session's user. Names
+// follow the W3C Gamepad API.
 //
-// Channel type "leaflow.fleet.gamepad.v1", lane "input": opened by
-// the viewer, one per gamepad it provides, within GamepadLimits.max_devices,
-// after its person agreed and a gamepad is connected. The viewer sends
+// Channel type "leaflow.fleet.gamepad.v1", lane "input": opened by the
+// participant, one per gamepad it provides, within GamepadLimits.max_devices,
+// after its person agreed and a gamepad is connected. The participant sends
 // GamepadClientMessage: the descriptor, then states; the session sends
-// GamepadServerMessage: the opening once the virtual device exists, a
-// receipt for every state it wrote, and the closing when it ends the device.
-// Closing the channel, or the end of the connection, releases every button,
-// returns every axis to its neutral value and removes the device; nothing is
-// replayed or adopted by another connection.
+// GamepadServerMessage: the opening once the virtual device exists, a receipt
+// for every state it wrote, and the closing when it ends the device. Closing
+// the channel, or the end of the connection, releases every button, returns
+// every axis to its neutral value and removes the device; nothing is replayed
+// or adopted by another connection.
 //
-// Until the device is open the viewer keeps only the newest complete state,
-// and sends it first with its original time. It never drops a button change
-// it observed; it may merge changes of axes only, and drops states older
-// than GamepadLimits.max_queue_time. Messages are at most 16 KiB and strings
-// at most 512 bytes; every value is finite and within its range.
+// Until the device is open the participant keeps only the newest complete
+// state, and sends it first with its original time. It never drops a button
+// change it observed; it may merge changes of axes only, and drops states older
+// than GamepadLimits.max_queue_time. Messages are at most 16 KiB and strings at
+// most 512 bytes; every value is finite and within its range.
 
-// A message from the viewer.
+// A message from the participant.
 message GamepadClientMessage {
   // The message.
   oneof message {
@@ -79,7 +79,7 @@ enum GamepadMapping {
 
 // The virtual device exists.
 message GamepadOpen {
-  // The descriptor in effect: the viewer's, with the standard mapping
+  // The descriptor in effect: the participant's, with the standard mapping
   // normalized.
   GamepadDescriptor descriptor = 1;
 }
@@ -88,7 +88,7 @@ message GamepadOpen {
 message GamepadState {
   // Grows by one with every state of the channel, starting at 1.
   uint64 sequence = 1;
-  // When the viewer read it, in microseconds on its own clock
+  // When the participant read it, in microseconds on its own clock
   // (Gamepad.timestamp). Informational.
   int64 timestamp_us = 2;
   // The axes, each from -1 to 1, as many as the descriptor has.
@@ -127,13 +127,13 @@ message GamepadClose {
 // Why the session removed a gamepad.
 enum GamepadCloseReason {
   GAMEPAD_CLOSE_REASON_UNSPECIFIED = 0;
-  // The viewer's authorization does not allow it.
+  // The participant's authorization does not allow it.
   GAMEPAD_CLOSE_REASON_PERMISSION_DENIED = 1;
-  // The viewer's authorization no longer allows it.
+  // The participant's authorization no longer allows it.
   GAMEPAD_CLOSE_REASON_PERMISSION_REVOKED = 2;
   // The session cannot create or keep the virtual device.
   GAMEPAD_CLOSE_REASON_DEVICE_UNAVAILABLE = 3;
-  // The viewer broke the rules above.
+  // The participant broke the rules above.
   GAMEPAD_CLOSE_REASON_PROTOCOL_ERROR = 4;
   // A limit of GamepadLimits was exceeded.
   GAMEPAD_CLOSE_REASON_RESOURCE_EXHAUSTED = 5;

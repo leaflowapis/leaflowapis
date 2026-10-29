@@ -21,7 +21,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/command/v1;commandv
 // Elevation. Inside a command, sudo(8) succeeds without a prompt while the
 // account may become root (Account.admin, asked with GetAccount at that
 // moment), and refuses otherwise: the user asked for the command, so
-// the request stands for the approval a person gives on a viewer of a
+// the request stands for the approval a person gives on a participant of a
 // session (leaflow.fleet.privilege.v1).
 //
 // A command is one line for the account's login shell, as `ssh host

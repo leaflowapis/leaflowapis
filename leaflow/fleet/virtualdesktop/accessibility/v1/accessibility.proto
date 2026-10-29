@@ -9,8 +9,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/acce
 // The accessibility trees the applications of the session expose, and the
 // actions they offer through them.
 //
-// Channel type "leaflow.fleet.virtualdesktop.accessibility.v1.AccessibilityService",
-// lane "interactive": opened by the viewer.
+// Channel type
+// "leaflow.fleet.virtualdesktop.accessibility.v1.AccessibilityService", lane
+// "interactive": opened by the participant.
 //
 // Model. Applications expose their user interface as a tree of nodes through
 // AT-SPI2. The session presents these trees as one, after the Chrome DevTools

@@ -7,41 +7,41 @@ import "google/rpc/status.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/terminal/v1;terminalv1";
 
-// Interactive terminals running the login shell of the session's user, with
-// its groups, home directory and shell, never as another account (RFC 4254
-// §6.2 "pty-req" with §6.5 "shell"; viewers cannot choose the command). A
+// Interactive terminals running the login shell of the session's user, with its
+// groups, home directory and shell, never as another account (RFC 4254 §6.2
+// "pty-req" with §6.5 "shell"; participants cannot choose the command). A
 // terminal belongs to the session and outlives the connections that show it:
-// its output is one byte stream numbered from 0, of which the session keeps
-// the last 1 to 4 MiB, so that a viewer that attaches again continues where
-// it left off. Client input is never replayed.
+// its output is one byte stream numbered from 0, of which the session keeps the
+// last 1 to 4 MiB, so that a participant that attaches again continues where it
+// left off. Client input is never replayed.
 //
 // Channel types:
 //   - "leaflow.fleet.terminal.v1", lane "interactive": opened by the
-//     viewer, one per terminal it shows. The viewer sends ClientMessage,
-//     starting with TerminalOpen or TerminalAttach; the session answers
-//     TerminalAttached, or an error and closes the channel, then sends the
-//     output from that offset on. Closing the channel only detaches; the
+//     participant, one per terminal it shows. The participant sends
+//     ClientMessage, starting with TerminalOpen or TerminalAttach; the session
+//     answers TerminalAttached, or an error and closes the channel, then sends
+//     the output from that offset on. Closing the channel only detaches; the
 //     terminal keeps running. When the shell exits the session sends
 //     TerminalExit and closes the channel.
 //   - "leaflow.fleet.terminal.v1.TerminalService", lane
-//     "interactive": opened by the viewer to list and close terminals.
+//     "interactive": opened by the participant to list and close terminals.
 //
 // Bytes. Input and output are raw bytes: keys, committed text, pastes,
 // terminal mouse reports and answers to terminal queries go in, in one
-// ordered stream; the viewer's preedit text does not. Neither side buffers
+// ordered stream; the participant's preedit text does not. Neither side buffers
 // lines, strips control or escape sequences, translates newlines or
 // re-encodes; message boundaries may split characters and escape sequences.
 //
-// Pacing. Several viewers may attach to one terminal and all may type. The
-// session stops reading the terminal only while every attached viewer is out
-// of channel credit, so the shell runs at the pace of the fastest; a viewer
-// that falls behind by more than half the kept output is detached with
-// CANCELLED and attaches again. While nobody is attached the session keeps
+// Pacing. Several participants may attach to one terminal and all may type. The
+// session stops reading the terminal only while every attached participant is
+// out of channel credit, so the shell runs at the pace of the fastest; a
+// participant that falls behind by more than half the kept output is detached
+// with CANCELLED and attaches again. While nobody is attached the session keeps
 // reading into the kept output.
 //
-// Needs TerminalPolicy; read-only viewers open neither channel.
+// Needs TerminalPolicy; read-only participants open neither channel.
 
-// A message from the viewer on the terminal channel.
+// A message from the participant on the terminal channel.
 message ClientMessage {
   // The message.
   oneof message {
@@ -51,8 +51,8 @@ message ClientMessage {
     TerminalAttach attach = 2;
     // Input for the terminal.
     TerminalInput input = 3;
-    // The viewer's terminal changed size. The latest size of any viewer
-    // applies, and the shell gets SIGWINCH.
+    // The participant's terminal changed size. The latest size of any
+    // participant applies, and the shell gets SIGWINCH.
     TerminalSize resize = 4;
   }
 }
@@ -65,7 +65,7 @@ message ServerMessage {
     TerminalAttached attached = 1;
     // Output of the terminal, continuing the stream.
     TerminalOutput output = 2;
-    // Another viewer changed the size.
+    // Another participant changed the size.
     TerminalSize resize = 3;
     // The shell ended. The last message.
     TerminalExit exit = 4;
@@ -93,7 +93,7 @@ message TerminalOpen {
 message TerminalAttach {
   // The terminal.
   uint64 terminal_id = 1;
-  // The output offset the viewer has applied up to. 0: nothing yet.
+  // The output offset the participant has applied up to. 0: nothing yet.
   uint64 offset = 2;
 }
 
@@ -105,7 +105,7 @@ message TerminalAttached {
   // The offset of the first output that follows: the requested one when it
   // is still kept, otherwise the current end, and nothing is replayed.
   uint64 offset = 2;
-  // The requested offset is no longer kept. The viewer resets its terminal
+  // The requested offset is no longer kept. The participant resets its terminal
   // (ECMA-48 RIS) before applying what follows, and the session makes the
   // program redraw by changing the size and back (SIGWINCH).
   bool reset = 3;
@@ -155,7 +155,7 @@ message TerminalExit {
 service TerminalService {
   // Lists the terminals of the session, oldest first: the running ones, and
   // ended ones whose last output the session still keeps for a while so that
-  // a viewer can read it.
+  // a participant can read it.
   rpc ListTerminals(ListTerminalsRequest) returns (ListTerminalsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
@@ -174,8 +174,8 @@ message Terminal {
   TerminalSize size = 2;
   // When it started.
   google.protobuf.Timestamp created_at = 3;
-  // The viewers showing it now, across all connections.
-  uint32 viewer_count = 4;
+  // The participants showing it now, across all connections.
+  uint32 participant_count = 4;
   // The offset its output has reached.
   uint64 offset = 5;
   // How it ended. Unset while it runs.
@@ -200,6 +200,6 @@ message CloseTerminalRequest {
 // The response of CloseTerminal.
 message CloseTerminalResponse {}
 
-// Allows a viewer to use terminals. Carried in the viewer's signed
+// Allows a participant to use terminals. Carried in the participant's signed
 // authorization.
 message TerminalPolicy {}

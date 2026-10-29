@@ -7,13 +7,13 @@ import "google/rpc/status.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/filetransfer/v1;filetransferv1";
 
-// Files moving between the viewer and the session, and the session user's
+// Files moving between the participant and the session, and the session user's
 // files. File operations run as the session's user; nothing here runs as
 // root.
 //
 // Channel types:
 //   - "leaflow.fleet.filetransfer.v1", lane "interactive": opened by
-//     the viewer, one per connection. Both ends send FileTransferMessage.
+//     the participant, one per connection. Both ends send FileTransferMessage.
 //   - "leaflow.fleet.filetransfer.v1.content", lane "bulk": opened by
 //     the receiver of a file, one per file and at most four at a time per
 //     connection. The opener sends one FileContentRequest; the source answers
@@ -22,7 +22,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/filetransfer/v1;fil
 //     stored the file, or with CANCELLED to stop. Flow control is the
 //     channel's credit, which the receiver returns as it writes.
 //   - "leaflow.fleet.filetransfer.v1.FileSystemService", lane
-//     "interactive": opened by the viewer to browse and change files.
+//     "interactive": opened by the participant to browse and change files.
 //
 // Transfers. The sender of files offers them with FileTransferOffer. The
 // receiver chooses with FileTransferRequest and the sender confirms with
@@ -38,7 +38,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/filetransfer/v1;fil
 // files are discarded and nothing resumes; the originals and files already
 // stored remain. File sizes and counts are not limited beyond
 // FileTransferPolicy; a failed file ends with google.rpc.Status and never
-// ends the session. Read-only viewers open none of these channels.
+// ends the session. Read-only participants open none of these channels.
 
 // A message on the filetransfer channel, from either end.
 message FileTransferMessage {
@@ -66,7 +66,7 @@ message FileTransferOffer {
   repeated FileEntry entries = 2;
   // The sum of the regular files' sizes.
   uint64 total_size_bytes = 3;
-  // From the viewer only: the directory of the session user to store the
+  // From the participant only: the directory of the session user to store the
   // files in, which needs FileTransferPolicy.file_system_allowed. Empty: the
   // user's private transfer directory. Existing files are never overwritten.
   string destination_directory = 4;
@@ -108,7 +108,7 @@ message FileTransferRequest {
   // The regular files, and the directories whose whole contents, it wants.
   repeated string file_ids = 3;
   // The files go to the receiver's clipboard once stored. Needs the matching
-  // direction of the viewer's ClipboardPolicy as well.
+  // direction of the participant's ClipboardPolicy as well.
   bool clipboard = 4;
 }
 
@@ -189,7 +189,7 @@ service FileSystemService {
   rpc RenameFile(RenameFileRequest) returns (RenameFileResponse);
   // Removes a file or an empty directory.
   rpc RemoveFile(RemoveFileRequest) returns (RemoveFileResponse);
-  // Offers files of the user to the viewer, which fetches them as for any
+  // Offers files of the user to the participant, which fetches them as for any
   // offer.
   rpc CreateFileOffer(CreateFileOfferRequest) returns (CreateFileOfferResponse);
 }
@@ -269,14 +269,14 @@ message CreateFileOfferResponse {
   FileTransferOffer offer = 1;
 }
 
-// What a viewer may do with files. Carried in the viewer's signed
-// authorization; without it the viewer may do none of this.
+// What a participant may do with files. Carried in the participant's signed
+// authorization; without it the participant may do none of this.
 message FileTransferPolicy {
-  // The viewer may send files to the session.
+  // The participant may send files to the session.
   bool upload_allowed = 1;
-  // The viewer may receive files from the session.
+  // The participant may receive files from the session.
   bool download_allowed = 2;
-  // The viewer may use FileSystemService and choose where uploads go.
+  // The participant may use FileSystemService and choose where uploads go.
   bool file_system_allowed = 3;
   // The most entries, directories included, of one offer. 0: 1024.
   uint32 max_entries = 4;

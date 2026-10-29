@@ -11,35 +11,35 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/inpu
 // Keyboard, pointer and text input.
 //
 // Channel types:
-//   - "leaflow.fleet.virtualdesktop.input.v1", lane "input": opened by the viewer,
-//     one per connection. The viewer sends ClientMessage, input as a
-//     keyboard, pointer or touch screen gives it; PointerMotion travels as a
-//     Datagram of the channel. The session
-//     sends ServerMessage: the state of the focused editor and dropped input.
-//   - "leaflow.fleet.virtualdesktop.input.v1.InputService", lane "input": opened by
-//     a viewer that operates the session through calls, to inject input and
-//     learn where it went.
+//   - "leaflow.fleet.virtualdesktop.input.v1", lane "input": opened by the
+//     participant, one per connection. The participant sends ClientMessage,
+//     input as a keyboard, pointer or touch screen gives it; PointerMotion
+//     travels as a Datagram of the channel. The session sends ServerMessage:
+//     the state of the focused editor and dropped input.
+//   - "leaflow.fleet.virtualdesktop.input.v1.InputService", lane "input":
+//     opened by a participant that operates the session through calls, to
+//     inject input and learn where it went.
 //
-// The session ignores input from read-only viewers. Input on the input
+// The session ignores input from read-only participants. Input on the input
 // channel always takes the input lease (leaflow.fleet.virtualdesktop.lease.v1),
 // from whoever held it.
 //
-// Order. Every message of the viewer on the input channel carries input_seq
-// from one counter of the connection, starting at 1. Everything but
+// Order. Every message of the participant on the input channel carries
+// input_seq from one counter of the connection, starting at 1. Everything but
 // PointerMotion travels in order on the channel; PointerMotion travels as a
-// datagram and may overtake or trail it. The session therefore drops a
-// motion whose input_seq is below the highest it has applied, and a motion
-// whose after_input_seq names input it has not applied yet. After sending
-// other input the viewer sends one motion with the current position in the
-// next animation frame, so that hover effects catch up.
+// datagram and may overtake or trail it. The session therefore drops a motion
+// whose input_seq is below the highest it has applied, and a motion whose
+// after_input_seq names input it has not applied yet. After sending other input
+// the participant sends one motion with the current position in the next
+// animation frame, so that hover effects catch up.
 //
 // Driver. A press of a key or button, a wheel turn or inserted text from a
-// viewer that has a viewport makes it the driver (see the window channel).
+// participant that has a viewport makes it the driver (see the window channel).
 // Releases belong to the press they end and never change the driver; neither
 // does pointer motion.
 //
 // Coordinates. A pointer position is a window and a point relative to it, so
-// that the viewer may lay windows out differently from the session. In a
+// that the participant may lay windows out differently from the session. In a
 // desktop session the window is the one carrying the whole canvas. Points
 // may lie outside the window during a pointer grab.
 //
@@ -51,7 +51,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/inpu
 // dependent input is dropped with InputError and older content is never
 // pasted; releases of keys and buttons pressed before are still applied.
 //
-// Text input. The viewer's own input method composes text, as its person
+// Text input. The participant's own input method composes text, as its person
 // knows it, and the session hands the result to the native input context of
 // the focused editor in the session (IBus or another input method
 // framework). The session reports the focused editor with TextInputState.
@@ -66,7 +66,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/inpu
 // native input method interpret it; missing caret geometry or an uncertain
 // text delivery never suppresses it.
 
-// A message from the viewer on the input channel.
+// A message from the participant on the input channel.
 message ClientMessage {
   // The message.
   oneof message {
@@ -80,7 +80,7 @@ message ClientMessage {
     PointerWheel pointer_wheel = 4;
     // Text to insert.
     InsertText insert_text = 5;
-    // A step of a composition of the viewer's input method.
+    // A step of a composition of the participant's input method.
     Composition composition = 6;
   }
 }
@@ -99,7 +99,7 @@ message ServerMessage {
 }
 
 // A physical key was pressed or released (RFC 6143 KeyEvent). The session
-// turns off X auto-repeat; the viewer sends its repeated key presses as
+// turns off X auto-repeat; the participant sends its repeated key presses as
 // further presses, and releases every pressed key when it loses focus.
 message KeyEvent {
   // The position in the input order.
@@ -118,13 +118,13 @@ message KeyEvent {
   // compensating Shift for the letters Caps Lock inverts, and applies a lock
   // key press as state instead of typing it. Unset: every lock is off.
   LockKeyState lock_key_state = 5;
-  // The window the viewer shows focused. When another window has the X focus
-  // the session activates this one first, because a WindowActivate sent on
-  // the window channel may arrive later. 0: the window with the X focus. For
+  // The window the participant shows focused. When another window has the X
+  // focus the session activates this one first, because a WindowActivate sent
+  // on the window channel may arrive later. 0: the window with the X focus. For
   // a window that is gone, presses are dropped and releases still typed.
   uint64 window_id = 6;
-  // The sequence of the latest clipboard content this viewer offered, until
-  // the session confirmed it. See "Clipboard before paste".
+  // The sequence of the latest clipboard content this participant offered,
+  // until the session confirmed it. See "Clipboard before paste".
   optional uint64 clipboard_sequence = 7;
 }
 
@@ -150,8 +150,8 @@ message PointerMotion {
   sint32 x = 3;
   // See x.
   sint32 y = 4;
-  // input_seq of the last other input the viewer sent before this motion; 0
-  // when none.
+  // input_seq of the last other input the participant sent before this motion;
+  // 0 when none.
   uint64 after_input_seq = 5;
 }
 
@@ -172,12 +172,12 @@ message PointerButton {
   uint32 button = 5;
   // A press or a release.
   bool pressed = 6;
-  // The sequence of the latest clipboard content this viewer offered, until
-  // the session confirmed it. See "Clipboard before paste".
+  // The sequence of the latest clipboard content this participant offered,
+  // until the session confirmed it. See "Clipboard before paste".
   optional uint64 clipboard_sequence = 7;
 }
 
-// The wheel or touchpad scrolled. The viewer adds up the deltas of an
+// The wheel or touchpad scrolled. The participant adds up the deltas of an
 // animation frame into one message; the session turns every 120 units into
 // one X button 4 to 7 click and keeps the remainder.
 message PointerWheel {
@@ -203,15 +203,15 @@ message TextInputState {
   // The window of the focused editor. 0 when no window has focus.
   uint64 window_id = 1;
   // An editable control or a terminal has focus and accepts text, whether
-  // or not its caret is known. The viewer keeps a local text field focused
+  // or not its caret is known. The participant keeps a local text field focused
   // while it is set, so that its own input method can start.
   bool enabled = 2;
   // The caret, relative to the window, for placing the input method's
   // candidate window. Unset when the application does not report it
   // reliably; text input still works.
   leaflow.fleet.virtualdesktop.display.v1.Rectangle cursor_rectangle = 3;
-  // Window.resize_counter the rectangles belong to. The viewer does not apply
-  // rectangles of an earlier window size.
+  // Window.resize_counter the rectangles belong to. The participant does not
+  // apply rectangles of an earlier window size.
   uint64 resize_counter = 4;
   // Where cursor_rectangle came from. UNSPECIFIED when it is unset.
   CursorSource cursor_source = 5;
@@ -223,12 +223,12 @@ message TextInputState {
   // caret moves. Compositions and composed text are bound to it.
   uint64 focus_serial = 7;
   // The bounds of the focused control, relative to the window (AT-SPI2
-  // Component.GetExtents; EditContext controlBounds). The viewer may anchor
-  // its candidate window there when cursor_rectangle is unset; it never
+  // Component.GetExtents; EditContext controlBounds). The participant may
+  // anchor its candidate window there when cursor_rectangle is unset; it never
   // treats it as the caret.
   leaflow.fleet.virtualdesktop.display.v1.Rectangle control_rectangle = 8;
   // The editor's native input context takes Composition messages: preedit
-  // text and the real keys consumed while composing. Otherwise the viewer
+  // text and the real keys consumed while composing. Otherwise the participant
   // sends only InsertText.
   bool composition_supported = 9;
 }
@@ -276,7 +276,7 @@ enum InputType {
   INPUT_TYPE_INSERT_FROM_COMPOSITION = 2;
 }
 
-// A step of a composition of the viewer's input method (W3C UI Events
+// A step of a composition of the participant's input method (W3C UI Events
 // CompositionEvent; EditContext). Sent only while
 // TextInputState.composition_supported is set.
 message Composition {
@@ -290,7 +290,7 @@ message Composition {
   uint64 focus_serial = 4;
   // Window.resize_counter when the composition began.
   uint64 resize_counter = 5;
-  // Chosen by the viewer at BEGIN, unique on the connection; the later
+  // Chosen by the participant at BEGIN, unique on the connection; the later
   // phases repeat it.
   uint64 composition_id = 6;
   // The step.
@@ -367,10 +367,10 @@ message TextInputError {
   string input_context_id = 3;
   // Its focus_serial, as when it was sent.
   uint64 focus_serial = 4;
-  // The composition cancelled with it. 0: none. The viewer ends only this
+  // The composition cancelled with it. 0: none. The participant ends only this
   // composition; new ones may begin in the same editor.
   uint64 composition_id = 5;
-  // Text input of this viewer is paused: the session dropped text whose
+  // Text input of this participant is paused: the session dropped text whose
   // delivery the application did not confirm, without replaying it. Pointer,
   // key and window input go on. Text is accepted again once a TextInputState
   // names an editor with a larger focus_serial.
@@ -379,21 +379,21 @@ message TextInputError {
   google.rpc.Status error = 7;
 }
 
-// Input through calls. Gestures run in the session as a whole, with the
-// timing of a person, so that double clicks, drags and key chords work
-// whatever the network delay (after the Chrome DevTools Protocol Input
-// domain). Keys are named as X keysym names (XStringToKeysym), such as
-// "Return", "Control_L", "F13" or "U20AC", or given as a single character,
-// such as "/"; an unknown name fails with INVALID_ARGUMENT and reason
-// UNKNOWN_KEYSYM (metadata "keysym"). Every call follows the rules for
-// operation calls (leaflow.fleet.virtualdesktop.lease.v1) and returns the session
-// revision at which it took effect.
+// Input through calls. Gestures run in the session as a whole, with the timing
+// of a person, so that double clicks, drags and key chords work whatever the
+// network delay (after the Chrome DevTools Protocol Input domain). Keys are
+// named as X keysym names (XStringToKeysym), such as "Return", "Control_L",
+// "F13" or "U20AC", or given as a single character, such as "/"; an unknown
+// name fails with INVALID_ARGUMENT and reason UNKNOWN_KEYSYM (metadata
+// "keysym"). Every call follows the rules for operation calls
+// (leaflow.fleet.virtualdesktop.lease.v1) and returns the session revision at
+// which it took effect.
 //
-// What a gesture presses is released when its call ends, however it ends.
-// Keys and buttons pressed with DispatchKey and DispatchPointerButton stay
-// down until released, until the viewer leaves or until another viewer takes
-// the input lease. A press of a pointer button brings the window it goes to
-// to the front, as a person's click does.
+// What a gesture presses is released when its call ends, however it ends. Keys
+// and buttons pressed with DispatchKey and DispatchPointerButton stay down
+// until released, until the participant leaves or until another participant
+// takes the input lease. A press of a pointer button brings the window it goes
+// to to the front, as a person's click does.
 //
 // Besides the refusals of those rules, calls fail with:
 //   - NOT_FOUND and reason WINDOW_NOT_FOUND for a window that is gone
@@ -421,7 +421,7 @@ service InputService {
   // Presses keys in order and releases them in reverse, such as
   // ["Control_L", "s"].
   rpc PressKeys(PressKeysRequest) returns (PressKeysResponse);
-  // Types text into the focused editor the way a viewer's InsertText goes:
+  // Types text into the focused editor the way a participant's InsertText goes:
   // through its input method context when it has one, else its accessible
   // text interface, and into a terminal as keys.
   rpc TypeText(TypeTextRequest) returns (TypeTextResponse);

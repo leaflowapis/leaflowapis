@@ -8,11 +8,11 @@ import "leaflow/fleet/virtualdesktop/display/v1/display.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/capture/v1;capturev1";
 
-// Still images of the session for viewers that look at it through calls
+// Still images of the session for participants that look at it through calls
 // rather than through the video stream.
 //
 // Channel type "leaflow.fleet.virtualdesktop.capture.v1.CaptureService", lane
-// "bulk": opened by the viewer. Read-only viewers may capture.
+// "bulk": opened by the participant. Read-only participants may capture.
 //
 // Coordinates. A capture of a window is in the coordinates of that window's
 // client area; its popups and dialogs may lie outside it, at negative

@@ -10,19 +10,19 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/exec/v1;execv1";
 // Programs run without a terminal as the session's user, never as root (RFC
 // 4254 §6.5 "exec", with an argument vector instead of a command line).
 //
-// Channel type "leaflow.fleet.exec.v1", lane "bulk": opened by the
-// viewer, one per run and at most four at a time per connection. The viewer
-// sends ClientMessage, starting with ExecStart; the session sends
-// ServerMessage: the output as the program writes it, then exactly one
-// ExecExit, and closes the channel. Closing the channel with CANCELLED, or
-// the end of the connection, kills the program's process group and nothing
-// else. Output beyond the channel's credit waits, so a viewer that reads
-// slowly slows the program down.
+// Channel type "leaflow.fleet.exec.v1", lane "bulk": opened by the participant,
+// one per run and at most four at a time per connection. The participant sends
+// ClientMessage, starting with ExecStart; the session sends ServerMessage: the
+// output as the program writes it, then exactly one ExecExit, and closes the
+// channel. Closing the channel with CANCELLED, or the end of the connection,
+// kills the program's process group and nothing else. Output beyond the
+// channel's credit waits, so a participant that reads slowly slows the program
+// down.
 //
 // Neither the arguments nor the output enter logs. Needs ExecPolicy;
-// read-only viewers open none.
+// read-only participants open none.
 
-// A message from the viewer.
+// A message from the participant.
 message ClientMessage {
   // The message.
   oneof message {
@@ -47,7 +47,7 @@ message ServerMessage {
   }
 }
 
-// Starts a program. No shell interprets the arguments; a viewer that wants
+// Starts a program. No shell interprets the arguments; a participant that wants
 // one runs it, such as ["/bin/sh", "-lc", "ls | wc -l"].
 message ExecStart {
   // The program and its arguments. argv[0] is looked up in PATH unless it
@@ -113,6 +113,6 @@ message ExecExit {
   google.rpc.Status error = 4;
 }
 
-// Allows a viewer to run commands. Carried in the viewer's signed
+// Allows a participant to run commands. Carried in the participant's signed
 // authorization.
 message ExecPolicy {}

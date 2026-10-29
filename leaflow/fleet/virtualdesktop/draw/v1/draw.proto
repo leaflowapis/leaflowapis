@@ -9,47 +9,47 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/draw
 // The pixels of windows, sent as frames.
 //
 // Channel types:
-//   - "leaflow.fleet.virtualdesktop.draw.v1", lane "metadata": opened by the viewer,
-//     one per connection, before any frame can flow. The viewer sends
-//     ClientMessage, the session ServerMessage. It negotiates encodings and
-//     carries acknowledgements, withdrawals and repaint requests.
+//   - "leaflow.fleet.virtualdesktop.draw.v1", lane "metadata": opened by the
+//     participant, one per connection, before any frame can flow. The
+//     participant sends ClientMessage, the session ServerMessage. It negotiates
+//     encodings and carries acknowledgements, withdrawals and repaint requests.
 //     FrameAcknowledge may also travel as a Datagram of this channel.
 //   - "leaflow.fleet.virtualdesktop.draw.v1.frame", lane "media": opened by the
 //     session, one per frame. The session sends FrameMessage: one FrameStart,
 //     the frame's WindowDraw messages and one FrameEnd, then closes the
-//     channel; the viewer sends nothing.
+//     channel; the participant sends nothing.
 //
 // Frames. frame_id starts at 1 and grows by exactly 1 with every frame of a
-// connection, so the viewer knows the fate of every frame below the newest it
-// has seen. A frame is presented as a whole or discarded as a whole.
+// connection, so the participant knows the fate of every frame below the newest
+// it has seen. A frame is presented as a whole or discarded as a whole.
 //
-// Withdrawal. The session may withdraw a frame in flight by closing its
-// channel with CANCELLED. It then also withdraws every frame in flight that
-// depends on it, sends their damage again in later frames, and lists all of
-// them in FrameCancel, since a closed channel may reach the viewer before its
-// FrameStart or not at all. The next frame of every window drawn in a
-// withdrawn frame uses no COPY_RECT and, for video, starts with a key frame.
+// Withdrawal. The session may withdraw a frame in flight by closing its channel
+// with CANCELLED. It then also withdraws every frame in flight that depends on
+// it, sends their damage again in later frames, and lists all of them in
+// FrameCancel, since a closed channel may reach the participant before its
+// FrameStart or not at all. The next frame of every window drawn in a withdrawn
+// frame uses no COPY_RECT and, for video, starts with a key frame.
 //
-// Discarding. A frame is completed once the viewer presented it, discarded it
-// or learned from FrameCancel that it was withdrawn. The viewer discards a
-// frame that draws window w and sends WindowRefresh for w when the frame
-// needs an exact dependency that is not met, a draw cannot be decoded, a size
-// change of w with a larger resize_counter is already shown, or it waited
+// Discarding. A frame is completed once the participant presented it, discarded
+// it or learned from FrameCancel that it was withdrawn. The participant
+// discards a frame that draws window w and sends WindowRefresh for w when the
+// frame needs an exact dependency that is not met, a draw cannot be decoded, a
+// size change of w with a larger resize_counter is already shown, or it waited
 // more than one second for a dependency or for w to appear on the window
-// channel. A window that is already gone never causes a discard: its draws
-// are skipped and the frame is presented for its other windows.
+// channel. A window that is already gone never causes a discard: its draws are
+// skipped and the frame is presented for its other windows.
 
-// A message from the viewer on the draw channel.
+// A message from the participant on the draw channel.
 message ClientMessage {
   // The message.
   oneof message {
-    // The encodings the viewer decodes. The first message of the channel.
+    // The encodings the participant decodes. The first message of the channel.
     ClientHello client_hello = 1;
-    // Frames the viewer finished with.
+    // Frames the participant finished with.
     FrameAcknowledge frame_acknowledge = 2;
     // Asks for a full repaint of a window.
     WindowRefresh window_refresh = 3;
-    // Stops or resumes frames to this viewer.
+    // Stops or resumes frames to this participant.
     SuppressOutput suppress_output = 4;
   }
 }
@@ -78,17 +78,17 @@ message FrameMessage {
   }
 }
 
-// What the viewer can decode (RFC 6143 §7.5.2 SetEncodings).
+// What the participant can decode (RFC 6143 §7.5.2 SetEncodings).
 message ClientHello {
-  // Encodings the viewer decodes, most preferred first. COPY_RECT and
+  // Encodings the participant decodes, most preferred first. COPY_RECT and
   // SOLID_FILL are always supported and need not be listed.
   repeated Encoding encodings = 1;
-  // WebCodecs codec strings the viewer decodes, most preferred first, such as
-  // "avc1.42E01F". Empty: no video.
+  // WebCodecs codec strings the participant decodes, most preferred first, such
+  // as "avc1.42E01F". Empty: no video.
   repeated string codecs = 2;
 }
 
-// What the session will send this viewer.
+// What the session will send this participant.
 message ServerHello {
   // The encodings it may use: those of ClientHello.encodings it supports.
   repeated Encoding encodings = 1;
@@ -107,7 +107,7 @@ enum Encoding {
   // Uncompressed pixels, rows top to bottom without padding, 4 bytes per
   // pixel in the order R, G, B, A with straight alpha (RFC 6143 Raw).
   ENCODING_RAW = 1;
-  // A copy of another area of the same window as the viewer shows it now,
+  // A copy of another area of the same window as the participant shows it now,
   // from source_x and source_y; the areas may overlap. data is empty. The
   // frame needs an exact dependency (RFC 6143 CopyRect).
   ENCODING_COPY_RECT = 2;
@@ -126,10 +126,10 @@ enum Encoding {
   ENCODING_H264 = 7;
 }
 
-// Starts a frame: draws the viewer presents together. The session sends one
-// frame per window with updates at each tick of its frame clock, and puts
-// several windows in one frame only when they must change together, such as
-// a menu opening while its window repaints.
+// Starts a frame: draws the participant presents together. The session sends
+// one frame per window with updates at each tick of its frame clock, and puts
+// several windows in one frame only when they must change together, such as a
+// menu opening while its window repaints.
 message FrameStart {
   // The frame.
   uint64 frame_id = 1;
@@ -139,10 +139,10 @@ message FrameStart {
 
 // What a frame needs of one window's earlier content.
 message FrameReference {
-  // The window. When the viewer does not know it yet it holds the frame for
-  // up to one second.
+  // The window. When the participant does not know it yet it holds the frame
+  // for up to one second.
   uint64 window_id = 1;
-  // The frame of this window the draws were encoded on top of. The viewer
+  // The frame of this window the draws were encoded on top of. The participant
   // presents the frame only when the window's last presented frame is not
   // older; with COPY_RECT or a video delta it must be exactly this frame.
   // 0: the frame repaints the window and depends on nothing. The first frame
@@ -150,8 +150,8 @@ message FrameReference {
   // WindowRefresh use 0; a repaint too large for one frame continues in
   // frames that depend on it.
   uint64 reference_frame_id = 2;
-  // Window.resize_counter the draws were encoded for. The viewer waits up to
-  // one second for the window with this counter and discards the frame once
+  // Window.resize_counter the draws were encoded for. The participant waits up
+  // to one second for the window with this counter and discards the frame once
   // a larger counter is shown. The new window size and the frame appear
   // together.
   uint64 resize_counter = 3;
@@ -183,8 +183,8 @@ message WindowDraw {
   // COPY_RECT only: the top edge of the source area.
   uint32 source_y = 11;
   // The size of the encoded image when the session scaled it down; the
-  // viewer scales it to width × height. Unset: width × height. Not for RAW,
-  // COPY_RECT or SOLID_FILL.
+  // participant scales it to width × height. Unset: width × height. Not for
+  // RAW, COPY_RECT or SOLID_FILL.
   leaflow.fleet.virtualdesktop.display.v1.Size scaled_size = 12;
   // H264 only: a key frame, decodable without earlier video frames (WebCodecs
   // EncodedVideoChunkType "key").
@@ -192,11 +192,11 @@ message WindowDraw {
   // H264 only: the presentation time in microseconds, increasing within the
   // window's video (WebCodecs EncodedVideoChunk timestamp).
   int64 timestamp_us = 14;
-  // H264 only, on every key frame: the WebCodecs codec string. The viewer
+  // H264 only, on every key frame: the WebCodecs codec string. The participant
   // reconfigures the window's decoder when it changes.
   string codec = 15;
   // H264 only: the next WindowDraw of this frame continues the same access
-  // unit. The viewer joins the data of such draws before decoding.
+  // unit. The participant joins the data of such draws before decoding.
   bool more_fragments = 16;
 }
 
@@ -209,22 +209,22 @@ message FrameEnd {
   uint32 draw_count = 2;
 }
 
-// Frames the session withdrew. The viewer treats each as completed: it drops
-// what it received of it and ignores the rest. One it already presented
+// Frames the session withdrew. The participant treats each as completed: it
+// drops what it received of it and ignores the rest. One it already presented
 // stays presented.
 message FrameCancel {
   // Ascending, at most 256.
   repeated uint64 frame_ids = 1;
 }
 
-// The frames the viewer has completed, sent after presenting them rather than
-// on receipt, so that the session sees decoding backlog as well as network
+// The frames the participant has completed, sent after presenting them rather
+// than on receipt, so that the session sees decoding backlog as well as network
 // delay and can pace itself (after MS-RDPEGFX RDPGFX_FRAME_ACKNOWLEDGE_PDU).
-// Frames of different windows complete out of order and a datagram may be
-// lost, so every acknowledgement states all completed frames: a watermark and
-// the completed frames above it. The viewer sends one per animation frame in
-// which it completed a frame, as a datagram when it can, and at least every
-// 250 milliseconds on the channel itself.
+// Frames of different windows complete out of order and a datagram may be lost,
+// so every acknowledgement states all completed frames: a watermark and the
+// completed frames above it. The participant sends one per animation frame in
+// which it completed a frame, as a datagram when it can, and at least every 250
+// milliseconds on the channel itself.
 message FrameAcknowledge {
   // Every frame up to and including this one is completed.
   uint64 completed_through_frame_id = 1;
@@ -247,9 +247,9 @@ message WindowRefresh {
   uint64 window_id = 1;
 }
 
-// Stops or resumes the frames sent to this viewer, such as while its window
-// is hidden (MS-RDPBCGR §2.2.11.3 Suppress Output PDU). While stopped the
-// session keeps the damage and sends one update covering it when frames
+// Stops or resumes the frames sent to this participant, such as while its
+// window is hidden (MS-RDPBCGR §2.2.11.3 Suppress Output PDU). While stopped
+// the session keeps the damage and sends one update covering it when frames
 // resume. Nothing but frames is affected. Frames are allowed when the
 // connection starts.
 message SuppressOutput {
