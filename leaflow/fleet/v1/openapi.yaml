@@ -138,6 +138,21 @@ info:
     `id`. A client that subscribes to them needs no polling; one that does not can list the
     pending requests.
 
+    ## Connections that drop
+
+    A machine's Agent and a session's process each keep a connection to the service, and on a poor
+    network it may drop and come back within seconds. Requests do not fail for that:
+
+    - A request that needs the machine or the session's process waits while it connects again,
+      for as long as the request would wait for its answer, and fails with `MACHINE_OFFLINE` or
+      `SESSION_UNAVAILABLE` only when it does not come back in that time.
+    - What the machine or the session's process received before its connection dropped, such as a
+      command or a session being opened, goes on, and its result is returned once it has
+      connected again within that time.
+
+    A machine stays `online` for up to a minute after its connection was lost, while its Agent
+    connects again; a machine whose Agent stops is offline at once.
+
     ## Operations that do not exist
 
     Some resources lack an operation on purpose:
@@ -357,7 +372,7 @@ paths:
         Requires `fleet:machines.login` on the machine.
 
         Fails with:
-        - `MACHINE_OFFLINE` when the machine is not connected;
+        - `MACHINE_OFFLINE` when the machine is not connected and does not connect again in time;
         - `FEATURE_UNAVAILABLE` when the machine does not offer `leaflow.fleet.command.v1`;
         - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
           the machine refuses the account, as for opening a session;
@@ -1145,7 +1160,7 @@ paths:
         person; several participants can also share one session.
 
         Fails with:
-        - `MACHINE_OFFLINE` when the machine is not connected;
+        - `MACHINE_OFFLINE` when the machine is not connected and does not connect again in time;
         - `FEATURE_UNAVAILABLE` when the machine does not offer sessions, or with `desktop`,
           desktops;
         - `USER_HAS_DESKTOP_SESSION` with `desktop` when the account already has a session with a
@@ -1320,8 +1335,8 @@ paths:
         - `SESSION_CLOSED` when the session has ended;
         - `SESSION_ACCESS_DENIED` when the caller may not join the session;
         - `OFFER_INVALID` when the offer is not an SDP offer that names a SHA-256 DTLS fingerprint;
-        - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
-          time, such as while it restarts; try again after the error's `retry_delay`;
+        - `SESSION_UNAVAILABLE` when the session's process is not connected and does not connect
+          again in time, or did not answer in time; try again after the error's `retry_delay`;
         - `PARTICIPANT_LIMIT_REACHED` when the session has as many participants as it admits;
         - `PARTICIPANT_REFUSED` when the session refused the participant;
         - `PARTICIPANT_KEY_IN_USE` when the public key belongs to a participant of the session that
@@ -1431,8 +1446,8 @@ paths:
         Fails with:
         - `PARTICIPANT_NOT_FOUND` when the participant has ended;
         - `CHECKPOINT_INVALID` when the checkpoint is not a serialized `Checkpoint`;
-        - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
-          time; try again after the error's `retry_delay`.
+        - `SESSION_UNAVAILABLE` when the session's process is not connected and does not connect
+          again in time, or did not answer in time; try again after the error's `retry_delay`.
       operationId: prepare-participant-migration
       tags:
         - Participant
@@ -1471,8 +1486,8 @@ paths:
         Fails with:
         - `PARTICIPANT_NOT_FOUND` when the participant has ended;
         - `CHECKPOINT_INVALID` when the checkpoint is not a serialized `Checkpoint`;
-        - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
-          time; try again after the error's `retry_delay`.
+        - `SESSION_UNAVAILABLE` when the session's process is not connected and does not connect
+          again in time, or did not answer in time; try again after the error's `retry_delay`.
       operationId: commit-participant-migration
       tags:
         - Participant
@@ -1514,8 +1529,8 @@ paths:
         - `OFFER_INVALID` when the offer is not an SDP offer that names a SHA-256 DTLS fingerprint;
         - `RATE_LIMIT_EXCEEDED` when the participant started too many PeerConnections in the
           last minute; try again after the error's `retry_delay`;
-        - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
-          time; try again after the error's `retry_delay`;
+        - `SESSION_UNAVAILABLE` when the session's process is not connected and does not connect
+          again in time, or did not answer in time; try again after the error's `retry_delay`;
         - `PEER_CONNECTION_ABORTED` when the session gave up the PeerConnection; start another.
       operationId: create-peer-connection
       tags:
@@ -1580,8 +1595,8 @@ paths:
 
         Fails with:
         - `PARTICIPANT_NOT_FOUND` when the participant has ended;
-        - `SESSION_UNAVAILABLE` when the session's process is not connected; try again after the
-          error's `retry_delay`.
+        - `SESSION_UNAVAILABLE` when the session's process is not connected and does not connect
+          again in time; try again after the error's `retry_delay`.
       operationId: create-peer-connection-candidates
       tags:
         - Participant
@@ -1777,7 +1792,9 @@ components:
         public_key:
           $ref: "#/components/schemas/PublicKey"
         online:
-          description: The machine's Agent is connected
+          description: |-
+            The machine's Agent is connected, or lost its connection less than a minute ago and
+            may connect again
           type: boolean
         operating_system:
           description: Null until the machine has reported once
@@ -2370,8 +2387,9 @@ components:
         process_connected:
           description: |-
             The session's process is connected to the service, so participants can join and start
-            PeerConnections. False while it restarts; such requests are then answered with
-            `SESSION_UNAVAILABLE` and succeed again shortly.
+            PeerConnections. False while it connects again, such as after it restarted; such
+            requests then wait for it and fail with `SESSION_UNAVAILABLE` only if it does not come
+            back in time.
           type: boolean
         last_input_at:
           description: The last input of a person in the session
