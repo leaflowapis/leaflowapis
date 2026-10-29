@@ -52,9 +52,12 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 service SessionHostService {
   // Opens a session for a platform user, as the user's directory account,
   // and returns once it is ready: its session process started, with what
-  // its options add, such as the X server of a desktop. An account has at
-  // most one session. Calling again with the session_id of an open session
-  // of the same user returns that session.
+  // its options add, such as the X server of a desktop. On a machine, an
+  // account has at most one session with a desktop, since a desktop's
+  // per-user services exist once per account, and at most 8 sessions in all:
+  // sessions without a desktop run side by side, such as one for a program
+  // and one for a person. Calling again with the session_id of an open
+  // session of the same user returns that session.
   //
   // Fails with:
   //   - INVALID_ARGUMENT and reason INVALID_REQUEST for an option of a type
@@ -72,8 +75,11 @@ service SessionHostService {
   //   - PERMISSION_DENIED and reason PAM_PERMISSION_DENIED when PAM refuses
   //     the account or the session (PAM_PERM_DENIED), with metadata
   //     "pamMessage", the text PAM gave;
-  //   - ALREADY_EXISTS and reason USER_HAS_SESSION when the user has a
-  //     session with another id, with metadata "sessionId";
+  //   - ALREADY_EXISTS and reason USER_HAS_DESKTOP_SESSION for a session
+  //     with a desktop when the user has one with another id, with metadata
+  //     "sessionId";
+  //   - FAILED_PRECONDITION and reason SESSION_LIMIT_REACHED when the user
+  //     has 8 open sessions on the machine;
   //   - ALREADY_EXISTS and reason SESSION_ID_CONFLICT when another user's
   //     session has the id;
   //   - INTERNAL and reason SESSION_START_FAILED when the session process or

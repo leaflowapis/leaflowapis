@@ -1111,12 +1111,18 @@ paths:
         files, ports, sound, devices, printers and privilege approvals. The account is created if
         the caller has none yet. Requires `fleet:machines.login` on the machine.
 
+        On a machine an account has at most one session with a desktop and at most 8 sessions in
+        all. Sessions without a desktop run side by side, such as one for a program and one for a
+        person; several viewers can also share one session.
+
         Fails with:
         - `MACHINE_OFFLINE` when the machine is not connected;
         - `FEATURE_UNAVAILABLE` when the machine does not offer sessions, or with `desktop`,
           desktops;
-        - `USER_HAS_SESSION` when the account already has a session on the machine, which
-          `metadata.sessionId` names; connect to it instead;
+        - `USER_HAS_DESKTOP_SESSION` with `desktop` when the account already has a session with a
+          desktop on the machine, which `metadata.sessionId` names; connect to it instead;
+        - `SESSION_LIMIT_REACHED` when the account already has 8 open sessions on the machine;
+          close one first;
         - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
           the machine refuses the account, such as while it has not received the account yet or a
           local account uses its name; `PAM_PERMISSION_DENIED` carries the machine's message in
