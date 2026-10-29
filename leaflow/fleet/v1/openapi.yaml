@@ -137,6 +137,17 @@ info:
     `id`. A client that subscribes to them needs no polling; one that does not can list the
     pending requests.
 
+    ## Operations that do not exist
+
+    Some resources lack an operation on purpose:
+
+    - Accounts are created when they are first needed and are never deleted, so that files keep
+      their owner.
+    - Enrollment requests are made only by machines.
+    - A machine registration cannot be changed; revoke it and create another.
+    - Machine events are a log: they are listed, never changed, and kept for 30 days.
+    - A privilege request is decided only by the user whose account asks.
+
     ## Viewing a session
 
     1. Have an Ed25519 key, for as long as the client wants: one per connection or one kept by the
@@ -402,6 +413,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PrivilegeApproval"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/privilege-approvals:
+    get:
+      summary: List the caller's privilege approval settings
+      description: |-
+        Returns the machines of the current project on which the caller has set privilege requests
+        to be approved without asking, with the setting of each, the most recently set first. A
+        machine whose setting is `never`, or whose `until` has passed, is not listed.
+      operationId: list-privilege-approvals
+      tags:
+        - Privilege
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PrivilegeApprovalList"
         default:
           description: Error
           content:
@@ -1212,6 +1249,28 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
   /api/v1/sessions/{sessionId}/viewers/{connectionId}:
+    get:
+      summary: Get a viewer of a session
+      description: Returns a viewer connected to the session.
+      operationId: get-viewer
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     delete:
       summary: Disconnect a viewer
       description: |-
@@ -1225,13 +1284,7 @@ paths:
         - Viewer
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - name: connectionId
-          in: path
-          required: true
-          schema:
-            type: integer
-            format: int64
-            minimum: 1
+        - $ref: "#/components/parameters/ConnectionId"
       responses:
         "204":
           description: Disconnected
@@ -1330,6 +1383,14 @@ components:
       schema:
         type: string
         format: uuid
+    ConnectionId:
+      name: connectionId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
     SessionId:
       name: sessionId
       in: path
@@ -2165,6 +2226,51 @@ components:
           description: Only with `until`. A setting whose time has passed reads as `never`.
           type: string
           format: date-time
+      additionalProperties: false
+    PrivilegeApprovalResource:
+      type: object
+      required:
+        - machine_id
+        - auto_approve
+      properties:
+        machine_id:
+          type: string
+          format: uuid
+        auto_approve:
+          description: "`until` or `forever`; see PrivilegeApproval."
+          type: string
+          enum:
+            - until
+            - forever
+        auto_approve_until:
+          description: Only with `until`.
+          type: string
+          format: date-time
+      additionalProperties: false
+    PrivilegeApprovalList:
+      type: object
+      required:
+        - items
+        - total_count
+        - page
+        - page_size
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PrivilegeApprovalResource"
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+        page:
+          type: integer
+          format: int64
+          minimum: 1
+        page_size:
+          type: integer
+          format: int64
+          minimum: 1
       additionalProperties: false
     PrivilegeRequestState:
       description: |-
