@@ -307,14 +307,18 @@ message Close {
 // service passes on the session's candidates that arrive until the session
 // sends end_of_candidates, and at most 2 seconds after the answer; the session
 // therefore sends end_of_candidates as soon as it gathered.
+//
+// The offer is the first signal of a PeerConnection: the service sends it
+// before any other signal of that PeerConnection. The participant's later
+// candidates, its end of candidates and the abort come from separate requests
+// and may reach the session in any order; a candidate or an end of candidates
+// of a PeerConnection that has ended is ignored.
 message Signal {
   // 16 random bytes the service chose for the PeerConnection: the id of the
   // PeerConnection in the Fleet API, a UUID.
   bytes peer_connection_id = 1;
   // The participant.
   uint64 participant_id = 2;
-  // Increases with every signal of one sender for the PeerConnection.
-  uint64 sequence = 3;
   // The ICE servers and policy for the session's end of the PeerConnection.
   // Set by the service on the offer.
   RtcConfiguration configuration = 4;
