@@ -25,10 +25,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 //
 // Reconciliation. The daemon reports every session with ReportSessions after
 // every connect and whenever its list of sessions changes, and each change of
-// a session with ReportSessionState. The full report is authoritative: a
-// session the service holds open on the machine but missing from it has
-// ended, and a changed boot_id means every earlier session ended. Nothing is
-// replayed after a reconnect.
+// a session with ReportSessionState. The full report is authoritative for
+// what the daemon observed before it: a session the service holds open on the
+// machine but missing from it has ended, unless a newer report of that
+// session arrived, and a changed boot_id means every earlier session ended.
+// Nothing is replayed after a reconnect.
 //
 // Accounts. A session runs as the directory account of its platform user,
 // admitted by PAM as any login is, and ends when the account may no longer
@@ -78,6 +79,7 @@ service SessionHostService {
   //   - INTERNAL and reason SESSION_START_FAILED when the session process or
   //     what its options add failed to start; what had started was undone;
   //   - the reasons the package of an option lists.
+  // A call without a timeout may run 120 seconds.
   rpc OpenSession(OpenSessionRequest) returns (OpenSessionResponse) {
     option idempotency_level = IDEMPOTENT;
   }
@@ -272,9 +274,14 @@ message TerminateSessionResponse {}
 message ReportSessionsRequest {
   // /proc/sys/kernel/random/boot_id, new on every boot.
   string boot_id = 1;
-  // Every session since the machine booted, closed ones included until the
-  // service has seen them closed once.
+  // Every session since the machine booted, closed ones included until a
+  // report that carried them closed was answered with success.
   repeated Session sessions = 2;
+  // Orders the reports the daemon sends on this connection by when it
+  // observed what they report (leaflow.fleet.control.v1 Reports): it
+  // increases with every report, 1 for the first, and a report sent again
+  // keeps its sequence.
+  uint64 sequence = 3;
 }
 
 // The response of ReportSessions.
@@ -285,6 +292,11 @@ message ReportSessionStateRequest {
   // The session as it is now. Its user_id must be the one the service holds
   // for it.
   Session session = 1;
+  // Orders the reports the daemon sends on this connection by when it
+  // observed what they report (leaflow.fleet.control.v1 Reports): it
+  // increases with every report, 1 for the first, and a report sent again
+  // keeps its sequence.
+  uint64 sequence = 2;
 }
 
 // The response of ReportSessionState.

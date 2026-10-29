@@ -38,7 +38,8 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/directory/v1;direct
 //     root.
 
 // Keeps the machine's copy of the directory. Served by the daemon; the
-// service calls it.
+// service calls it, one call at a time per machine, so that an earlier copy
+// never arrives after a later one.
 service MachineDirectoryService {
   // Replaces the machine's copy of the directory. The Agent serves the
   // accounts and groups of the request through NSS and PAM from then on,
@@ -223,6 +224,11 @@ message ReportDirectoryStatusRequest {
   // Directory.revision of the copy the Agent serves. Empty before the first
   // SetDirectory.
   string revision = 1;
+  // Orders the reports the daemon sends on this connection by when it
+  // observed what they report (leaflow.fleet.control.v1 Reports): it
+  // increases with every report, 1 for the first, and a report sent again
+  // keeps its sequence.
+  uint64 sequence = 2;
 }
 
 // The response of ReportDirectoryStatus.

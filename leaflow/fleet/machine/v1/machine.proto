@@ -179,6 +179,11 @@ message ReportMachineStatusRequest {
   // The features the Agent has installed, available or not. A feature
   // missing here is not installed.
   repeated Feature features = 7;
+  // Orders the reports the daemon sends on this connection by when it
+  // observed what they report (leaflow.fleet.control.v1 Reports): it
+  // increases with every report, 1 for the first, and a report sent again
+  // keeps its sequence.
+  uint64 sequence = 8;
 }
 
 // The response of ReportMachineStatus.

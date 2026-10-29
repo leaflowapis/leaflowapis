@@ -26,10 +26,12 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // Every credential proves possession of an Ed25519 key (RFC 8032) by signing
 // the service's challenge; none is a bearer secret.
 //
-// Carriage. A WebSocket (RFC 6455) to the URL the service gives out, with the
-// subprotocol "leaflow.fleet.control.v1". Each binary message is
-// exactly one ClientMessage from the endpoint or ServerMessage from the
-// service. A receiver ignores a message whose case it does not know.
+// Carriage. A WebSocket (RFC 6455) to the URL the service gives out. The
+// endpoint offers the subprotocols of the versions it speaks, this one being
+// "leaflow.fleet.control.v1", and the service picks one (see Evolution). Each
+// binary message is exactly one ClientMessage from the endpoint or
+// ServerMessage from the service. A receiver ignores a message whose case it
+// does not know.
 //
 // Fragments. A message whose encoding is larger than 256 KiB travels as
 // Fragment messages: its encoding cut into consecutive pieces of at most
@@ -45,7 +47,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 //
 // Handshake. The service sends ServerHello as soon as the WebSocket opens;
 // the endpoint answers with ClientHello; the service answers with Welcome or
-// Close. Before Welcome both sides close on any other message.
+// Close. Before Welcome both sides close on any other message. A service that
+// cannot take a connection now, such as under load or because its address
+// opens connections too fast, refuses the WebSocket upgrade with HTTP status
+// 503 and a Retry-After header (RFC 9110 §10.2.3).
 //
 // Calls. Both ends call methods of each other with leaflow.fleet.rpc.v1
 // frames. Each service says who serves it on which connections; a call of any
@@ -54,9 +59,32 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // (leaflow.fleet.directory.v1), remote commands (leaflow.fleet.command.v1)
 // and sessions (leaflow.fleet.host.v1), travel on its daemon's connection; the
 // service calls the methods of a feature only while the machine reports it
-// available (leaflow.fleet.machine.v1). When a connection drops, its calls in
-// flight end with UNAVAILABLE and reason CONNECTION_LOST and are never
-// replayed.
+// available (leaflow.fleet.machine.v1), and on a new connection only after
+// its first ReportMachineStatus. When a connection drops, its calls in flight
+// end with UNAVAILABLE and reason CONNECTION_LOST and are never replayed.
+//
+// Concurrency. A callee may work on several calls of a connection at once and
+// answer them in any order; a caller that needs one call to take effect
+// before another waits for the first result. At most
+// ServerHello.max_concurrent_calls calls of an endpoint run on the service at
+// a time, and a further one fails with RESOURCE_EXHAUSTED and reason
+// TOO_MANY_CALLS. A Call without a timeout may run 30 seconds, unless its
+// method states another default.
+//
+// Retries. A method with idempotency_level IDEMPOTENT or NO_SIDE_EFFECTS may
+// be called again with the same request, to the same effect as one call; any
+// other method states what calling it again does. A caller repeats a call
+// only after it failed with UNAVAILABLE, DEADLINE_EXCEEDED or
+// RESOURCE_EXHAUSTED, and only a call it may repeat.
+//
+// Reports. The reports of a daemon (ReportMachineStatus, ReportSessions,
+// ReportSessionState and ReportDirectoryStatus) carry a sequence that orders
+// them by when the daemon observed what they report, so that the service
+// never lets an older report override a newer one, whatever order the calls
+// complete in. Only the newest daemon connection of a machine reports: the
+// service answers the reports of a connection that a newer one replaced with
+// FAILED_PRECONDITION and reason CONNECTION_REPLACED, and applies none of
+// them.
 //
 // Signaling. Viewers and session processes send transport.v1 Signal and
 // Migration. The service takes the sender from the connection a message
@@ -78,15 +106,53 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // once. Either side closes with PING_TIMEOUT when it has received nothing for
 // ServerHello.idle_timeout.
 //
+// Flow. An endpoint sends at most ServerHello.messages_per_second messages a
+// second on average and ServerHello.message_burst at once; the service closes
+// a connection that sends more with POLICY_VIOLATION. An endpoint reads what
+// the service sends as it arrives; the service closes with
+// ENDPOINT_TOO_SLOW a connection whose messages pile up unread.
+//
+// Reconnection. An endpoint whose connection ends connects again, for as
+// long as it takes, unless the close ends it (below): updates of the service
+// close every connection, and an outage may last long, such as while the
+// service is attacked. Before each attempt it waits a random time between
+// zero and the smaller of 60 seconds and 1 second times 2 to the number of
+// attempts since its last connection that lasted 5 minutes, and at least the
+// retry_delay of the Close it received. What ends it:
+//   - for a daemon, AUTHENTICATION_FAILED for its machine credential (the
+//     machine enrolls again), PERMISSION_DENIED (the machine was removed)
+//     and an enrollment DENIED (leaflow.fleet.machine.v1);
+//   - for a daemon closed with NEW_CLIENT that holds no newer connection of
+//     its own, nothing: another process uses the machine's identity, such as
+//     on a copied disk. It connects again every 10 minutes and logs it;
+//   - for a session process, SESSION_NOT_FOUND and SESSION_EXIT;
+//   - for a viewer, AUTHENTICATION_FAILED, PERMISSION_DENIED,
+//     SESSION_NOT_FOUND, SESSION_EXIT and DETACH_REQUEST. It may enter again
+//     with a new ticket.
+//
+// Disconnected. A machine keeps working while its daemon is not connected:
+// the Agent serves its copy of the directory (leaflow.fleet.directory.v1),
+// sessions go on under their SessionPolicy (leaflow.fleet.host.v1), and
+// privilege requests go only to the session's viewers
+// (leaflow.fleet.privilege.v1). The service calls none of the machine's
+// features meanwhile. A viewer whose control connection is down cannot renew
+// the leases of its PeerConnections, which stop sending application data
+// once a lease runs out and go on once the viewer renews it
+// (leaflow.fleet.transport.v1). After every connect the daemon reports the
+// machine, its sessions and its directory again.
+//
 // Resumption. When the control connection of a viewer or a session process
-// drops, the service keeps that endpoint's attachments for
-// Welcome.resume_grace. A viewer that connects again within it, with
-// resume_connection_id, the same viewer key and a fresh ticket for the same
-// user and session, keeps its connection_id and its PeerConnections; a
-// session process that connects again with the same session key keeps its
-// viewers. Nothing sent before is replayed: a PeerConnection attempt whose
-// signaling was cut off is abandoned, and the viewer starts another one.
-// When the grace of a session process passes, the service closes the
+// drops, or the service closes it with SERVER_UPGRADE, the service keeps that
+// endpoint's attachments for Welcome.resume_grace. A viewer that connects
+// again within it, with resume_connection_id, the same viewer key and a fresh
+// ticket for the same user and session, keeps its connection_id and its
+// PeerConnections, whose leases it renews with the PeerAuthorization it holds
+// (leaflow.fleet.transport.v1 Signal.renewal); a session process that
+// connects again with the same session key keeps its viewers. An endpoint
+// may resume at any address of the service: nothing ties it to the one it
+// used before. Nothing sent before is replayed: a PeerConnection attempt
+// whose signaling was cut off is abandoned, and the viewer starts another
+// one. When the grace of a session process passes, the service closes the
 // session's viewers with SESSION_RESTARTING.
 //
 // Session lifetime. A session process sends Close with SESSION_EXIT just
@@ -98,6 +164,12 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // sends in Welcome and again on every connection whenever the set changes. It
 // adds a key at least 5 minutes before it signs with it, and removes one only
 // when nothing it signed with that key is still valid.
+//
+// Evolution. A change that endpoints already in use cannot follow gets a new
+// subprotocol, such as "leaflow.fleet.control.v2", and the service keeps
+// serving the versions endpoints still use. Within a version, messages and
+// methods only gain fields, oneof cases, enum values and methods, which a
+// receiver that does not know them ignores or refuses with UNIMPLEMENTED.
 
 // A message from an endpoint.
 message ClientMessage {
@@ -172,6 +244,12 @@ message ServerHello {
   // The largest WebSocket message, in bytes, either end may send. At least
   // 512 KiB, so that a Fragment always fits.
   uint32 max_message_size = 5;
+  // How many calls of the endpoint may run on the service at a time.
+  uint32 max_concurrent_calls = 6;
+  // How many messages a second the endpoint may send on average.
+  uint32 messages_per_second = 7;
+  // How many messages the endpoint may send at once, above the average.
+  uint32 message_burst = 8;
 }
 
 // The endpoint's side of the handshake.
@@ -393,9 +471,9 @@ message Close {
   CloseReason reason = 1;
   // Plain text for logs, at most 1024 bytes.
   string reason_phrase = 2;
-  // How long to wait before connecting again. Set with SERVER_UPGRADE and
-  // SESSION_RESTARTING. Unset: back off between 0.5 and 30 seconds with
-  // jitter.
+  // How long to wait at least before connecting again (see Reconnection).
+  // Always set with OVERLOADED; set with SERVER_UPGRADE and
+  // SESSION_RESTARTING.
   google.protobuf.Duration retry_delay = 3;
 }
 
@@ -445,6 +523,12 @@ enum CloseReason {
   CLOSE_REASON_POLICY_VIOLATION = 16;
   // The sender failed. Either side.
   CLOSE_REASON_INTERNAL_ERROR = 17;
+  // The service cannot serve the connection now; connect again after
+  // retry_delay, which is always set. Service only.
+  CLOSE_REASON_OVERLOADED = 18;
+  // The endpoint did not read what the service sent as it arrived. Service
+  // only.
+  CLOSE_REASON_ENDPOINT_TOO_SLOW = 19;
 }
 
 // Renews viewers' authorizations. Served by the service on viewer
@@ -463,7 +547,8 @@ service AuthorizationService {
   //   - FAILED_PRECONDITION and reason REFRESH_PENDING while another call
   //     runs.
   // When the user's rights changed or the session refused the update, the
-  // service closes the connection with PERMISSION_DENIED instead.
+  // service closes the connection with PERMISSION_DENIED instead. A ticket
+  // serves once: to call again, ask for a new one.
   rpc RefreshAuthorization(RefreshAuthorizationRequest) returns (RefreshAuthorizationResponse);
 }
 
@@ -493,9 +578,12 @@ service ViewerService {
   //
   // Fails with PERMISSION_DENIED and reason AUTHORIZATION_INVALID when the
   // authorization does not verify.
-  rpc AttachViewer(AttachViewerRequest) returns (AttachViewerResponse);
+  rpc AttachViewer(AttachViewerRequest) returns (AttachViewerResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // Replaces an attached viewer's authorization with a renewed one, verified
-  // as in AttachViewer.
+  // as in AttachViewer. Replacing it with the one the viewer holds already
+  // succeeds.
   //
   // Fails with:
   //   - NOT_FOUND and reason VIEWER_NOT_FOUND for a viewer not attached;
@@ -503,7 +591,9 @@ service ViewerService {
   //     verify;
   //   - FAILED_PRECONDITION and reason AUTHORIZATION_CHANGED when it differs
   //     from the current one in more than later issued_at and expires_at.
-  rpc UpdateViewerAuthorization(UpdateViewerAuthorizationRequest) returns (UpdateViewerAuthorizationResponse);
+  rpc UpdateViewerAuthorization(UpdateViewerAuthorizationRequest) returns (UpdateViewerAuthorizationResponse) {
+    option idempotency_level = IDEMPOTENT;
+  }
   // Ends a viewer. The session closes its PeerConnections and releases what
   // it held, such as pressed keys and the input lease, and answers once the
   // viewer can do nothing more in the session. Detaching a viewer that is not

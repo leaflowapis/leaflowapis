@@ -322,8 +322,12 @@ message Signal {
     // The service's authorization of the attempt, sent to both ends before
     // either may send application data.
     SignedPeerAuthorization authorization = 9;
-    // The viewer asks for a new lease of the same attempt.
-    bool renew_lease = 10;
+    // The viewer asks for a new lease of the attempt this authorization is
+    // for, the latest it holds. The service checks that it signed it, for
+    // this connection, and that the viewer's connection is still attached,
+    // and sends both ends a new authorization of the attempt. A viewer that
+    // resumed its connection renews this way too.
+    SignedPeerAuthorization renewal = 11;
   }
 }
 
@@ -414,14 +418,17 @@ message PeerAuthorization {
   // SHA-256 fingerprint of the Agent's DTLS certificate, from its answer.
   bytes agent_fingerprint_sha256 = 7;
   // SHA-256 of the viewer's authorization that both ends hold for the
-  // connection: the exact serialized bytes the service signed.
+  // connection: the exact serialized bytes the service signed. A renewal
+  // names the viewer's current authorization, which may be a renewed one
+  // (leaflow.fleet.control.v1 RefreshAuthorization).
   bytes viewer_authorization_sha256 = 8;
   // When the service signed it.
   google.protobuf.Timestamp issued_at = 9;
-  // The end of the attempt's authorization, no later than the viewer's.
+  // The end of the attempt's authorization: the end of the viewer's current
+  // authorization.
   google.protobuf.Timestamp expires_at = 10;
   // The end of the current lease, at most 30 seconds after issued_at and no
-  // later than expires_at. A renewal moves only this time. Each end stops
-  // sending application data when the lease runs out.
+  // later than expires_at. Each end stops sending application data when the
+  // lease runs out, and goes on once it holds a later one.
   google.protobuf.Timestamp lease_expires_at = 11;
 }
