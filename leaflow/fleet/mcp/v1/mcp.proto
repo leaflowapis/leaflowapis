@@ -6,9 +6,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/mcp/v1;mcpv1";
 
 // Model Context Protocol servers reached through a machine: servers the
 // machine runs itself, and remote servers it connects to, as an account
-// configured them. The Agent is the MCP client (Model Context Protocol,
-// revision 2025-06-18); the platform lists, searches and calls the tools of
-// all of an account's servers through it, and edits their configuration.
+// configured them. The Agent is the MCP client; the platform lists, searches
+// and calls the tools of all of an account's servers through it, and edits
+// their configuration. The Agent offers each server the latest revision of
+// MCP it implements and accepts any revision it implements that the server
+// answers with, back to 2024-11-05.
 // Every call fails with the reasons of each method in a google.rpc.ErrorInfo
 // of the domain "fleet.leaflow.cloud".
 //
@@ -19,7 +21,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/mcp/v1;mcpv1";
 // stacks of its PAM service, as it runs a command
 // (leaflow.fleet.command.v1). Whatever the account may not do, its servers
 // may not either, and they are refused whenever a login of the account would
-// be.
+// be. When the account may no longer log in, such as when the directory
+// changes or the account expires, its servers stop at once, as its sessions
+// do.
 //
 // Configuration. Each account configures its servers in
 // ~/.local/share/leaflow/agent/mcp.json in its home directory, in the format
@@ -39,14 +43,17 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/mcp/v1;mcpv1";
 //     }
 //   }
 //
-// A member of mcpServers is a server, named by its key: with "command" (and
+// A member of mcpServers is a server, named by its key, which matches
+// ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ and holds no "__", since the tools of all
+// servers are named "<server>__<tool>" together. With "command" (and
 // "args", "env") the Agent starts it and speaks to it over its standard input
 // and output; with "url" (and "headers") it connects to it over Streamable
 // HTTP, or over HTTP with Server-Sent Events when "type" is "sse". "type" may
 // also be "stdio" or "http", the default for its form. "disabled": true keeps
 // a server configured but stopped. Members and fields the Agent does not know
-// are kept as they are. A server whose entry is not valid, such as one with
-// neither "command" nor "url", is reported as INVALID; the others still work.
+// are kept as they are. A server whose name or entry is not valid, such as
+// one with neither "command" nor "url", is reported as INVALID; the others
+// still work.
 //
 // The account edits the file by hand or through the platform, and the Agent
 // picks up every change by itself, without restarting: it starts what was
@@ -54,10 +61,12 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/mcp/v1;mcpv1";
 // used. The file may be missing, which is no server at all. When it cannot be
 // read or is not a JSON object with an object "mcpServers", the Agent keeps
 // serving the configuration it last read in full and reports the file as
-// UNREADABLE or INVALID until it is fixed. A file that is not valid when the
-// Agent starts does not keep it from starting: the Agent sets it aside under
-// a new name in the same directory (McpConfigurationFile.set_aside) and
-// starts with an empty configuration in its place. The Agent writes the file
+// UNREADABLE or INVALID until it is fixed. Nothing about the file keeps the
+// Agent from starting to serve an account: a file that is not valid then is
+// set aside under a new name in the same directory
+// (McpConfigurationFile.set_aside) and replaced by an empty configuration,
+// and a file that cannot be read is left as it is and served as empty, since
+// whether it is valid cannot be told. The Agent writes the file
 // only when the platform asks it to, as a whole, through a new file that
 // replaces it at once, readable only by the account, and keeps the previous
 // version as mcp.json.bak next to it.
@@ -124,7 +133,10 @@ service McpService {
   // a query: every word of it, ignoring case, in the tool's name, title or
   // description. Servers that are not running are started to learn their
   // tools; one that cannot be is named in unavailable_servers, and the
-  // others are listed anyway.
+  // others are listed anyway. The call does not wait for slow servers: before
+  // its timeout passes it answers with those still starting named in
+  // unavailable_servers with TIMEOUT, and they go on starting, so that a
+  // later call lists their tools.
   //
   // Fails with NOT_FOUND and reason MCP_SERVER_NOT_FOUND for a server that is
   // not configured.
@@ -132,7 +144,13 @@ service McpService {
 
   // Sends one JSON-RPC request of MCP to one of the account's servers, such
   // as tools/call, resources/read or prompts/get, and returns its response.
-  // The Agent itself handles initialization and the session of the server.
+  // The Agent itself handles initialization and the session of the server,
+  // and passes the request on without checking it against a revision of MCP.
+  // When the call is cancelled or its timeout passes, the Agent cancels the
+  // request at the server (notifications/cancelled). A request the server
+  // makes of the client meanwhile, such as for sampling, is answered with the
+  // JSON-RPC error -32601, and its notifications, such as of progress, are
+  // dropped.
   //
   // Fails with:
   //   - NOT_FOUND and reason MCP_SERVER_NOT_FOUND for a server that is not
@@ -141,7 +159,8 @@ service McpService {
   //     be started or reached, with metadata "failure", a McpServerFailure
   //     name without its prefix in lower case, such as "unauthorized";
   //   - INVALID_ARGUMENT and reason INVALID_REQUEST for a message that is not
-  //     a JSON-RPC request, or one of initialize or of the lifecycle.
+  //     one JSON-RPC request, such as a batch or a notification, or that is
+  //     one of initialization.
   // A response with a JSON-RPC error is a successful call.
   rpc SendMcpRequest(SendMcpRequestRequest) returns (SendMcpRequestResponse);
 }
@@ -177,7 +196,8 @@ message McpConfigurationFile {
   uint32 invalid_line = 3;
   uint32 invalid_column = 4;
   // The name, in the same directory, under which the Agent set aside a file
-  // that was not valid when it started; empty when it did not.
+  // that was not valid when it started to serve the account; empty when it
+  // did not.
   string set_aside = 5;
 }
 
@@ -262,7 +282,8 @@ enum McpServerState {
 // Why a server failed or is not valid.
 enum McpServerFailure {
   MCP_SERVER_FAILURE_UNSPECIFIED = 0;
-  // Its entry is not valid, such as with neither "command" nor "url".
+  // Its name or entry is not valid, such as an entry with neither "command"
+  // nor "url".
   MCP_SERVER_FAILURE_INVALID_DEFINITION = 1;
   // Its program could not be started, such as when it is not installed.
   MCP_SERVER_FAILURE_START_FAILED = 2;
@@ -288,8 +309,8 @@ message McpImplementation {
 // The request of PutMcpServer.
 message PutMcpServerRequest {
   McpAccount account = 1;
-  // The server's key in "mcpServers": 1 to 64 letters, digits, "_" or "-",
-  // since tools of every server are named "<server>__<tool>" together.
+  // The server's key in "mcpServers", by the rule of Configuration; any other
+  // fails the call with INVALID_REQUEST.
   string name = 2;
   McpServerDefinition definition = 3;
   // Keys of the server's current env whose values stay as they are, when
@@ -298,7 +319,8 @@ message PutMcpServerRequest {
   repeated string keep_env = 4;
   // Keys of the server's current headers whose values stay, as keep_env.
   repeated string keep_headers = 5;
-  // McpConfigurationFile.revision as last read.
+  // McpConfigurationFile.revision as last read, empty only for a file that
+  // was MISSING.
   string expected_revision = 6;
 }
 
@@ -312,7 +334,8 @@ message PutMcpServerResponse {
 message DeleteMcpServerRequest {
   McpAccount account = 1;
   string name = 2;
-  // McpConfigurationFile.revision as last read.
+  // McpConfigurationFile.revision as last read, empty only for a file that
+  // was MISSING.
   string expected_revision = 3;
 }
 
@@ -352,7 +375,8 @@ message ListMcpToolsRequest {
 
 // The response of ListMcpTools.
 message ListMcpToolsResponse {
-  // Ordered by server, then by tool name.
+  // Ordered by server, then by tool name; fewer than page_size when more
+  // would make the response larger than 8 MiB.
   repeated McpTool tools = 1;
   // Empty on the last page.
   string next_page_token = 2;

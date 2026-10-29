@@ -121,6 +121,18 @@ info:
     `fleet:machines.login` on the machine. Inside the command, `sudo` works without a prompt for
     a caller with `fleet:machines.admin` on the machine: the request approves the elevation.
 
+    ## MCP servers
+
+    A machine that offers `leaflow.fleet.mcp.v1` reaches the MCP servers its accounts configure:
+    servers it runs itself and remote servers it connects to. Each account configures them in
+    `~/.local/share/leaflow/agent/mcp.json` in its home directory, in the `mcpServers` format other
+    MCP clients use, by hand or through this API; the machine picks up every change by itself.
+    The caller's servers run as the caller's account, and the requests below act on them only.
+
+    The configuration stays on the machine. The values of `env` and `headers` often hold
+    credentials: this API writes them, and they then pass through the platform, but never returns
+    them. Arguments, URLs, tool arguments and tool results pass through the platform as they are.
+
     ## Approving sudo
 
     An account may become root through sudo on a machine while its user has
@@ -221,6 +233,7 @@ tags:
   - name: Session
   - name: Participant
   - name: Privilege
+  - name: MCP
 paths:
   /api/v1/machines:
     get:
@@ -401,6 +414,313 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RunCommandResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/mcp-configuration:
+    get:
+      summary: Get the caller's MCP configuration on a machine
+      description: |-
+        Returns the caller's MCP configuration file on the machine and every server in it, with
+        what each is doing now. The values of `env` and `headers` are never returned, only their
+        keys. Requires `fleet:machines.login` on the machine.
+
+        Fails with:
+        - `MACHINE_OFFLINE` when the machine is not connected and does not connect again in time;
+        - `FEATURE_UNAVAILABLE` when the machine does not offer `leaflow.fleet.mcp.v1`;
+        - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
+          the machine refuses the account, as for opening a session;
+        - `MACHINE_TIMEOUT` when the machine did not answer in time.
+      operationId: get-mcp-configuration
+      tags:
+        - MCP
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpConfigurationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    put:
+      summary: Replace the caller's MCP configuration on a machine
+      description: |-
+        Replaces the caller's MCP configuration file on the machine as a whole, also one that cannot
+        be read or is not valid. The machine starts the servers that were added, stops the ones
+        that were removed and restarts the ones that changed when they are next used. The account
+        is created if the caller has none yet. The content, secrets included, passes through the
+        platform. Requires `fleet:machines.login` on the machine.
+
+        Fails with:
+        - `MCP_CONFIGURATION_CHANGED` when the file is no longer at `expected_revision`;
+        - `MCP_CONFIGURATION_INVALID` when `content` is not an object with an object `mcpServers`,
+          with `metadata.line` and `metadata.column`;
+        - `MACHINE_OFFLINE` when the machine is not connected and does not connect again in time;
+        - `FEATURE_UNAVAILABLE` when the machine does not offer `leaflow.fleet.mcp.v1`;
+        - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
+          the machine refuses the account, as for opening a session;
+        - `MACHINE_TIMEOUT` when the machine did not answer in time.
+      operationId: replace-mcp-configuration
+      tags:
+        - MCP
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplaceMcpConfigurationRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpConfigurationFile"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/mcp-servers/{serverName}:
+    put:
+      summary: Add or replace an MCP server
+      description: |-
+        Adds a server to the caller's MCP configuration on the machine, or replaces the one with
+        the same name. The values of `env` and `headers` the request gives, secrets included, pass
+        through the platform; those named in `keep_env` and `keep_headers` stay as they are on the
+        machine. The account is created if the caller has none yet. Requires
+        `fleet:machines.login` on the machine.
+
+        Fails with:
+        - `MCP_CONFIGURATION_CHANGED` when the file is no longer at `expected_revision`;
+        - `MCP_CONFIGURATION_INVALID` when the file cannot be read or is not valid; replace it
+          whole first;
+        - `MACHINE_OFFLINE` when the machine is not connected and does not connect again in time;
+        - `FEATURE_UNAVAILABLE` when the machine does not offer `leaflow.fleet.mcp.v1`;
+        - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
+          the machine refuses the account, as for opening a session;
+        - `MACHINE_TIMEOUT` when the machine did not answer in time.
+      operationId: update-mcp-server
+      tags:
+        - MCP
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: "#/components/parameters/McpServerName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateMcpServerRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UpdateMcpServerResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Remove an MCP server
+      description: |-
+        Removes a server from the caller's MCP configuration on the machine and stops it. Removing
+        one that is not configured succeeds. Requires `fleet:machines.login` on the machine.
+
+        Fails as replacing a server does.
+      operationId: delete-mcp-server
+      tags:
+        - MCP
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: "#/components/parameters/McpServerName"
+        - name: expected_revision
+          in: query
+          description: |-
+            The configuration's `revision` as last read; absent only for one that was `missing`
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpConfigurationFile"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/mcp-servers/{serverName}:send:
+    post:
+      summary: Send an MCP request to a server
+      description: |-
+        Sends one JSON-RPC request of MCP to one of the caller's servers on the machine, such as
+        `tools/call`, `resources/read` or `prompts/get`, and returns the server's response. The
+        machine starts or connects to the server if it is not running, and handles its
+        initialization itself; a request still running when `timeout_seconds` passes is cancelled
+        at the server. Requests the server makes of the client, such as for sampling, are refused,
+        and its notifications, such as of progress, are dropped. A response with a JSON-RPC error
+        is a successful request. Neither the request nor the response is hidden from the
+        platform. Requires `fleet:machines.login` on the machine.
+
+        Fails with:
+        - `MCP_SERVER_NOT_FOUND` when the server is not configured;
+        - `MCP_SERVER_UNAVAILABLE` when it could not be started or reached, with
+          `metadata.failure`, an `McpServerFailure`;
+        - `INVALID_ARGUMENT` when `request` is not one JSON-RPC request, such as a notification, or
+          is one of initialization;
+        - `RESULT_TOO_LARGE` when the response is larger than 8 MiB;
+        - `MACHINE_OFFLINE` when the machine is not connected and does not connect again in time;
+        - `FEATURE_UNAVAILABLE` when the machine does not offer `leaflow.fleet.mcp.v1`;
+        - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
+          the machine refuses the account, as for opening a session;
+        - `MACHINE_TIMEOUT` when the machine did not answer in time.
+      operationId: send-mcp-request
+      tags:
+        - MCP
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: "#/components/parameters/McpServerName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMcpRequestRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendMcpRequestResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/mcp-servers/{serverName}/tools/{toolName}:call:
+    post:
+      summary: Call an MCP tool
+      description: |-
+        Calls one tool of one of the caller's servers on the machine and returns its MCP
+        `CallToolResult`. A tool that reports an error, with `isError`, is a successful request. A
+        tool whose name cannot appear in a path is called with `send-mcp-request`. Neither the
+        arguments nor the result is hidden from the platform. Requires `fleet:machines.login` on
+        the machine.
+
+        Fails as sending a request does.
+      operationId: call-mcp-tool
+      tags:
+        - MCP
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - $ref: "#/components/parameters/McpServerName"
+        - name: toolName
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CallMcpToolRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallMcpToolResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/mcp-tools:
+    get:
+      summary: List the caller's MCP tools on a machine
+      description: |-
+        Lists the tools of the caller's servers on the machine, or of one of them, that match
+        `query`: every word of it, ignoring case, in the tool's name, title or description. They
+        are ordered by server, then by tool name. Servers that are not running are started to
+        learn their tools; one that cannot be is named in `unavailable_servers`, and the others are
+        listed anyway. Slow servers do not hold the request up: those still starting are named
+        with `timeout` and go on starting, so that a later request lists their tools. Requires
+        `fleet:machines.login` on the machine.
+
+        Fails with:
+        - `MCP_SERVER_NOT_FOUND` when `server` is not configured;
+        - `MACHINE_OFFLINE` when the machine is not connected and does not connect again in time;
+        - `FEATURE_UNAVAILABLE` when the machine does not offer `leaflow.fleet.mcp.v1`;
+        - `USER_NOT_FOUND`, `USER_NOT_ALLOWED`, `ACCOUNT_EXPIRED` or `PAM_PERMISSION_DENIED` when
+          the machine refuses the account, as for opening a session;
+        - `MACHINE_TIMEOUT` when the machine did not answer in time.
+      operationId: list-mcp-tools
+      tags:
+        - MCP
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - name: server
+          in: query
+          description: Only this server's tools
+          schema:
+            type: string
+            maxLength: 64
+        - name: query
+          in: query
+          description: Words that each must occur in a tool's name, title or description
+          schema:
+            type: string
+            maxLength: 256
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: page_token
+          in: query
+          description: "`next_page_token` of the previous page"
+          schema:
+            type: string
+            maxLength: 1024
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/McpToolList"
         default:
           description: Error
           content:
@@ -1699,6 +2019,16 @@ components:
       schema:
         type: string
         format: uuid
+    McpServerName:
+      name: serverName
+      in: path
+      required: true
+      description: |-
+        The server's key in `mcpServers`: a letter or digit, then up to 63 letters, digits, `_`
+        or `-`, without `__`, since the tools of all servers are named `<server>__<tool>` together
+      schema:
+        type: string
+        pattern: "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
     EnrollmentId:
       name: enrollmentId
       in: path
@@ -2567,6 +2897,386 @@ components:
         stderr_truncated:
           description: "`stderr` is cut short"
           type: boolean
+      additionalProperties: false
+    McpConfigurationFile:
+      type: object
+      required:
+        - state
+        - revision
+        - invalid_line
+        - invalid_column
+        - set_aside
+      properties:
+        state:
+          description: |-
+            `ok` when the file was read in full; `missing` when there is none, which is no server;
+            `unreadable` when it cannot be read and `invalid` when it is not an object with an
+            object `mcpServers`: then the machine serves the servers of the file it last read in
+            full, if any, and none otherwise.
+          type: string
+          enum:
+            - ok
+            - missing
+            - unreadable
+            - invalid
+        revision:
+          description: |-
+            SHA-256 of the file in lower-case hex, empty while it is `missing`. Edits carry it as
+            `expected_revision`, so that they fail rather than undo an edit made in between.
+          type: string
+        invalid_line:
+          description: With `invalid`, the line of the first error, counted from 1; null otherwise
+          type:
+            - integer
+            - "null"
+          format: int64
+        invalid_column:
+          description: With `invalid`, the column of the first error, counted from 1; null otherwise
+          type:
+            - integer
+            - "null"
+          format: int64
+        set_aside:
+          description: |-
+            The name, in the file's directory, under which the machine set aside a file that was not
+            valid when it started to serve the account, and put an empty configuration in its place;
+            null when it did not
+          type:
+            - string
+            - "null"
+      additionalProperties: false
+    McpConfigurationResource:
+      type: object
+      required:
+        - file
+        - servers
+      properties:
+        file:
+          $ref: "#/components/schemas/McpConfigurationFile"
+        servers:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpServerResource"
+      additionalProperties: false
+    McpTransport:
+      description: |-
+        `stdio` for a program the machine starts as the account, `http` for Streamable HTTP and
+        `sse` for HTTP with Server-Sent Events, the transport of earlier revisions of MCP
+      type: string
+      enum:
+        - stdio
+        - http
+        - sse
+    McpServerFailure:
+      description: |-
+        Why a server failed or is not valid: `invalid_definition`, `start_failed` (its program could
+        not be started), `exited`, `unreachable`, `unauthorized` (it asked for authorization the
+        headers do not give, such as through OAuth), `protocol_error` or `timeout`
+      type: string
+      enum:
+        - invalid_definition
+        - start_failed
+        - exited
+        - unreachable
+        - unauthorized
+        - protocol_error
+        - timeout
+    McpServerResource:
+      type: object
+      required:
+        - name
+        - transport
+        - command
+        - args
+        - env_keys
+        - url
+        - header_keys
+        - disabled
+        - state
+        - failure
+        - implementation
+        - tool_count
+      properties:
+        name:
+          description: Its key in `mcpServers`
+          type: string
+        transport:
+          $ref: "#/components/schemas/McpTransport"
+        command:
+          description: With `stdio`, the program
+          type: string
+        args:
+          type: array
+          items:
+            type: string
+        env_keys:
+          description: The variables `env` sets; their values are never returned
+          type: array
+          items:
+            type: string
+        url:
+          description: With `http` and `sse`, the endpoint
+          type: string
+        header_keys:
+          description: The headers `headers` sends; their values are never returned
+          type: array
+          items:
+            type: string
+        disabled:
+          description: Configured but kept stopped
+          type: boolean
+        state:
+          description: |-
+            `stopped` before its first use or after it was idle, `starting`, `running`, `failed`
+            (it is tried again when next used), `disabled` or `invalid`
+          type: string
+          enum:
+            - stopped
+            - starting
+            - running
+            - failed
+            - disabled
+            - invalid
+        failure:
+          description: With `failed` and `invalid`, why; null otherwise
+          anyOf:
+            - $ref: "#/components/schemas/McpServerFailure"
+            - type: "null"
+        implementation:
+          description: With `running`, what the server said of itself; null otherwise
+          anyOf:
+            - $ref: "#/components/schemas/McpImplementation"
+            - type: "null"
+        tool_count:
+          description: With `running`, how many tools it offers; null otherwise
+          type:
+            - integer
+            - "null"
+          format: int64
+      additionalProperties: false
+    McpImplementation:
+      type: object
+      required:
+        - name
+        - version
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        title:
+          type: string
+      additionalProperties: false
+    UpdateMcpServerRequest:
+      type: object
+      properties:
+        transport:
+          description: Unset for `stdio` with `command` and `http` with `url`
+          allOf:
+            - $ref: "#/components/schemas/McpTransport"
+        command:
+          description: With `stdio`, the program, looked up in the account's `PATH`
+          type: string
+          maxLength: 4096
+        args:
+          description: |-
+            With `stdio`; shown to anyone who reads the configuration, so no place for credentials
+          type: array
+          maxItems: 256
+          items:
+            type: string
+            maxLength: 65536
+        env:
+          description: With `stdio`, variables added to the account's environment
+          type: object
+          maxProperties: 256
+          additionalProperties:
+            type: string
+            maxLength: 65536
+        url:
+          description: |-
+            With `http` and `sse`, the endpoint; shown to anyone who reads the configuration
+          type: string
+          maxLength: 4096
+        headers:
+          description: With `http` and `sse`, headers sent with every request
+          type: object
+          maxProperties: 256
+          additionalProperties:
+            type: string
+            maxLength: 65536
+        disabled:
+          description: Configured but kept stopped
+          type: boolean
+          default: false
+        keep_env:
+          description: Variables of the server's current `env` whose values stay as they are
+          type: array
+          maxItems: 256
+          items:
+            type: string
+        keep_headers:
+          description: Headers of the server's current `headers` whose values stay as they are
+          type: array
+          maxItems: 256
+          items:
+            type: string
+        expected_revision:
+          description: |-
+            The configuration's `revision` as last read; absent only for one that was `missing`
+          type: string
+          maxLength: 64
+      additionalProperties: false
+    UpdateMcpServerResponse:
+      type: object
+      required:
+        - file
+        - server
+      properties:
+        file:
+          $ref: "#/components/schemas/McpConfigurationFile"
+        server:
+          $ref: "#/components/schemas/McpServerResource"
+      additionalProperties: false
+    ReplaceMcpConfigurationRequest:
+      type: object
+      required:
+        - content
+      properties:
+        content:
+          description: The new file, an object with an object `mcpServers`, at most 1 MiB as JSON
+          type: object
+          additionalProperties: true
+        expected_revision:
+          description: |-
+            The configuration's `revision` as last read; absent replaces whatever is there, such as
+            a file that cannot be read
+          type: string
+          maxLength: 64
+      additionalProperties: false
+    SendMcpRequestRequest:
+      type: object
+      required:
+        - request
+      properties:
+        request:
+          description: One JSON-RPC 2.0 request of MCP, at most 4 MiB
+          type: object
+          additionalProperties: true
+        timeout_seconds:
+          description: How long to wait for the response
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 300
+          default: 60
+      additionalProperties: false
+    SendMcpRequestResponse:
+      type: object
+      required:
+        - response
+      properties:
+        response:
+          description: The server's JSON-RPC 2.0 response, with the id of the request
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    CallMcpToolRequest:
+      type: object
+      properties:
+        arguments:
+          description: The tool's arguments, as its `input_schema` describes them
+          type: object
+          additionalProperties: true
+        timeout_seconds:
+          description: How long to wait for the result
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 300
+          default: 60
+      additionalProperties: false
+    CallMcpToolResponse:
+      type: object
+      required:
+        - result
+      properties:
+        result:
+          description: |-
+            The tool's MCP `CallToolResult`, with `content`, `structuredContent` and `isError`
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    McpToolResource:
+      type: object
+      required:
+        - server
+        - name
+        - title
+        - description
+        - input_schema
+        - output_schema
+        - annotations
+      properties:
+        server:
+          description: The server that offers it
+          type: string
+        name:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        input_schema:
+          description: The JSON Schema of its arguments
+          type: object
+          additionalProperties: true
+        output_schema:
+          description: The JSON Schema of its structured result; null when it has none
+          type:
+            - object
+            - "null"
+          additionalProperties: true
+        annotations:
+          description: |-
+            Its MCP `ToolAnnotations`, such as `readOnlyHint`; hints of the server, not guarantees
+          type:
+            - object
+            - "null"
+          additionalProperties: true
+      additionalProperties: false
+    McpUnavailableServer:
+      type: object
+      required:
+        - name
+        - failure
+      properties:
+        name:
+          type: string
+        failure:
+          $ref: "#/components/schemas/McpServerFailure"
+      additionalProperties: false
+    McpToolList:
+      type: object
+      required:
+        - items
+        - next_page_token
+        - unavailable_servers
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/McpToolResource"
+        next_page_token:
+          description: Null on the last page
+          type:
+            - string
+            - "null"
+        unavailable_servers:
+          description: Servers whose tools are missing because they could not be started or reached
+          type: array
+          items:
+            $ref: "#/components/schemas/McpUnavailableServer"
       additionalProperties: false
     UpdatePrivilegeAutoApprovalRequest:
       type: object
