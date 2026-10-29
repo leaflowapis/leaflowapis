@@ -52,7 +52,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // upgrade with HTTP status 503 and a Retry-After header (RFC 9110 §10.2.3); a
 // proxy in front of it that limits how fast an address connects may refuse it
 // with 429. The endpoint counts either as a failed attempt (see Reconnection)
-// and waits at least Retry-After when given.
+// and waits at least Retry-After when given. The service closes with
+// OVERLOADED, before Welcome, a connection of a machine's daemon or of a
+// session process that connects more often than the service allows; an
+// endpoint that follows Reconnection stays well below that.
 //
 // Calls. Both ends call methods of each other with leaflow.fleet.rpc.v1
 // frames. Each service says who serves it on which connections; a call of any
@@ -140,11 +143,17 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // ServerHello.idle_timeout.
 //
 // Flow. Every WebSocket message an endpoint sends, Fragment, Ping and Pong
-// included, takes a token from a bucket that holds ServerHello.message_burst
-// tokens and refills at ServerHello.messages_per_second; the service closes a
-// connection that sends with the bucket empty with POLICY_VIOLATION. An
-// endpoint reads what the service sends as it arrives; the service closes with
-// ENDPOINT_TOO_SLOW a connection whose messages pile up unread.
+// included, takes one token from a message bucket that holds
+// ServerHello.message_burst tokens and refills at
+// ServerHello.messages_per_second, and one token for each of its bytes from a
+// byte bucket that holds ServerHello.byte_burst and refills at
+// ServerHello.bytes_per_second. The service reads an endpoint's next message
+// only once both buckets hold enough, so an endpoint that sends faster is
+// slowed down by the transport rather than closed: its writes stall, and a
+// Ping it sends then waits behind what it sent before. An endpoint therefore
+// paces what it sends to the buckets. An endpoint reads what the service sends
+// as it arrives; the service closes with ENDPOINT_TOO_SLOW a connection whose
+// messages pile up unread.
 //
 // Reconnection. An endpoint whose connection ends connects again, for as
 // long as it takes, unless the close ends it (below): updates of the service
@@ -284,11 +293,18 @@ message ServerHello {
   // How many calls of the endpoint may run on the service at a time. At
   // least 1.
   uint32 max_concurrent_calls = 6;
-  // How fast the endpoint's token bucket refills, in messages a second (see
-  // Flow). At least 1.
+  // How fast the endpoint's message bucket refills, in messages a second
+  // (see Flow). At least 1.
   uint32 messages_per_second = 7;
-  // How many tokens the endpoint's bucket holds (see Flow). At least 1.
+  // How many tokens the endpoint's message bucket holds (see Flow). At
+  // least 1.
   uint32 message_burst = 8;
+  // How fast the endpoint's byte bucket refills, in bytes a second (see
+  // Flow). At least 1.
+  uint32 bytes_per_second = 9;
+  // How many bytes the endpoint's byte bucket holds (see Flow). At least
+  // max_message_size, so that any message fits.
+  uint32 byte_burst = 10;
 }
 
 // The endpoint's side of the handshake.
@@ -542,8 +558,9 @@ enum CloseReason {
   CLOSE_REASON_POLICY_VIOLATION = 16;
   // The sender failed. Either side.
   CLOSE_REASON_INTERNAL_ERROR = 17;
-  // The service cannot serve the connection now; connect again after
-  // retry_delay, which is always set. Service only.
+  // The service cannot serve the connection now, or the endpoint connected
+  // too often; connect again after retry_delay, which is always set. Service
+  // only.
   CLOSE_REASON_OVERLOADED = 18;
   // The endpoint did not read what the service sent as it arrived. Service
   // only.
