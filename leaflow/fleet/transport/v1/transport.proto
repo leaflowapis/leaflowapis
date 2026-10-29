@@ -67,6 +67,10 @@ message Packet {
     Checkpoint receipt = 4;
     // Why the sender is about to close the PeerConnection. On "binding".
     Close close = 5;
+    // A renewed PeerAuthorization of this PeerConnection that the participant
+    // received from the Fleet API. On "binding" only, from the participant,
+    // after both Hellos verified.
+    SignedPeerAuthorization peer_authorization = 6;
   }
 }
 
@@ -305,8 +309,9 @@ message Close {
 // a PeerConnection through the Fleet API, and receives the session's answer,
 // candidates and the PeerAuthorization in the answer of its request. The
 // service passes on the session's candidates that arrive until the session
-// sends end_of_candidates, and at most 2 seconds after the answer; the session
-// therefore sends end_of_candidates as soon as it gathered.
+// sends end_of_candidates, and at most 10 seconds after the answer; the
+// session therefore sends end_of_candidates as soon as it gathered, and the
+// participant's request waits no longer than that.
 //
 // The offer is the first signal of a PeerConnection: the service sends it
 // before any other signal of that PeerConnection. The participant's later
@@ -440,7 +445,16 @@ message PeerAuthorization {
   google.protobuf.Timestamp expires_at = 10;
   // The end of the current lease, at most 30 seconds after issued_at and no
   // later than expires_at. The participant renews it through the Fleet API with
-  // the PeerAuthorization it holds. Each end stops sending application data
-  // when the lease runs out, and goes on once it holds a later one.
+  // the PeerAuthorization it holds, and passes each renewed one to the session
+  // on "binding" (Packet.peer_authorization); the service also sends it on the
+  // session's control connection, so that either path keeps the lease while
+  // the other is down. The session takes whichever arrives first and ignores
+  // one whose lease does not end later than the one it holds. It takes one
+  // that the service signed with a key of its SigningKeys, that names the
+  // same PeerConnection, participant, fingerprints and session, and whose
+  // participant_authorization_sha256 names the participant's authorization it
+  // holds or, while that one has not expired, the authorization it replaced.
+  // Each end stops sending application data when the lease runs out, and goes
+  // on once it holds a later one.
   google.protobuf.Timestamp lease_expires_at = 11;
 }
