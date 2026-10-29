@@ -19,3 +19,4 @@ SDKs generated from these contracts are maintained in separate repositories:
 | --- | --- | --- |
 | Go | `go get github.com/leaflowapis/leaflow-go/<service>[/<sub-package>]` | [leaflow-go](https://github.com/leaflowapis/leaflow-go) |
 | TypeScript | `npm install @leaflow/sdk` | [leaflow-ts](https://github.com/leaflowapis/leaflow-ts) |
+| Rust | `cargo add leaflow-<service> --git https://github.com/leaflowapis/leaflow-rs` | [leaflow-rs](https://github.com/leaflowapis/leaflow-rs) |
