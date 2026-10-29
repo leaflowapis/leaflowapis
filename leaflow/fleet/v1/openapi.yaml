@@ -1256,9 +1256,6 @@ paths:
         reading logs — is granted only with its permission; a viewer that may only watch gets
         none of them. A ticket may ask for less: to watch only, or for some of the capabilities.
 
-        A request made by a browser binds the ticket to its `Origin`, which the WebSocket
-        connection must carry too.
-
         Fails with:
         - `SESSION_CLOSED` when the session has ended;
         - `SESSION_ACCESS_DENIED` when the caller may not view the session.

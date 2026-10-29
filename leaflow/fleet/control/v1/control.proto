@@ -252,9 +252,10 @@ message SessionDelegation {
 // A viewer, with its own key.
 message ViewerCredential {
   // A single-use ticket the service issued to a signed-in user for one
-  // session, this viewer key and, for a browser, the Origin it asked from
-  // (RFC 6454), which the WebSocket handshake must carry. Valid for at most
-  // 60 seconds. It authenticates nothing by itself. Never put into a URL.
+  // session and this viewer key. Valid for at most 60 seconds. It
+  // authenticates nothing by itself: the signature below proves the key.
+  // Whoever asked for it, a browser through its console, a desktop client or
+  // a program, connects with it the same way. Never put into a URL.
   string ticket = 1;
   // Resumes the viewer connection with this id. 0: a new connection.
   uint64 resume_connection_id = 2;
