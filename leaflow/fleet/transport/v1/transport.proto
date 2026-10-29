@@ -11,11 +11,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/transport/v1;transp
 // WebRTC PeerConnection (W3C WebRTC; RFC 8831 data channels). The Fleet
 // service relays the signaling below between the participant's requests to
 // the Fleet API and the session's control connection, and signs a
-// PeerAuthorization for every attempt; it never carries or sees the data that
-// flows here.
+// PeerAuthorization for every PeerConnection; it never carries or sees the
+// data that flows here.
 //
-// Paths. One logical connection, named by connection_id, lives on one
-// PeerConnection at a time. Each PeerConnection is a path with its own
+// Paths. The connection of a participant, named by its participant_id, lives
+// on one PeerConnection at a time. Each PeerConnection is a path with its own
 // epoch, 1 for the first. When a path fails the participant creates a new
 // PeerConnection and migrates the connection to it under the next epoch
 // (Migration); only envelopes the receiver had not admitted are sent again.
@@ -72,27 +72,27 @@ message Packet {
 
 // Each end sends Hello twice: first with its own challenge and an empty
 // response, then, once the peer's Hello arrived, again with response set to
-// the peer's challenge. A Hello that names another attempt, another
-// connection, an unexpected epoch or another PeerAuthorization than the one
-// the receiver holds ends the attempt.
+// the peer's challenge. A Hello that names another PeerConnection, another
+// participant, an unexpected epoch or another PeerAuthorization than the one
+// the receiver holds ends the PeerConnection.
 message Hello {
-  // The attempt this PeerConnection belongs to (Signal.attempt_id).
-  bytes attempt_id = 1;
-  // The logical connection.
-  uint64 connection_id = 2;
-  // The epoch of this path, chosen by the participant: 1 for the first attempt
-  // of the connection, then one more than the committed epoch, since the
-  // session may have taken an earlier attempt that the participant did not. The
-  // session accepts one more than its committed epoch, or 1 while no path has
-  // carried the connection, and greets with the same epoch.
+  // The PeerConnection (Signal.peer_connection_id).
+  bytes peer_connection_id = 1;
+  // The participant.
+  uint64 participant_id = 2;
+  // The epoch of this path, chosen by the participant: 1 for its first
+  // PeerConnection, then one more than the committed epoch, since the session
+  // may have taken an earlier PeerConnection that the participant did not.
+  // The session accepts one more than its committed epoch, or 1 while no path
+  // has carried the connection, and greets with the same epoch.
   uint64 epoch = 3;
   // 32 unpredictable bytes.
   bytes challenge = 4;
   // The peer's challenge. Empty in the first Hello.
   bytes response = 5;
   // SHA-256 of the bytes of the first PeerAuthorization the service signed
-  // for this attempt (SignedPeerAuthorization.authorization). Renewed ones do
-  // not change it.
+  // for this PeerConnection (SignedPeerAuthorization.authorization). Renewed
+  // ones do not change it.
   bytes authorization_sha256 = 6;
   // The Ed25519 public key (RFC 8032) that vouches for the sender's DTLS
   // certificate: the machine key for the Agent, the participant's own key for
@@ -101,8 +101,8 @@ message Hello {
   // than the one in the participant's authorization.
   bytes public_key = 7;
   // Ed25519 signature by public_key over the UTF-8 string
-  // "leaflow.fleet.transport.v1.Hello", one zero byte, attempt_id,
-  // connection_id as 8 big-endian bytes, one byte for the role of the
+  // "leaflow.fleet.transport.v1.Hello", one zero byte, peer_connection_id,
+  // participant_id as 8 big-endian bytes, one byte for the role of the
   // sender (1 participant, 2 Agent) and the SHA-256 fingerprint of the
   // sender's own DTLS certificate (RFC 8122).
   bytes dtls_attestation = 8;
@@ -114,10 +114,10 @@ message Hello {
   uint64 initial_max_data = 10;
   // The largest Datagram.data, in bytes, the sender accepts. 0: none.
   uint32 max_datagram_size = 11;
-  // 16 bytes that identify the process holding this end of the connection.
-  // It stays the same across migrations; a migration that reaches another
-  // owner ends the connection.
-  bytes owner_id = 12;
+  // 16 bytes that identify the process instance holding this end of the
+  // connection. It stays the same across migrations; a migration that reaches
+  // another instance ends the connection.
+  bytes instance_id = 12;
 }
 
 // One step of a logical channel. The sender numbers the envelopes of each
@@ -241,8 +241,8 @@ message Datagram {
 message Checkpoint {
   // The epoch the checkpoint belongs to.
   uint64 epoch = 1;
-  // Hello.owner_id of the end that took it.
-  bytes owner_id = 2;
+  // Hello.instance_id of the end that took it.
+  bytes instance_id = 2;
   // The last admitted envelope of every live channel, at most 4096.
   repeated ChannelCursor cursors = 3;
   // Channels both ends have closed, compacted into ranges. Envelopes of these
@@ -278,8 +278,8 @@ message RetiredRange {
 // participant starts a migration: when the session's side of the path fails,
 // the participant's side fails too.
 message Migration {
-  // The logical connection.
-  uint64 connection_id = 1;
+  // The participant.
+  uint64 participant_id = 1;
   // The step.
   oneof step {
     // The participant's checkpoint for the next epoch.
@@ -299,24 +299,24 @@ message Close {
   google.rpc.Status status = 1;
 }
 
-// Signaling for one PeerConnection attempt (RFC 9429 JSEP; RFC 8838 trickle
-// ICE) between the session process and the service, which stands for the
+// Signaling for one PeerConnection (RFC 9429 JSEP; RFC 8838 trickle ICE)
+// between the session process and the service, which stands for the
 // participant: the participant sends its offer, its candidates and the end of
-// an attempt through the Fleet API, and receives the session's answer,
+// a PeerConnection through the Fleet API, and receives the session's answer,
 // candidates and the PeerAuthorization in the answer of its request. The
 // service passes on the session's candidates that arrive until the session
 // sends end_of_candidates, and at most 2 seconds after the answer; the session
 // therefore sends end_of_candidates as soon as it gathered.
 message Signal {
-  // 16 random bytes the service chose for the attempt: the attempt_id of the
-  // Fleet API, a UUID.
-  bytes attempt_id = 1;
-  // The logical connection.
-  uint64 connection_id = 2;
-  // Increases with every signal of one sender in the attempt.
+  // 16 random bytes the service chose for the PeerConnection: the id of the
+  // PeerConnection in the Fleet API, a UUID.
+  bytes peer_connection_id = 1;
+  // The participant.
+  uint64 participant_id = 2;
+  // Increases with every signal of one sender for the PeerConnection.
   uint64 sequence = 3;
-  // The ICE servers and policy for the session's end of the attempt. Set by
-  // the service on the offer.
+  // The ICE servers and policy for the session's end of the PeerConnection.
+  // Set by the service on the offer.
   RtcConfiguration configuration = 4;
   // The signal.
   oneof signal {
@@ -326,12 +326,12 @@ message Signal {
     IceCandidate candidate = 6;
     // No more candidates from the sender (RFC 8838).
     bool end_of_candidates = 7;
-    // The sender gave up the attempt: the participant ended it through the
-    // Fleet API, or the session could not take it. The participant starts
+    // The sender gave up the PeerConnection: the participant ended it through
+    // the Fleet API, or the session could not take it. The participant starts
     // another one.
     bool abort = 8;
-    // The service's authorization of the attempt, sent to the session this
-    // way and to the participant with the answer, before either may send
+    // The service's authorization of the PeerConnection, sent to the session
+    // this way and to the participant with the answer, before either may send
     // application data. Renewed ones reach the session this way too, and the
     // participant in the answer of its renewal through the Fleet API.
     SignedPeerAuthorization authorization = 9;
@@ -357,7 +357,7 @@ enum SdpType {
 // An ICE candidate (RFC 8445), as in W3C RTCIceCandidateInit.
 message IceCandidate {
   // The candidate attribute, at most 4096 bytes. At most 64 per end and
-  // attempt.
+  // PeerConnection.
   string candidate = 1;
   // The media stream identification tag of the candidate (RFC 5888).
   string sdp_mid = 2;
@@ -395,7 +395,7 @@ enum IceTransportPolicy {
 
 // A PeerAuthorization signed by the service.
 message SignedPeerAuthorization {
-  // The service key that signed it.
+  // The signing key that signed it.
   string key_id = 1;
   // A serialized PeerAuthorization.
   bytes authorization = 2;
@@ -405,8 +405,8 @@ message SignedPeerAuthorization {
   bytes signature = 3;
 }
 
-// The service's statement that one attempt joins this participant to this
-// session with these two DTLS certificates. Both ends check the signature,
+// The service's statement that one PeerConnection joins this participant to
+// this session with these two DTLS certificates. Both ends check the signature,
 // every field and the lifetime before sending application data; DTLS alone does
 // not authorize.
 message PeerAuthorization {
@@ -416,23 +416,23 @@ message PeerAuthorization {
   string machine_id = 2;
   // The session.
   string session_id = 3;
-  // The logical connection of the participant.
-  uint64 connection_id = 4;
-  // The attempt.
-  bytes attempt_id = 5;
+  // The participant.
+  uint64 participant_id = 4;
+  // The PeerConnection.
+  bytes peer_connection_id = 5;
   // SHA-256 fingerprint of the participant's DTLS certificate, from its offer.
   bytes participant_fingerprint_sha256 = 6;
   // SHA-256 fingerprint of the Agent's DTLS certificate, from its answer.
   bytes agent_fingerprint_sha256 = 7;
-  // SHA-256 of the participant's authorization that both ends hold for the
-  // connection: the exact serialized bytes the service signed. A renewal
+  // SHA-256 of the participant's authorization that both ends hold: the exact
+  // serialized bytes the service signed. A renewal
   // names the participant's current authorization, which may be a renewed one
   // through the Fleet API.
   bytes participant_authorization_sha256 = 8;
   // When the service signed it.
   google.protobuf.Timestamp issued_at = 9;
-  // The end of the attempt's authorization: the end of the participant's
-  // current authorization.
+  // The end of the PeerConnection's authorization: the end of the
+  // participant's current authorization.
   google.protobuf.Timestamp expires_at = 10;
   // The end of the current lease, at most 30 seconds after issued_at and no
   // later than expires_at. The participant renews it through the Fleet API with

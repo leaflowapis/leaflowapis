@@ -119,8 +119,8 @@ service SessionRegistryService {
   rpc ReportSessions(ReportSessionsRequest) returns (ReportSessionsResponse) {
     option idempotency_level = IDEMPOTENT;
   }
-  // Reports that a session changed state or its session process stopped or
-  // started. Only for a session the service opened or saw in a full report.
+  // Reports that a session changed state. Only for a session the service
+  // opened or saw in a full report.
   // CLOSED is final: later reports of the session are ignored.
   rpc ReportSessionState(ReportSessionStateRequest) returns (ReportSessionStateResponse) {
     option idempotency_level = IDEMPOTENT;
@@ -147,8 +147,6 @@ message Session {
   google.protobuf.Timestamp created_at = 7;
   // The last input of a person in the session. Informational.
   google.protobuf.Timestamp last_input_at = 8;
-  // The session process runs. False while it restarts.
-  bool session_process_running = 9;
   // Why the session ended. CLOSED only.
   SessionCloseReason close_reason = 10;
   // Plain text for logs about close_reason, at most 1024 bytes.
@@ -159,16 +157,13 @@ message Session {
   repeated google.protobuf.Any details = 12;
 }
 
-// Where a session is in its life. ONLINE, ACTIVE and CLOSING are the logind
-// session states (org.freedesktop.login1 Session.State).
+// Where a session is in its life.
 enum SessionState {
   SESSION_STATE_UNSPECIFIED = 0;
   // The PAM session opens and the session process starts.
   SESSION_STATE_OPENING = 1;
-  // Logged in but not in the foreground.
-  SESSION_STATE_ONLINE = 2;
-  // Logged in and active: a running session.
-  SESSION_STATE_ACTIVE = 3;
+  // Logged in: the session runs.
+  SESSION_STATE_OPEN = 2;
   // Logged out; its processes are being cleaned up.
   SESSION_STATE_CLOSING = 4;
   // Gone.
@@ -186,16 +181,15 @@ enum SessionCloseReason {
   SESSION_CLOSE_REASON_LOGOUT = 3;
   // SessionPolicy.disconnected_timeout passed.
   SESSION_CLOSE_REASON_DISCONNECTED_TIMEOUT = 4;
-  // SessionPolicy.no_client_timeout passed.
-  SESSION_CLOSE_REASON_NO_CLIENT_TIMEOUT = 5;
+  // SessionPolicy.no_participant_timeout passed.
+  SESSION_CLOSE_REASON_NO_PARTICIPANT_TIMEOUT = 5;
   // SessionPolicy.max_lifetime passed.
   SESSION_CLOSE_REASON_MAX_LIFETIME = 6;
   // What an option added and the session cannot go on without exited
   // unexpectedly, such as the X server of a desktop.
   SESSION_CLOSE_REASON_DISPLAY_EXIT = 7;
-  // The process that held the session died, and the daemon cleaned up what
-  // was left.
-  SESSION_CLOSE_REASON_HELPER_LOST = 8;
+  // The session process died, and the daemon cleaned up what was left.
+  SESSION_CLOSE_REASON_PROCESS_LOST = 8;
   // Opening failed and was undone.
   SESSION_CLOSE_REASON_OPEN_FAILED = 9;
   // The account may no longer log in to the machine.
@@ -211,7 +205,7 @@ message SessionPolicy {
   // Ends the session this long after it opened.
   google.protobuf.Duration max_lifetime = 2;
   // Ends the session when no participant came this long after it opened.
-  google.protobuf.Duration no_client_timeout = 3;
+  google.protobuf.Duration no_participant_timeout = 3;
   // Limits on the user's resources.
   ResourceControl resource_control = 4;
 }
@@ -254,7 +248,7 @@ message OpenSessionRequest {
 
 // The response of OpenSession.
 message OpenSessionResponse {
-  // The session, ACTIVE.
+  // The session, OPEN.
   Session session = 1;
 }
 

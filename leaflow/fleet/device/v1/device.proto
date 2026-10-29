@@ -68,8 +68,8 @@ message DeviceDemand {
   // The applications using it, as far as the session can tell them apart,
   // at most 32. Empty does not mean that nothing uses it.
   repeated DeviceConsumer consumers = 5;
-  // The connection that provides the device, as in ParticipantList. 0: none.
-  uint64 provider_connection_id = 6;
+  // The participant that provides the device, as in ParticipantList. 0: none.
+  uint64 provider_participant_id = 6;
 }
 
 // Whether something uses a device.

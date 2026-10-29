@@ -160,18 +160,18 @@ info:
        one second has passed, so that the offer carries them.
     3. Join with `POST /api/v1/sessions/{sessionId}/participants`, sending the public key and the
        offer. The answer carries the participant's signed authorization, the keys the service
-       signs with, and the attempt: the session's SDP answer, its ICE candidates and the signed
-       PeerAuthorization. Pass candidates gathered later with
-       `POST …/participants/{connectionId}/attempts/{attemptId}/candidates`.
-    4. Renew the participant with `POST …/participants/{connectionId}:renew` well before
+       signs with, and the first PeerConnection: the session's SDP answer, its ICE candidates and
+       the signed PeerAuthorization. Pass candidates gathered later with
+       `POST …/participants/{participantId}/peer-connections/{peerConnectionId}/candidates`.
+    4. Renew the participant with `POST …/participants/{participantId}:renew` well before
        `lease_expires_at`, every 15 seconds, presenting the PeerAuthorization of each
        PeerConnection; the answer renews them. A participant whose lease runs out ends, and its
        PeerConnections stop within 30 seconds of their last lease.
     5. When a path fails, start another PeerConnection with
-       `POST …/participants/{connectionId}/attempts` and move the connection to it with
-       `:prepare-migration` and `:commit-migration`. Abandon an attempt with
-       `DELETE …/attempts/{attemptId}`.
-    6. Leave with `DELETE …/participants/{connectionId}`.
+       `POST …/participants/{participantId}/peer-connections` and move the connection to it with
+       `:prepareMigration` and `:commitMigration`. Abandon a PeerConnection that does not
+       connect with `DELETE …/peer-connections/{peerConnectionId}`.
+    6. Leave with `DELETE …/participants/{participantId}`.
 
     Signaling travels only through these requests; a participant holds no other connection to
     the service.
@@ -179,15 +179,16 @@ info:
     What a participant may do in a session is decided when it is created, from the caller's
     permissions and what the request asks for, and does not change afterwards. Participants are not
     told apart by kind: a person in a browser and a program that operates the session are both
-    participants, named by the `client_id` label they choose, and either can be disconnected.
+    participants, named by the `client_name` they choose, and either can be disconnected.
 
     Every participant that ends, including through `DELETE`, is announced through EventBus as
-    `leaflow.fleet.participant.closed`, addressed to its user in the current project, with its
-    `session_id`, `connection_id` (a decimal string) and `reason`: the name of the
-    `CloseReason` of `leaflow/fleet/control/v1/control.proto` in lower case without its prefix,
-    such as `detach_request` when it was ended through `DELETE`, `ping_timeout` when its lease
-    ran out, `session_exit` when its session ended, `session_restarting` when the session's process
-    did not come back in time, or `permission_denied` when its rights were withdrawn.
+    `leaflow.fleet.participant.ended`, addressed to its user in the current project, with its
+    `session_id`, `participant_id` (a decimal string) and `reason`: `left` when its user ended it,
+    `removed` when someone else did, `lease_expired` when it was not renewed in time,
+    `session_ended` when its session ended, `session_process_lost` when the session's process did
+    not come back in time, `rights_changed` when its user's permissions no longer grant what it
+    holds, `machine_removed` when its machine was removed, or `key_revoked` when the key that signed
+    its authorization was revoked. A participant whose creation failed is not announced.
 servers:
   - url: https://fleet.leaflow.cloud
     description: Machines, accounts, commands, sessions and participants
@@ -1294,8 +1295,8 @@ paths:
       description: |-
         Admits one participant with the given public key to the session: signs its authorization,
         has the session accept it, and starts its first PeerConnection with the offer. The answer
-        carries the participant, its authorization and the attempt with the session's answer. The
-        participant lasts while it is renewed.
+        carries the participant, its authorization and the PeerConnection with the session's
+        answer. The participant lasts while it is renewed.
 
         The owner of a session may operate it. Joining another member's session requires
         `fleet:sessions.view`, which admits watching only, or
@@ -1313,8 +1314,8 @@ paths:
           time, such as while it restarts; try again after the error's `retry_delay`;
         - `PARTICIPANT_LIMIT_REACHED` when the session has as many participants as it admits;
         - `PARTICIPANT_REFUSED` when the session refused the participant;
-        - `ATTEMPT_ABORTED` when the session gave up the PeerConnection; try again with a new
-          offer.
+        - `PEER_CONNECTION_ABORTED` when the session gave up the PeerConnection; try again with a
+          new offer.
       operationId: create-participant
       tags:
         - Participant
@@ -1332,7 +1333,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ParticipantConnection"
+                $ref: "#/components/schemas/CreateParticipantResponse"
         default:
           description: Error
           content:
@@ -1360,15 +1361,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/participants/{connectionId}:renew:
+  /api/v1/sessions/{sessionId}/participants/{participantId}:renew:
     post:
       summary: Renew a participant
       description: |-
         Extends the participant's lease and returns renewed PeerAuthorizations for the
-        PeerConnections whose current ones the request presents; the session receives them too.
-        A presented authorization that the service did not sign for this participant, or whose
-        attempt has ended, is left out of the answer. When the participant's authorization nears
-        its end, the answer carries a renewed one, which the session already holds.
+        PeerConnections whose current ones the request presents; the session receives them too. A
+        presented authorization that the service did not sign for this participant, or whose
+        PeerConnection has ended, is left out of the answer. When the participant's authorization
+        nears its end, the answer carries a renewed one, which the session already holds.
 
         Only the participant's user may renew it.
 
@@ -1381,7 +1382,7 @@ paths:
         - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/ConnectionId"
+        - $ref: "#/components/parameters/ParticipantId"
       requestBody:
         required: true
         content:
@@ -1401,7 +1402,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/participants/{connectionId}:prepare-migration:
+  /api/v1/sessions/{sessionId}/participants/{participantId}:prepareMigration:
     post:
       summary: Prepare a migration
       description: |-
@@ -1421,7 +1422,7 @@ paths:
         - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/ConnectionId"
+        - $ref: "#/components/parameters/ParticipantId"
       requestBody:
         required: true
         content:
@@ -1441,7 +1442,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/participants/{connectionId}:commit-migration:
+  /api/v1/sessions/{sessionId}/participants/{participantId}:commitMigration:
     post:
       summary: Commit a migration
       description: |-
@@ -1461,7 +1462,7 @@ paths:
         - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/ConnectionId"
+        - $ref: "#/components/parameters/ParticipantId"
       requestBody:
         required: true
         content:
@@ -1481,67 +1482,67 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/participants/{connectionId}/attempts:
+  /api/v1/sessions/{sessionId}/participants/{participantId}/peer-connections:
     post:
       summary: Start a PeerConnection
       description: |-
         Starts another PeerConnection of the participant with the offer, such as after a path
         failed, and returns the session's answer, its ICE candidates and the signed
-        PeerAuthorization. Move the connection to it with `prepare-participant-migration` and
-        `commit-participant-migration`.
+        PeerAuthorization. Move the participant's connection to it with
+        `prepare-participant-migration` and `commit-participant-migration`.
 
         Only the participant's user may start one.
 
         Fails with:
         - `PARTICIPANT_NOT_FOUND` when the participant has ended;
         - `OFFER_INVALID` when the offer is not an SDP offer that names a SHA-256 DTLS fingerprint;
-        - `TOO_MANY_ATTEMPTS` when the participant started too many PeerConnections in the last
-          minute; try again after the error's `retry_delay`;
+        - `RATE_LIMIT_EXCEEDED` when the participant started too many PeerConnections in the
+          last minute; try again after the error's `retry_delay`;
         - `SESSION_UNAVAILABLE` when the session's process is not connected or did not answer in
           time; try again after the error's `retry_delay`;
-        - `ATTEMPT_ABORTED` when the session gave up the PeerConnection; start another.
-      operationId: create-attempt
+        - `PEER_CONNECTION_ABORTED` when the session gave up the PeerConnection; start another.
+      operationId: create-peer-connection
       tags:
         - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/ConnectionId"
+        - $ref: "#/components/parameters/ParticipantId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateAttemptRequest"
+              $ref: "#/components/schemas/CreatePeerConnectionRequest"
       responses:
         "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Attempt"
+                $ref: "#/components/schemas/PeerConnection"
         default:
           description: Error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/participants/{connectionId}/attempts/{attemptId}:
+  /api/v1/sessions/{sessionId}/participants/{participantId}/peer-connections/{peerConnectionId}:
     delete:
       summary: Abandon a PeerConnection
       description: |-
-        Tells the session to give up the attempt and close its PeerConnection. Abandoning an
-        attempt that has ended succeeds.
+        Tells the session to give up the PeerConnection and close it. Abandoning a PeerConnection
+        that has ended succeeds.
 
         Only the participant's user may abandon it.
 
         Fails with `PARTICIPANT_NOT_FOUND` when the participant has ended.
-      operationId: delete-attempt
+      operationId: delete-peer-connection
       tags:
         - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/ConnectionId"
-        - $ref: "#/components/parameters/AttemptId"
+        - $ref: "#/components/parameters/ParticipantId"
+        - $ref: "#/components/parameters/PeerConnectionId"
       responses:
         "204":
           description: Abandoned
@@ -1551,13 +1552,13 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/participants/{connectionId}/attempts/{attemptId}/candidates:
+  /api/v1/sessions/{sessionId}/participants/{participantId}/peer-connections/{peerConnectionId}/candidates:
     post:
       summary: Add ICE candidates to a PeerConnection
       description: |-
         Passes the ICE candidates the participant gathered after its offer to the session, and with
-        `end_of_candidates`, that it has gathered all (RFC 8838). The session ignores those of an
-        attempt that has ended.
+        `end_of_candidates`, that it has gathered all (RFC 8838). The session ignores those of a
+        PeerConnection that has ended.
 
         Only the participant's user may add them.
 
@@ -1565,19 +1566,19 @@ paths:
         - `PARTICIPANT_NOT_FOUND` when the participant has ended;
         - `SESSION_UNAVAILABLE` when the session's process is not connected; try again after the
           error's `retry_delay`.
-      operationId: create-attempt-candidates
+      operationId: create-peer-connection-candidates
       tags:
         - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/ConnectionId"
-        - $ref: "#/components/parameters/AttemptId"
+        - $ref: "#/components/parameters/ParticipantId"
+        - $ref: "#/components/parameters/PeerConnectionId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateAttemptCandidatesRequest"
+              $ref: "#/components/schemas/CreatePeerConnectionCandidatesRequest"
       responses:
         "204":
           description: Passed on
@@ -1587,7 +1588,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/participants/{connectionId}:
+  /api/v1/sessions/{sessionId}/participants/{participantId}:
     get:
       summary: Get a participant of a session
       description: Returns a participant of the session.
@@ -1596,7 +1597,7 @@ paths:
         - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/ConnectionId"
+        - $ref: "#/components/parameters/ParticipantId"
       responses:
         "200":
           description: OK
@@ -1623,7 +1624,7 @@ paths:
         - Participant
       parameters:
         - $ref: "#/components/parameters/SessionId"
-        - $ref: "#/components/parameters/ConnectionId"
+        - $ref: "#/components/parameters/ParticipantId"
       responses:
         "204":
           description: Disconnected
@@ -1680,16 +1681,16 @@ components:
       schema:
         type: string
         format: uuid
-    ConnectionId:
-      name: connectionId
+    ParticipantId:
+      name: participantId
       in: path
       required: true
       schema:
         type: integer
         format: int64
         minimum: 1
-    AttemptId:
-      name: attemptId
+    PeerConnectionId:
+      name: peerConnectionId
       in: path
       required: true
       schema:
@@ -2289,21 +2290,18 @@ components:
         - desktop
         - seamless
     SessionState:
-      description: |-
-        `opening` starts; `online` is logged in but not in the foreground; `active` runs;
-        `closing` is ending; `closed` has ended.
+      description: '`opening` starts; `open` runs; `closing` is ending; `closed` has ended.'
       type: string
       enum:
         - opening
-        - online
-        - active
+        - open
         - closing
         - closed
     SessionCloseReason:
       description: |-
         Why a session ended. `close_requested` and `terminate_requested` follow a request;
-        `logout` the user logged out; `disconnected_timeout`, `no_client_timeout` and
-        `max_lifetime` a time limit passed; `display_exit` and `helper_lost` the session failed;
+        `logout` the user logged out; `disconnected_timeout`, `no_participant_timeout` and
+        `max_lifetime` a time limit passed; `display_exit` and `process_lost` the session failed;
         `open_failed` it never opened; `access_revoked` its user may no longer log in;
         `machine_restarted` the machine restarted; `unknown` the machine no longer reports it.
       type: string
@@ -2312,10 +2310,10 @@ components:
         - terminate_requested
         - logout
         - disconnected_timeout
-        - no_client_timeout
+        - no_participant_timeout
         - max_lifetime
         - display_exit
-        - helper_lost
+        - process_lost
         - open_failed
         - access_revoked
         - machine_restarted
@@ -2329,7 +2327,7 @@ components:
         - username
         - state
         - desktop
-        - process_running
+        - process_connected
         - last_input_at
         - close_reason
         - created_at
@@ -2352,10 +2350,11 @@ components:
           oneOf:
             - $ref: "#/components/schemas/DesktopState"
             - type: "null"
-        process_running:
+        process_connected:
           description: |-
-            The session can admit participants. False while its process restarts; requests that
-            signal are then answered with `SESSION_UNAVAILABLE` and succeed again shortly.
+            The session's process is connected to the service, so participants can join and start
+            PeerConnections. False while it restarts; such requests are then answered with
+            `SESSION_UNAVAILABLE` and succeed again shortly.
           type: boolean
         last_input_at:
           description: The last input of a person in the session
@@ -2673,35 +2672,33 @@ components:
     ParticipantResource:
       type: object
       required:
-        - connection_id
+        - id
         - user
-        - client_id
+        - client_name
         - read_only
-        - policies
-        - remote_address
+        - permissions
+        - source_address
         - created_at
       properties:
-        connection_id:
-          description: The participant's connection
+        id:
+          description: The participant; `participant_id` of the protocol
           type: integer
           format: int64
         user:
           $ref: "#/components/schemas/NamedIdentity"
-        client_id:
-          description: The label the participant's client chose, such as `console` or `assistant`; neither unique nor verified
+        client_name:
+          description: The name the participant's client gave itself, such as `console` or `assistant`; neither unique nor verified
           type: string
         read_only:
           description: The participant may only watch
           type: boolean
-        policies:
-          description: |-
-            The capabilities granted to the participant, as the full names of their policy messages,
-            such as `leaflow.fleet.filetransfer.v1.FileTransferPolicy`
+        permissions:
+          description: The capabilities granted to the participant, as permission names such as `fleet:files.transfer`
           type: array
           items:
             type: string
-        remote_address:
-          description: The IP address the participant joined from
+        source_address:
+          description: The IP address the participant joined from; empty when it joined through a platform service
           type: string
         created_at:
           description: When the participant joined
@@ -2718,7 +2715,7 @@ components:
           items:
             $ref: "#/components/schemas/ParticipantResource"
       additionalProperties: false
-    Signed:
+    SignedMessage:
       description: |-
         A message the service signed: the serialized message, the key that signed it and the
         signature, as in `SignedAuthorization` and `SignedPeerAuthorization` of the protocol. Each
@@ -2739,16 +2736,16 @@ components:
           type: string
           format: byte
       additionalProperties: false
-    ServiceKey:
-      description: A key the service signs with, as `ServiceKeys` of the protocol
+    SigningKey:
+      description: A key the service signs with, as `SigningKeys` of the protocol
       type: object
       required:
         - key_id
-        - ed25519
+        - public_key
       properties:
         key_id:
           type: string
-        ed25519:
+        public_key:
           $ref: "#/components/schemas/PublicKey"
       additionalProperties: false
     IceServer:
@@ -2805,20 +2802,20 @@ components:
           type: string
           maxLength: 64
       additionalProperties: false
-    Attempt:
+    PeerConnection:
       description: |-
         One PeerConnection of a participant, as the session answered it. Set the answer as the
         remote description, add the candidates, and verify the authorization before sending
-        application data; its SHA-256 goes into `Hello.authorization_sha256`.
+        application data; the SHA-256 of its `message` goes into `Hello.authorization_sha256`.
       type: object
       required:
-        - attempt_id
+        - id
         - answer
         - candidates
         - authorization
       properties:
-        attempt_id:
-          description: The attempt, as `attempt_id` of the transport protocol in its 16 bytes
+        id:
+          description: The PeerConnection; its 16 bytes are `peer_connection_id` of the transport protocol
           type: string
           format: uuid
         answer:
@@ -2832,42 +2829,42 @@ components:
           items:
             $ref: "#/components/schemas/IceCandidate"
         authorization:
-          description: The signed `PeerAuthorization` of the attempt, the same one the session holds
+          description: The signed `PeerAuthorization` of the PeerConnection, the same one the session holds
           allOf:
-            - $ref: "#/components/schemas/Signed"
+            - $ref: "#/components/schemas/SignedMessage"
       additionalProperties: false
-    ParticipantConnection:
+    CreateParticipantResponse:
       type: object
       required:
         - participant
         - authorization
         - rtc_configuration
-        - service_keys
+        - signing_keys
         - lease_expires_at
-        - attempt
+        - peer_connection
       properties:
         participant:
           $ref: "#/components/schemas/ParticipantResource"
         authorization:
           description: The participant's signed `Authorization`, the same one the session holds
           allOf:
-            - $ref: "#/components/schemas/Signed"
+            - $ref: "#/components/schemas/SignedMessage"
         rtc_configuration:
           description: The ICE servers for later PeerConnections of the participant
           allOf:
             - $ref: "#/components/schemas/RtcConfiguration"
-        service_keys:
+        signing_keys:
           type: array
           items:
-            $ref: "#/components/schemas/ServiceKey"
+            $ref: "#/components/schemas/SigningKey"
         lease_expires_at:
           description: When the participant ends unless renewed
           type: string
           format: date-time
-        attempt:
+        peer_connection:
           description: The first PeerConnection, started with the request's offer
           allOf:
-            - $ref: "#/components/schemas/Attempt"
+            - $ref: "#/components/schemas/PeerConnection"
       additionalProperties: false
     RenewParticipantRequest:
       type: object
@@ -2877,7 +2874,7 @@ components:
           type: array
           maxItems: 8
           items:
-            $ref: "#/components/schemas/Signed"
+            $ref: "#/components/schemas/SignedMessage"
       additionalProperties: false
     RenewParticipantResponse:
       type: object
@@ -2885,7 +2882,7 @@ components:
         - lease_expires_at
         - peer_authorizations
         - rtc_configuration
-        - service_keys
+        - signing_keys
       properties:
         lease_expires_at:
           type: string
@@ -2894,17 +2891,17 @@ components:
           description: The renewed signed `PeerAuthorization`s, in the order of the request
           type: array
           items:
-            $ref: "#/components/schemas/Signed"
+            $ref: "#/components/schemas/SignedMessage"
         authorization:
           description: A renewed signed `Authorization`, when the current one nears its end
           allOf:
-            - $ref: "#/components/schemas/Signed"
+            - $ref: "#/components/schemas/SignedMessage"
         rtc_configuration:
           $ref: "#/components/schemas/RtcConfiguration"
-        service_keys:
+        signing_keys:
           type: array
           items:
-            $ref: "#/components/schemas/ServiceKey"
+            $ref: "#/components/schemas/SigningKey"
       additionalProperties: false
     CreateParticipantRequest:
       type: object
@@ -2914,8 +2911,8 @@ components:
       properties:
         public_key:
           $ref: "#/components/schemas/PublicKey"
-        client_id:
-          description: A label for the client that joins, such as `console` or `assistant`, shown to the other participants. It is neither unique nor verified.
+        client_name:
+          description: A name for the client that joins, such as `console` or `assistant`, shown to the other participants. It is neither unique nor verified.
           type: string
           maxLength: 64
         read_only:
@@ -2947,7 +2944,7 @@ components:
           type: string
           maxLength: 65536
       additionalProperties: false
-    CreateAttemptRequest:
+    CreatePeerConnectionRequest:
       type: object
       required:
         - offer
@@ -2959,7 +2956,7 @@ components:
           type: string
           maxLength: 65536
       additionalProperties: false
-    CreateAttemptCandidatesRequest:
+    CreatePeerConnectionCandidatesRequest:
       type: object
       properties:
         candidates:

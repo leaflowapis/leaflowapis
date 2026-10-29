@@ -87,15 +87,15 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // them.
 //
 // Signaling. A participant signals through the Fleet API: the service passes
-// its offers, candidates, abandoned attempts and migration steps to the session
-// process as transport.v1 Signal and Migration, and answers the participant's
-// request with what the session sends back for the same connection_id and
-// attempt. The session process sends Signal and Migration on its control
-// connection. The service drops one that no request of the participant waits
-// for, such as a candidate that arrives after the answer was returned. It
-// closes with POLICY_VIOLATION a session process's connection that names a
-// participant never attached to its session, and a daemon's connection that
-// sends either.
+// its offers, candidates, abandoned PeerConnections and migration steps to the
+// session process as transport.v1 Signal and Migration, and answers the
+// participant's request with what the session sends back for the same
+// participant and PeerConnection. The session process sends Signal and
+// Migration on its control connection. The service drops one that no request
+// of the participant waits for, such as a candidate that arrives after the
+// answer was returned. It closes with POLICY_VIOLATION a session process's
+// connection that names a participant never attached to its session, and a
+// daemon's connection that sends either.
 //
 // Participants. A participant is created and kept through the Fleet API
 // (leaflow/fleet/v1/openapi.yaml): creating it signs an Authorization for the
@@ -128,9 +128,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 //   - for a daemon, AUTHENTICATION_FAILED for its machine credential (the
 //     machine enrolls again), PERMISSION_DENIED (the machine was removed)
 //     and an enrollment DENIED (leaflow.fleet.machine.v1);
-//   - for a daemon closed with NEW_CLIENT that holds no newer connection of
-//     its own, nothing: another process uses the machine's identity, such as
-//     on a copied disk. It connects again every 10 minutes and logs it;
+//   - for a daemon closed with CONNECTION_REPLACED that holds no newer
+//     connection of its own, nothing: another process uses the machine's
+//     identity, such as on a copied disk. It connects again every 10
+//     minutes and logs it;
 //   - for a session process, SESSION_NOT_FOUND and SESSION_EXIT; the
 //     process leaves its session running, and the service ends it if it
 //     should no longer run (leaflow.fleet.host.v1).
@@ -151,9 +152,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // participants for Welcome.resume_grace. A session process that connects again
 // within it with the same session key keeps them; it may connect at any address
 // of the service, since nothing ties it to the one it used before. Nothing sent
-// before is replayed: a PeerConnection attempt whose signaling was cut off is
+// before is replayed: a PeerConnection whose signaling was cut off is
 // abandoned, and the participant starts another one. When the grace passes, the
-// service ends the session's participants with SESSION_RESTARTING.
+// service ends the session's participants with SESSION_PROCESS_LOST.
 //
 // Session lifetime. A session process sends Close with SESSION_EXIT just
 // before its session ends, and the service then ends the session's
@@ -161,7 +162,7 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // answers a participant that signals with SESSION_UNAVAILABLE and a
 // retry_delay.
 //
-// Keys. The service signs with the Ed25519 keys of ServiceKeys, which it
+// Keys. The service signs with the Ed25519 keys of SigningKeys, which it
 // sends in Welcome and again on every connection whenever the set changes,
 // and which the Fleet API returns with what it signs for participants. It
 // adds a key at least 5 minutes before it signs with it, and removes one only
@@ -225,7 +226,7 @@ message ServerMessage {
     // session processes only.
     leaflow.fleet.transport.v1.Migration migration = 9;
     // The keys the service signs with, after they changed.
-    ServiceKeys service_keys = 10;
+    SigningKeys signing_keys = 10;
     // The service closes the connection.
     Close close = 11;
     // A piece of a message too large to send whole.
@@ -341,7 +342,7 @@ message Welcome {
   // The session. Session processes only.
   string session_id = 3;
   // The keys the service signs with.
-  ServiceKeys service_keys = 4;
+  SigningKeys signing_keys = 4;
   // How long the service keeps the session's participants when this connection
   // drops. Session processes only.
   google.protobuf.Duration resume_grace = 5;
@@ -351,7 +352,7 @@ message Welcome {
 }
 
 // The keys the service signs with, all of them. Replaces the previous set.
-message ServiceKeys {
+message SigningKeys {
   // At most 8.
   repeated PublicKey keys = 1;
 }
@@ -377,16 +378,16 @@ message Authorization {
   string machine_id = 2;
   // The session.
   string session_id = 3;
-  // The participant's connection.
-  uint64 connection_id = 4;
+  // The participant.
+  uint64 participant_id = 4;
   // The platform user the participant acts for.
   string user_id = 5;
   // The user's name, plain text.
   string display_name = 6;
-  // The label the client gave itself when it created the participant, such
+  // The name the client gave itself when it created the participant, such
   // as "console" or "assistant", at most 64 bytes. Neither unique nor
   // verified: it lets people tell participants apart and grants nothing.
-  string client_id = 7;
+  string client_name = 7;
   // The participant's Ed25519 public key, 32 bytes. The session accepts only
   // a PeerConnection whose participant Hello is signed with it
   // (leaflow.fleet.transport.v1).
@@ -458,8 +459,7 @@ message Close {
   google.protobuf.Duration retry_delay = 3;
 }
 
-// Why a control connection ends, and why a participant ends
-// (DetachParticipantRequest.reason).
+// Why a control connection ends.
 enum CloseReason {
   CLOSE_REASON_UNSPECIFIED = 0;
   // An ordinary close. Either side.
@@ -470,8 +470,7 @@ enum CloseReason {
   CLOSE_REASON_SERVER_SHUTDOWN = 3;
   // The service restarts; connect again after retry_delay. Service only.
   CLOSE_REASON_SERVER_UPGRADE = 4;
-  // Nothing arrived for idle_timeout. Either side. For a participant, its
-  // lease ran out.
+  // Nothing arrived for idle_timeout. Either side.
   CLOSE_REASON_PING_TIMEOUT = 5;
   // ClientHello did not arrive in time. Service only.
   CLOSE_REASON_HELLO_TIMEOUT = 6;
@@ -484,25 +483,17 @@ enum CloseReason {
   // key. For a machine credential it is final: the daemon stops and its
   // machine must enroll again. Service only.
   CLOSE_REASON_AUTHENTICATION_FAILED = 9;
-  // The endpoint is known but not allowed, such as a removed machine or a
-  // participant whose rights were withdrawn. Service only.
+  // The endpoint is known but not allowed, such as the daemon of a removed
+  // machine. Service only.
   CLOSE_REASON_PERMISSION_DENIED = 10;
   // The session named by the credential does not exist or has ended.
   // Service only.
   CLOSE_REASON_SESSION_NOT_FOUND = 11;
   // A newer connection with the same identity replaced this one, such as a
   // daemon that connected again. Service only.
-  CLOSE_REASON_NEW_CLIENT = 12;
-  // The session ended. The session process before it ends, and the service
-  // for the session's participants.
+  CLOSE_REASON_CONNECTION_REPLACED = 12;
+  // The session ends. Session process only, just before its session ends.
   CLOSE_REASON_SESSION_EXIT = 13;
-  // The session's process did not connect again within
-  // Welcome.resume_grace. Service only, for the session's participants.
-  CLOSE_REASON_SESSION_RESTARTING = 14;
-  // The participant was ended on request, such as when it left or another
-  // member disconnected it; the session goes on. Service only, for
-  // participants.
-  CLOSE_REASON_DETACH_REQUEST = 15;
   // A rule or a rate limit was broken. Either side.
   CLOSE_REASON_POLICY_VIOLATION = 16;
   // The sender failed. Either side.
@@ -519,10 +510,10 @@ enum CloseReason {
 // on its control connection; the service calls it when a participant
 // is created, renewed or ends through the Fleet API.
 service ParticipantService {
-  // Admits a participant, before any of its signaling. The session verifies the
-  // signature with a key of ServiceKeys; that issuer, machine_id and session_id
-  // are its own; and the lifetime. It then accepts the PeerConnections of
-  // connection_id whose participant Hello is signed with
+  // Admits a participant, before any of its signaling. The session verifies
+  // the signature with a key of SigningKeys; that issuer, machine_id and
+  // session_id are its own; and the lifetime. It then accepts the
+  // PeerConnections of participant_id whose participant Hello is signed with
   // participant_public_key. Attaching an attached participant again with the
   // same authorization succeeds.
   //
@@ -575,12 +566,37 @@ message UpdateParticipantAuthorizationResponse {}
 
 // The request of DetachParticipant.
 message DetachParticipantRequest {
-  // The participant's connection.
-  uint64 connection_id = 1;
-  // Why it ends, such as DETACH_REQUEST when it was ended through the Fleet
-  // API or PING_TIMEOUT when its lease ran out.
-  CloseReason reason = 2;
+  // The participant.
+  uint64 participant_id = 1;
+  // Why it ends.
+  ParticipantEndReason reason = 2;
 }
 
 // The response of DetachParticipant.
 message DetachParticipantResponse {}
+
+// Why a participant ends. The session learns it with DetachParticipant, and the
+// participant's user through the participant.ended event of the Fleet API.
+enum ParticipantEndReason {
+  PARTICIPANT_END_REASON_UNSPECIFIED = 0;
+  // Its user ended it.
+  PARTICIPANT_END_REASON_LEFT = 1;
+  // Someone else ended it, such as the owner of the session or an operator.
+  PARTICIPANT_END_REASON_REMOVED = 2;
+  // It was not renewed before its lease ran out.
+  PARTICIPANT_END_REASON_LEASE_EXPIRED = 3;
+  // Its session ended.
+  PARTICIPANT_END_REASON_SESSION_ENDED = 4;
+  // The session's process did not connect again within Welcome.resume_grace.
+  PARTICIPANT_END_REASON_SESSION_PROCESS_LOST = 5;
+  // Its user's permissions no longer grant what it holds, or the user left
+  // the project.
+  PARTICIPANT_END_REASON_RIGHTS_CHANGED = 6;
+  // Its machine was removed from the project.
+  PARTICIPANT_END_REASON_MACHINE_REMOVED = 7;
+  // The key that signed its authorization was revoked.
+  PARTICIPANT_END_REASON_KEY_REVOKED = 8;
+  // Its first PeerConnection did not start, so it was never handed to its
+  // client.
+  PARTICIPANT_END_REASON_NOT_ADMITTED = 9;
+}

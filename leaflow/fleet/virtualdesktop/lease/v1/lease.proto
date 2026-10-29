@@ -57,8 +57,8 @@ message ServerMessage {
 // Who holds the input lease. Sent in the snapshot and whenever it changes,
 // so that every participant sees who operates the session.
 message InputLease {
-  // The connection that holds it. 0: nobody; the next input takes it.
-  uint64 holder_connection_id = 1;
+  // The participant that holds it. 0: nobody; the next input takes it.
+  uint64 holder_participant_id = 1;
   // The platform user of the holder.
   string holder_user_id = 2;
   // When the holder took it.

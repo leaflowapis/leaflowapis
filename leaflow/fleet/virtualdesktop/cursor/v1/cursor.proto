@@ -61,9 +61,9 @@ message PointerPosition {
   sint32 x = 2;
   // See x.
   sint32 y = 3;
-  // The connection whose input moved it, as in ParticipantList. 0: an
+  // The participant whose input moved it, as in ParticipantList. 0: an
   // application moved it.
-  uint64 connection_id = 4;
+  uint64 participant_id = 4;
 }
 
 // The area an operation call acted on, so that the other participants see what
@@ -72,8 +72,8 @@ message PointerPosition {
 // injected click or an action on an accessibility node. The participant draws
 // it briefly.
 message Highlight {
-  // The connection that acted, as in ParticipantList.
-  uint64 connection_id = 1;
+  // The participant that acted, as in ParticipantList.
+  uint64 participant_id = 1;
   // The window the area is relative to. 0: canvas coordinates.
   uint64 window_id = 2;
   // The area: the bounds of the node acted on, or a small square around the
