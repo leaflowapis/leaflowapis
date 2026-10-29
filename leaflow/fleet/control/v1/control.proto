@@ -61,11 +61,12 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/control/v1;controlv
 // frames. Each service says who serves it on which connections; a call of any
 // other method fails with PERMISSION_DENIED and reason METHOD_NOT_ALLOWED.
 // The features of a machine, such as its directory
-// (leaflow.fleet.directory.v1), remote commands (leaflow.fleet.command.v1)
-// and sessions (leaflow.fleet.host.v1), travel on its daemon's connection; the
-// service calls the methods of a feature only while the machine reports it
-// available (leaflow.fleet.machine.v1), and on a new connection only after
-// its first ReportMachineStatus.
+// (leaflow.fleet.directory.v1), remote commands (leaflow.fleet.command.v1),
+// MCP servers (leaflow.fleet.mcp.v1) and sessions (leaflow.fleet.host.v1),
+// travel on its daemon's connection; the service calls the methods of a
+// feature only while the machine reports it available
+// (leaflow.fleet.machine.v1), and on a new connection only after its first
+// ReportMachineStatus.
 //
 // Disconnection. A call the service made on a connection that drops goes on
 // once the endpoint received it: the endpoint finishes it and keeps its

@@ -80,6 +80,8 @@ info:
       exist on the machine; members log in over SSH with their keys and become root through sudo
       as their permissions allow;
     - `leaflow.fleet.command.v1`: running commands;
+    - `leaflow.fleet.mcp.v1`: the MCP servers each account configures on the machine, local ones
+      and remote ones it connects to;
     - `leaflow.fleet.host.v1`: terminal sessions, with programs, files, ports, sound, devices,
       printers and privilege approvals;
     - `leaflow.fleet.virtualdesktop.host.v1`: sessions with a desktop.
