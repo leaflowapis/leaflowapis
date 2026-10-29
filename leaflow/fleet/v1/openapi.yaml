@@ -150,19 +150,33 @@ info:
 
     ## Viewing a session
 
-    1. Have an Ed25519 key, for as long as the client wants: one per connection or one kept by the
-       client. The private key must never leave the client; in a browser, use a non-extractable
-       WebCrypto key.
-    2. For each connection, create a ticket for the public key with
-       `POST /api/v1/sessions/{sessionId}/viewer-tickets`. It is valid for 60 seconds and once.
-    3. Open a WebSocket to the returned `url` with the subprotocol
-       `leaflow.fleet.control.v1` and follow `leaflow/fleet/control/v1/control.proto`.
-       The ticket travels inside the protocol and never in a URL.
+    1. Have an Ed25519 key, for as long as the client wants: one per viewer connection or one kept
+       by the client. The private key must never leave the client; in a browser, use a
+       non-extractable WebCrypto key.
+    2. Create a viewer connection for the public key with
+       `POST /api/v1/sessions/{sessionId}/viewers`. The answer carries the viewer's signed
+       authorization, the ICE servers, the keys the service signs with and a signaling ticket.
+    3. To start a PeerConnection, open a WebSocket to the ticket's `url` with the subprotocol
+       `leaflow.fleet.control.v1` and follow `leaflow/fleet/control/v1/control.proto` and
+       `leaflow/fleet/transport/v1/transport.proto`. The ticket travels inside the protocol and
+       never in a URL, and serves once within 60 seconds; for a later PeerConnection, such as
+       after a path failed, ask for another with
+       `POST /api/v1/sessions/{sessionId}/viewers/{connectionId}/signaling-tickets`. The
+       WebSocket may be closed once the PeerConnection carries data.
+    4. Renew the viewer connection with `POST …/viewers/{connectionId}:renew` well before
+       `lease_expires_at`, every 15 seconds, presenting the PeerAuthorization of each
+       PeerConnection; the answer renews them. A viewer connection whose lease runs out ends,
+       and its PeerConnections stop within 30 seconds of their last lease.
+    5. Leave with `DELETE …/viewers/{connectionId}`.
 
-    What a viewer may do in a session is decided when its ticket is created, from the caller's
-    permissions and what the ticket asks for, and does not change during the connection. Viewers
+    What a viewer may do in a session is decided when its viewer connection is created, from the
+    caller's permissions and what the request asks for, and does not change afterwards. Viewers
     are not told apart by kind: a person in a browser and a program that operates the session are
     both viewers, named by the `client_id` label they choose, and either can be disconnected.
+
+    A viewer connection that ends for any other reason than its own `DELETE` is announced through
+    EventBus as `leaflow.fleet.viewer.closed`, addressed to its user in the current project, with
+    its `session_id`, `connection_id` and `reason`.
 servers:
   - url: https://fleet.leaflow.cloud
     description: Machines, accounts, commands, sessions and viewers
@@ -1233,6 +1247,52 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
   /api/v1/sessions/{sessionId}/viewers:
+    post:
+      summary: Create a viewer connection
+      description: |-
+        Admits one viewer with the given public key to the session: signs its authorization,
+        has the session accept it, and returns it with a first signaling ticket. The viewer
+        connection lasts while it is renewed.
+
+        The owner of a session may operate it. Viewing another member's session requires
+        `fleet:sessions.view`, which admits watching only, or
+        `fleet:sessions.control`, which also admits operating it. Each further capability
+        of the session — file transfer, the clipboard, terminals and programs, port forwarding,
+        devices and audio, printing, SSH agent forwarding, approving privilege requests and
+        reading logs — is granted only with its permission; a viewer that may only watch gets
+        none of them. A request may ask for less: to watch only, or for some of the capabilities.
+
+        Fails with:
+        - `SESSION_CLOSED` when the session has ended;
+        - `SESSION_ACCESS_DENIED` when the caller may not view the session;
+        - `SESSION_UNAVAILABLE` when the session's process is not connected, such as while it
+          restarts; try again after `Retry-After`;
+        - `VIEWER_LIMIT_REACHED` when the session has as many viewers as it admits;
+        - `VIEWER_REFUSED` when the session refused the viewer.
+      operationId: create-viewer
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateViewerRequest"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ViewerConnection"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
     get:
       summary: List the viewers of a session
       description: Returns the viewers connected to the session, in the order they connected.
@@ -1248,6 +1308,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ViewerList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/viewers/{connectionId}:renew:
+    post:
+      summary: Renew a viewer connection
+      description: |-
+        Extends the viewer connection's lease and returns renewed PeerAuthorizations for the
+        PeerConnections whose current ones the request presents; the session receives them too.
+        A presented authorization that the service did not sign for this viewer connection, or
+        whose attempt has ended, is left out of the answer. When the viewer's authorization nears
+        its end, the answer carries a renewed one, which the session already holds.
+
+        Only the viewer connection's user may renew it.
+
+        Fails with:
+        - `VIEWER_NOT_FOUND` when the viewer connection has ended; create another;
+        - `VIEWER_RIGHTS_CHANGED` when the caller's permissions no longer grant what the viewer
+          connection holds; it has ended, and another can be created with the current rights.
+      operationId: renew-viewer
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ConnectionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenewViewerRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenewViewerResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/viewers/{connectionId}/signaling-tickets:
+    post:
+      summary: Create a signaling ticket
+      description: |-
+        Issues a single-use ticket for one signaling WebSocket of the viewer connection, valid for
+        60 seconds. Only the viewer connection's user may ask for one.
+
+        Fails with `VIEWER_NOT_FOUND` when the viewer connection has ended.
+      operationId: create-signaling-ticket
+      tags:
+        - Viewer
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ConnectionId"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignalingTicket"
         default:
           description: Error
           content:
@@ -1278,13 +1406,14 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
     delete:
-      summary: Disconnect a viewer
+      summary: End a viewer connection
       description: |-
-        Disconnects the viewer from the session; the session goes on. The viewer can connect
-        again only with a new ticket.
+        Ends the viewer connection: the session detaches the viewer and closes its
+        PeerConnections, and the session goes on. A viewer leaves this way; others are
+        disconnected this way.
 
-        The owner of the session may disconnect its viewers; otherwise this requires
-        `fleet:sessions.manage`.
+        The viewer connection's user and the owner of the session may end it; otherwise this
+        requires `fleet:sessions.manage`.
       operationId: delete-viewer
       tags:
         - Viewer
@@ -1294,48 +1423,6 @@ paths:
       responses:
         "204":
           description: Disconnected
-        default:
-          description: Error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Error"
-  /api/v1/sessions/{sessionId}/viewer-tickets:
-    post:
-      summary: Create a viewer ticket
-      description: |-
-        Issues a single-use ticket that admits one viewer connection with the given public key to
-        the session. It is valid for 60 seconds.
-
-        The owner of a session may operate it. Viewing another member's session requires
-        `fleet:sessions.view`, which admits watching only, or
-        `fleet:sessions.control`, which also admits operating it. Each further capability
-        of the session — file transfer, the clipboard, terminals and programs, port forwarding,
-        devices and audio, printing, SSH agent forwarding, approving privilege requests and
-        reading logs — is granted only with its permission; a viewer that may only watch gets
-        none of them. A ticket may ask for less: to watch only, or for some of the capabilities.
-
-        Fails with:
-        - `SESSION_CLOSED` when the session has ended;
-        - `SESSION_ACCESS_DENIED` when the caller may not view the session.
-      operationId: create-viewer-ticket
-      tags:
-        - Viewer
-      parameters:
-        - $ref: "#/components/parameters/SessionId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateViewerTicketRequest"
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ViewerTicketResource"
         default:
           description: Error
           content:
@@ -2420,7 +2507,163 @@ components:
           items:
             $ref: "#/components/schemas/ViewerResource"
       additionalProperties: false
-    CreateViewerTicketRequest:
+    SignalingTicket:
+      type: object
+      required:
+        - ticket
+        - url
+        - expires_at
+      properties:
+        ticket:
+          description: The ticket to send in `ViewerCredential.ticket`. Never put it in a URL.
+          type: string
+        url:
+          description: The WebSocket URL of the control connection
+          type: string
+          format: uri
+        expires_at:
+          type: string
+          format: date-time
+      additionalProperties: false
+    Signed:
+      description: |-
+        A message the service signed: the serialized message, the key that signed it and the
+        signature, as in `SignedAuthorization` and `SignedPeerAuthorization` of the protocol. Each
+        byte string is standard Base64.
+      type: object
+      required:
+        - key_id
+        - message
+        - signature
+      properties:
+        key_id:
+          type: string
+        message:
+          description: The serialized message; decode it only after the signature verified
+          type: string
+          format: byte
+        signature:
+          type: string
+          format: byte
+      additionalProperties: false
+    ServiceKey:
+      description: A key the service signs with, as `ServiceKeys` of the protocol
+      type: object
+      required:
+        - key_id
+        - ed25519
+      properties:
+        key_id:
+          type: string
+        ed25519:
+          $ref: "#/components/schemas/PublicKey"
+      additionalProperties: false
+    IceServer:
+      description: A STUN or TURN server, as W3C RTCIceServer
+      type: object
+      required:
+        - urls
+      properties:
+        urls:
+          type: array
+          items:
+            type: string
+        username:
+          description: TURN only
+          type: string
+        credential:
+          description: TURN only. A secret for the relay; never log it.
+          type: string
+      additionalProperties: false
+    RtcConfiguration:
+      description: The ICE servers for the PeerConnections the viewer starts
+      type: object
+      required:
+        - ice_servers
+        - ice_transport_policy
+        - expires_at
+      properties:
+        ice_servers:
+          type: array
+          items:
+            $ref: "#/components/schemas/IceServer"
+        ice_transport_policy:
+          type: string
+          enum:
+            - all
+            - relay
+        expires_at:
+          description: No PeerConnection starts with these servers after this time
+          type: string
+          format: date-time
+      additionalProperties: false
+    ViewerConnection:
+      type: object
+      required:
+        - viewer
+        - authorization
+        - rtc_configuration
+        - service_keys
+        - signaling
+        - lease_expires_at
+      properties:
+        viewer:
+          $ref: "#/components/schemas/ViewerResource"
+        authorization:
+          description: The viewer's signed `Authorization`, the same one the session holds
+          allOf:
+            - $ref: "#/components/schemas/Signed"
+        rtc_configuration:
+          $ref: "#/components/schemas/RtcConfiguration"
+        service_keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceKey"
+        signaling:
+          $ref: "#/components/schemas/SignalingTicket"
+        lease_expires_at:
+          description: When the viewer connection ends unless renewed
+          type: string
+          format: date-time
+      additionalProperties: false
+    RenewViewerRequest:
+      type: object
+      properties:
+        peer_authorizations:
+          description: The current signed `PeerAuthorization` of each PeerConnection to renew
+          type: array
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/Signed"
+      additionalProperties: false
+    RenewViewerResponse:
+      type: object
+      required:
+        - lease_expires_at
+        - peer_authorizations
+        - rtc_configuration
+        - service_keys
+      properties:
+        lease_expires_at:
+          type: string
+          format: date-time
+        peer_authorizations:
+          description: The renewed signed `PeerAuthorization`s, in the order of the request
+          type: array
+          items:
+            $ref: "#/components/schemas/Signed"
+        authorization:
+          description: A renewed signed `Authorization`, when the current one nears its end
+          allOf:
+            - $ref: "#/components/schemas/Signed"
+        rtc_configuration:
+          $ref: "#/components/schemas/RtcConfiguration"
+        service_keys:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceKey"
+      additionalProperties: false
+    CreateViewerRequest:
       type: object
       required:
         - public_key
@@ -2453,22 +2696,4 @@ components:
               - fleet:ssh_agent.use
               - fleet:privilege.approve
               - fleet:logs.read
-      additionalProperties: false
-    ViewerTicketResource:
-      type: object
-      required:
-        - ticket
-        - url
-        - expires_at
-      properties:
-        ticket:
-          description: The ticket to send in `ViewerCredential.ticket`. Never put it in a URL.
-          type: string
-        url:
-          description: The WebSocket URL of the control connection
-          type: string
-          format: uri
-        expires_at:
-          type: string
-          format: date-time
       additionalProperties: false

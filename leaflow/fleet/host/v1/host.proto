@@ -29,7 +29,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 // what the daemon observed before it: a session the service holds open on the
 // machine but missing from it has ended, unless a newer report of that
 // session arrived, and a changed boot_id means every earlier session ended.
-// Nothing is replayed after a reconnect.
+// A session the machine reports open that the service holds ended, such as
+// one whose session process the service no longer admits, is ended by the
+// service with TerminateSession. Nothing is replayed after a reconnect.
 //
 // Accounts. A session runs as the directory account of its platform user,
 // admitted by PAM as any login is, and ends when the account may no longer
