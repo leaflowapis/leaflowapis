@@ -174,9 +174,13 @@ info:
     are not told apart by kind: a person in a browser and a program that operates the session are
     both viewers, named by the `client_id` label they choose, and either can be disconnected.
 
-    A viewer connection that ends for any other reason than its own `DELETE` is announced through
-    EventBus as `leaflow.fleet.viewer.closed`, addressed to its user in the current project, with
-    its `session_id`, `connection_id` and `reason`.
+    Every viewer connection that ends, including through `DELETE`, is announced through EventBus as
+    `leaflow.fleet.viewer.closed`, addressed to its user in the current project, with its
+    `session_id`, `connection_id` (a decimal string) and `reason`: the name of the
+    `CloseReason` of `leaflow/fleet/control/v1/control.proto` in lower case without its prefix,
+    such as `detach_request` when it was ended through `DELETE`, `ping_timeout` when its lease
+    ran out, `session_exit` when its session ended, `session_restarting` when the session's process
+    did not come back in time, or `permission_denied` when its rights were withdrawn.
 servers:
   - url: https://fleet.leaflow.cloud
     description: Machines, accounts, commands, sessions and viewers
@@ -1266,7 +1270,7 @@ paths:
         - `SESSION_CLOSED` when the session has ended;
         - `SESSION_ACCESS_DENIED` when the caller may not view the session;
         - `SESSION_UNAVAILABLE` when the session's process is not connected, such as while it
-          restarts; try again after `Retry-After`;
+          restarts; try again after the error's `retry_delay`;
         - `VIEWER_LIMIT_REACHED` when the session has as many viewers as it admits;
         - `VIEWER_REFUSED` when the session refused the viewer.
       operationId: create-viewer

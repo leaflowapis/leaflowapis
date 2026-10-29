@@ -571,7 +571,8 @@ service ViewerService {
 
 // The request of AttachViewer.
 message AttachViewerRequest {
-  // The viewer's authorization, the same one its Welcome carried.
+  // The viewer's authorization, the same one the Fleet API returned for the
+  // viewer connection.
   SignedAuthorization authorization = 1;
 }
 
