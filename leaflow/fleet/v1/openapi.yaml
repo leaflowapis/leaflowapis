@@ -2633,18 +2633,18 @@ components:
       additionalProperties: false
     PrivilegeDecider:
       description: |-
-        Who decided a request: `user` on the platform, `auto_approval` at once by the user's
-        automatic approval for the machine, or `participant` a participant of the session.
+        Who decided a request on the platform: `user` the user, or `auto_approval` the user's
+        automatic approval for the machine, at once.
       type: string
       enum:
         - user
         - auto_approval
-        - participant
     PrivilegeRequestState:
       description: |-
-        `pending` waits for a decision; `approved` and `denied` were decided, as `decided_by`
-        tells; `expired` was not decided in time; `cancelled` ended because the asking program
-        gave up.
+        `pending` waits for a decision; `approved` and `denied` were decided on the platform, as
+        `decided_by` tells; `expired` was not decided in time; `cancelled` means the machine
+        stopped waiting for the platform, because a participant of the session decided first or
+        the asking program gave up.
       type: string
       enum:
         - pending
@@ -2665,7 +2665,6 @@ components:
         - tty
         - state
         - decided_by
-        - participant_id
         - created_at
         - expires_at
         - decided_at
@@ -2708,12 +2707,6 @@ components:
           anyOf:
             - $ref: "#/components/schemas/PrivilegeDecider"
             - type: "null"
-        participant_id:
-          description: The participant that decided, with `decided_by` `participant`; null otherwise
-          type:
-            - integer
-            - "null"
-          format: int64
         created_at:
           type: string
           format: date-time
