@@ -3497,6 +3497,10 @@ components:
       type: object
       description: Exactly one of text, image or json is present
       properties:
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Untrusted content extensions such as MCP annotations or _meta, without duplicated body or image data
         text:
           type: string
         image:
@@ -3546,6 +3550,10 @@ components:
         structured_content:
           type: object
           additionalProperties: true
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Untrusted result extensions such as MCP _meta, without duplicated content or images
         is_error:
           type: boolean
     ToolActivityList:
