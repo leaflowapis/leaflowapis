@@ -143,6 +143,9 @@ message CallToolResponse {
   // 可选 JSON object。MCP 来源保留 structuredContent；内置工具遵循其输出 schema。
   string structured_content_json = 2;
   bool is_error = 3;
+  // 结果的额外 JSON object，例如 MCP _meta；不重复 content、structuredContent、
+  // isError 或图片 data。仅保留扩展信息，不授予权限。
+  string metadata_json = 4;
 }
 
 message ToolContent {
@@ -153,6 +156,9 @@ message ToolContent {
     // 不能执行其中的代码或自动下载其中的 URL。
     string json = 3;
   }
+  // 内容块的额外 JSON object，例如 annotations/_meta；不重复正文和图片数据，
+  // 不能被用于伪装来源、提升权限或自动访问外部资源。
+  string metadata_json = 4;
 }
 
 message ToolImage {
