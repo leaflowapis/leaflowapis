@@ -110,4 +110,10 @@ message CapturedWindow {
   leaflow.fleet.virtualdesktop.display.v1.Rectangle geometry = 2;
   // Its Window.resize_counter when captured.
   uint64 resize_counter = 3;
+  // 捕获时的 Window.shape_counter，供依赖截图的动作拒绝过期区域状态。
+  uint64 shape_counter = 4;
+  // 捕获时的窗口局部 X Shape 区域，presence 含义与 Window 相同；geometry 则仍在
+  // 整张截图的原始坐标空间。不能把相对窗口的区域直接当作画布或缩放后图像坐标。
+  leaflow.fleet.virtualdesktop.display.v1.Region bounding_region = 5;
+  leaflow.fleet.virtualdesktop.display.v1.Region input_region = 6;
 }
