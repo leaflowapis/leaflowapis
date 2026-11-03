@@ -84,7 +84,9 @@ info:
       and remote ones it connects to;
     - `leaflow.fleet.host.v1`: terminal sessions, with programs, files, ports, sound, devices,
       printers and privilege approvals;
-    - `leaflow.fleet.virtualdesktop.host.v1`: sessions with a desktop.
+    - `leaflow.fleet.virtualdesktop.host.v1`: sessions with a graphical backend;
+    - `leaflow.fleet.tool.v1`: live session tools. Builtin `computer.*` tools are exposed only while
+      the virtual desktop capability is actually available; MCP is a separate source.
 
     A graphical backend does not require a full desktop environment. Terminal logins, commands
     and MCP server initialization prepare or reuse the account's lightweight graphical context,
@@ -676,6 +678,12 @@ paths:
       summary: Call a live builtin or external MCP tool
       description: |-
         Uses the same current permissions, directory account and graphical session as listTools.
+        Listing is not a precondition: callers may use a previously discovered ToolRef, and this
+        operation never sends a discovery request or refreshes schemas before executing it.
+        A removed tool or MCP server returns TOOL_NOT_FOUND, as does a direct builtin computer.*
+        call while virtual desktop capability is unavailable. Actual permission errors remain
+        permission errors; a missing target window is not a missing tool. Use listTools only when
+        discovery or refresh is needed, and do not cache or reuse execution results.
         Source is explicit: MCP names never select or impersonate builtin tools. The arguments
         object is at most 256 KiB. The complete result is at most 8 MiB in the protobuf transport,
         with each encoded image at most 4 MiB; images are converted to base64 once at this JSON
@@ -1675,6 +1683,11 @@ paths:
         terminal opens another session. Either kind also offers programs, files, ports, sound,
         devices, printers and privilege approvals. The account is created if the caller has none
         yet. Requires `fleet:machines.login` on the machine.
+        All newly created graphical account sessions, including desktop-first FullDesktop and
+        Seamless sessions, keep running when no viewer has joined or the last viewer disconnects.
+        Configured maximum lifetime, resource limits and explicit close/terminate still apply.
+        This create API has no client-selected idle policy; existing running policies are not
+        silently rewritten when tools, commands or terminals reuse the account context.
 
         On a machine an account has at most one session with a desktop and at most 8 sessions in
         all. Sessions without a desktop run side by side, such as one for a program and one for a
