@@ -197,6 +197,10 @@ service ApplicationService {
   rpc ListApplications(ListApplicationsRequest) returns (ListApplicationsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // Opens an absolute path, URI or desktop entry, as a desktop open action:
+  // programs execute directly, documents and folders use registered handlers.
+  // It never interprets a shell command line or changes the default handler.
+  rpc Open(OpenRequest) returns (OpenResponse);
   // Starts an application, or one of its actions, possibly with files or
   // URLs to open ("Open With"). It returns when the startup sequence ends
   // (freedesktop Startup Notification Protocol): a window of the launch
@@ -239,44 +243,78 @@ message ListApplicationsResponse {
   uint64 revision = 3;
 }
 
-// The request of LaunchApplication. Exactly one nonempty desktop_file_id,
-// path or uri is required. action_id and uris belong to the desktop-entry
-// branch; arguments belongs to the path branch. A missing source fails with
-// INVALID_ARGUMENT / APPLICATION_SOURCE_REQUIRED; mixed sources or fields
-// fail with INVALID_ARGUMENT / APPLICATION_SOURCE_CONFLICT. Error details
-// name the conflicting fields, and no application has been started.
+// The request of Open. The session resolves one object; callers do not need
+// to choose an executable-versus-document mode. Permission and lease checks
+// are the same as for launching or opening through ApplicationService.
+message OpenRequest {
+  // One absolute local path, absolute URI, or installed desktop file ID.
+  // Paths are canonicalized; NUL, relative paths and parent-directory path
+  // components are invalid. Local paths are limited to 4096 UTF-8 bytes,
+  // desktop IDs to 1024 and the complete target to 8192.
+  // Executable programs, including AppImages and native binaries, are run
+  // directly; ordinary documents and folders open in their default handler.
+  // File classification uses the filesystem and MIME information, not an
+  // application-name or filename-extension allowlist. An executable bit on
+  // an otherwise ordinary document does not turn its content into code.
+  // Empty: OPEN_TARGET_REQUIRED. Invalid: OPEN_TARGET_INVALID. Missing local
+  // objects: FILE_NOT_FOUND. Unknown desktop IDs: APPLICATION_NOT_FOUND.
+  // Error details identify field=target and the concrete issue.
+  string target = 1;
+  // Program arguments after argv[0], passed unchanged without shell expansion,
+  // interpolation or joining. At most 256 arguments, each at most 8192 UTF-8
+  // bytes, and at most 65536 bytes together; NUL is invalid. A malformed vector
+  // fails with OPEN_ARGUMENTS_INVALID and identifies its index or size limit.
+  // Arguments on a document, directory, URI handler or desktop entry fail with
+  // OPEN_OPTIONS_NOT_APPLICABLE; they are never silently ignored.
+  repeated string arguments = 2;
+  // An action of a desktop entry. Not valid for other target kinds.
+  string action_id = 3;
+  // Files or URLs supplied to a desktop entry's Exec field codes. Not valid
+  // for other target kinds; document open uses target instead.
+  repeated string uris = 4;
+  // The same trust decision as OpenUri. Unspecified never approves an
+  // untrusted desktop launcher on behalf of the person.
+  LauncherConfirmation launcher_confirmation = 5;
+}
+
+// Open was accepted. The started application belongs to the session, not this
+// call: cancelling, timing out or disconnecting never terminates it. Session
+// lifetime and explicit termination still apply. Waiting for a matched window
+// is bounded (at most 30 seconds for StartupNotify, otherwise 5 seconds).
+// No matched window is a successful result, not a reason to repeat Open: an
+// application may still be starting, have no window, or reuse another process.
+// A registered alternative handler may be tried only when the previous handler
+// was definitely not started. Missing associations fail with
+// URI_HANDLER_NOT_FOUND and report the detected MIME and bounded candidate
+// desktop IDs when known. A spawn failure or nonzero startup exit fails with
+// APPLICATION_START_FAILED, with stage, started, pid and exit status when
+// known. Started or uncertain failures must not be automatically replayed.
+message OpenResponse {
+  // The startup notification ID, when one was used.
+  string startup_id = 1;
+  // The matched window; unset when none was observed or required.
+  optional uint64 window_id = 2;
+  // The session revision at which the request was accepted or wait ended.
+  uint64 revision = 3;
+  // The initial process actually spawned. Unset for activation of an existing
+  // handler without an observable spawn; never guessed from an unrelated
+  // window. This is not necessarily the eventual window-owning process.
+  optional uint32 pid = 4;
+}
+
+// The request of LaunchApplication, for a menu entry or its action.
+// Open accepts general paths and URIs.
 message LaunchApplicationRequest {
   // The application. An unknown entry, or one whose TryExec fails, fails with
-  // NOT_FOUND and reason APPLICATION_NOT_FOUND; this reason is never used for
-  // a path launch.
+  // NOT_FOUND and reason APPLICATION_NOT_FOUND.
   string desktop_file_id = 1;
   // An ApplicationAction.action_id to run instead of the application. Empty:
-  // the application. Only valid with desktop_file_id.
+  // the application.
   string action_id = 2;
   // Files or URLs to open (the %f, %F, %u and %U field codes). A URI that is
   // not acceptable, such as a URL for an application that opens only local
-  // files, fails with INVALID_ARGUMENT. Only valid with desktop_file_id.
+  // files, fails with INVALID_ARGUMENT.
   repeated string uris = 3;
-  // An absolute executable file path, such as an AppImage or native binary.
-  // At most 4096 UTF-8 bytes; NUL and parent-directory components are invalid.
-  // The session canonicalizes it and checks that the target is a regular file
-  // executable by the session user. Invalid, missing or non-executable paths
-  // fail with INVALID_ARGUMENT and reason APPLICATION_PATH_INVALID.
-  string path = 4;
-  // Arguments after argv[0], passed unchanged, without shell expansion,
-  // interpolation, quoting or joining. At most 256 arguments, each at most
-  // 8192 UTF-8 bytes and together at most 65536 bytes; NUL is invalid.
-  // Only valid with path. Invalid vectors fail with INVALID_ARGUMENT and
-  // reason APPLICATION_ARGUMENTS_INVALID; details identify the argument or
-  // size limit without echoing the whole vector.
-  repeated string arguments = 5;
-  // A URL, file URI or folder URI to open with its default registered handler,
-  // using the same policy and trusted-launcher rules as OpenUri. It neither
-  // names an executable nor changes the default association. Other source
-  // fields, action_id, uris and arguments must be empty. Malformed URIs fail
-  // with APPLICATION_URI_INVALID, missing files with FILE_NOT_FOUND, missing
-  // default handlers with URI_HANDLER_NOT_FOUND; no shell command is accepted.
-  string uri = 6;
 }
 
 // The response of LaunchApplication. A spawned application belongs to the
@@ -289,8 +327,6 @@ message LaunchApplicationRequest {
 // for StartupNotify, otherwise 5 seconds), the call succeeds with no window_id;
 // this is not a failed launch and must not trigger another launch. The program
 // may still be starting, forward to an existing instance, or have no window.
-// A URI request may also be accepted by an existing default handler without
-// spawning a process or yielding a matched window; that is a successful result.
 message LaunchApplicationResponse {
   // The startup notification ID given to the program (DESKTOP_STARTUP_ID).
   string startup_id = 1;
@@ -302,7 +338,7 @@ message LaunchApplicationResponse {
   // The initial process spawned for this launch. It may exit after forwarding
   // to another process; it is not necessarily the process owning window_id.
   // Unset when activation happened without an observable spawned process,
-  // such as D-Bus activation. Always set for a successful path spawn.
+  // such as D-Bus activation.
   optional uint32 pid = 4;
 }
 
