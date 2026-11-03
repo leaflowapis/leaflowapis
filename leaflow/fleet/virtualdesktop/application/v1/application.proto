@@ -25,9 +25,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/appl
 //   - "leaflow.fleet.virtualdesktop.application.v1.ApplicationService", lane
 //     "interactive": opened by the participant to list, launch and open.
 //
-// Participants send only desktop file IDs and URIs, never command lines: the
-// session builds every command from the Exec key itself (Desktop Entry
-// Specification, "The Exec key"), so that a participant cannot inject commands.
+// Participants launch a desktop entry, or an absolute executable path with an
+// argument vector. Neither branch accepts a shell command line: the session
+// expands a desktop entry's Exec key itself (Desktop Entry Specification,
+// "The Exec key"), or executes the canonical path with arguments unchanged.
+// Launching uses the session user's credentials and graphical environment.
 // Names of applications, menus and launchers are localized for the language of
 // the session channel's ClientHello and are plain text. Icons are rendered at
 // the participant's device pixel ratio: 16 or 24 pixels in menus, 48 to 64 on
@@ -237,24 +239,44 @@ message ListApplicationsResponse {
   uint64 revision = 3;
 }
 
-// The request of LaunchApplication.
+// The request of LaunchApplication. Exactly one nonempty desktop_file_id or
+// path is required. action_id and uris belong to the desktop-entry branch;
+// arguments belongs to the path branch. Mixing branches is INVALID_ARGUMENT.
 message LaunchApplicationRequest {
-  // The application. An unknown one, or one whose TryExec fails, fails with
-  // NOT_FOUND.
+  // The application. An unknown entry, or one whose TryExec fails, fails with
+  // NOT_FOUND and reason APPLICATION_NOT_FOUND; this reason is never used for
+  // a path launch.
   string desktop_file_id = 1;
   // An ApplicationAction.action_id to run instead of the application. Empty:
-  // the application.
+  // the application. Only valid with desktop_file_id.
   string action_id = 2;
   // Files or URLs to open (the %f, %F, %u and %U field codes). A URI that is
   // not acceptable, such as a URL for an application that opens only local
-  // files, fails with INVALID_ARGUMENT.
+  // files, fails with INVALID_ARGUMENT. Only valid with desktop_file_id.
   repeated string uris = 3;
+  // An absolute executable file path, such as an AppImage or native binary.
+  // At most 4096 UTF-8 bytes; NUL and parent-directory components are invalid.
+  // The session canonicalizes it and checks that the target is a regular file
+  // executable by the session user. Invalid, missing or non-executable paths
+  // fail with INVALID_ARGUMENT and reason APPLICATION_PATH_INVALID.
+  string path = 4;
+  // Arguments after argv[0], passed unchanged, without shell expansion,
+  // interpolation, quoting or joining. At most 256 arguments, each at most
+  // 8192 UTF-8 bytes and together at most 65536 bytes; NUL is invalid.
+  // Only valid with path.
+  repeated string arguments = 5;
 }
 
-// The response of LaunchApplication. When the program exits with a failure
-// before showing a window the call fails with ABORTED; when no window appears
-// within 30 seconds (StartupNotify) or 5 seconds (otherwise) it fails with
-// DEADLINE_EXCEEDED, though the program may still be running.
+// The response of LaunchApplication. A spawned application belongs to the
+// session, not to this RPC: cancelling, timing out or disconnecting this call
+// never terminates the application. Session lifetime and explicit termination
+// still apply. A spawn failure, or a nonzero exit before a window appears,
+// fails with reason APPLICATION_START_FAILED; metadata distinguishes whether
+// a process was already started and its pid when known. Do not blindly retry.
+// When no window appears within the bounded startup wait (at most 30 seconds
+// for StartupNotify, otherwise 5 seconds), the call succeeds with no window_id;
+// this is not a failed launch and must not trigger another launch. The program
+// may still be starting, forward to an existing instance, or have no window.
 message LaunchApplicationResponse {
   // The startup notification ID given to the program (DESKTOP_STARTUP_ID).
   string startup_id = 1;
@@ -263,6 +285,11 @@ message LaunchApplicationResponse {
   optional uint64 window_id = 2;
   // The session revision at which the startup sequence ended.
   uint64 revision = 3;
+  // The initial process spawned for this launch. It may exit after forwarding
+  // to another process; it is not necessarily the process owning window_id.
+  // Unset when activation happened without an observable spawned process,
+  // such as D-Bus activation. Always set for a successful path spawn.
+  optional uint32 pid = 4;
 }
 
 // The request of OpenUri.
