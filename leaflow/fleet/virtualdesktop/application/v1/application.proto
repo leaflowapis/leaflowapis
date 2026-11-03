@@ -239,9 +239,12 @@ message ListApplicationsResponse {
   uint64 revision = 3;
 }
 
-// The request of LaunchApplication. Exactly one nonempty desktop_file_id or
-// path is required. action_id and uris belong to the desktop-entry branch;
-// arguments belongs to the path branch. Mixing branches is INVALID_ARGUMENT.
+// The request of LaunchApplication. Exactly one nonempty desktop_file_id,
+// path or uri is required. action_id and uris belong to the desktop-entry
+// branch; arguments belongs to the path branch. A missing source fails with
+// INVALID_ARGUMENT / APPLICATION_SOURCE_REQUIRED; mixed sources or fields
+// fail with INVALID_ARGUMENT / APPLICATION_SOURCE_CONFLICT. Error details
+// name the conflicting fields, and no application has been started.
 message LaunchApplicationRequest {
   // The application. An unknown entry, or one whose TryExec fails, fails with
   // NOT_FOUND and reason APPLICATION_NOT_FOUND; this reason is never used for
@@ -263,8 +266,17 @@ message LaunchApplicationRequest {
   // Arguments after argv[0], passed unchanged, without shell expansion,
   // interpolation, quoting or joining. At most 256 arguments, each at most
   // 8192 UTF-8 bytes and together at most 65536 bytes; NUL is invalid.
-  // Only valid with path.
+  // Only valid with path. Invalid vectors fail with INVALID_ARGUMENT and
+  // reason APPLICATION_ARGUMENTS_INVALID; details identify the argument or
+  // size limit without echoing the whole vector.
   repeated string arguments = 5;
+  // A URL, file URI or folder URI to open with its default registered handler,
+  // using the same policy and trusted-launcher rules as OpenUri. It neither
+  // names an executable nor changes the default association. Other source
+  // fields, action_id, uris and arguments must be empty. Malformed URIs fail
+  // with APPLICATION_URI_INVALID, missing files with FILE_NOT_FOUND, missing
+  // default handlers with URI_HANDLER_NOT_FOUND; no shell command is accepted.
+  string uri = 6;
 }
 
 // The response of LaunchApplication. A spawned application belongs to the
@@ -277,6 +289,8 @@ message LaunchApplicationRequest {
 // for StartupNotify, otherwise 5 seconds), the call succeeds with no window_id;
 // this is not a failed launch and must not trigger another launch. The program
 // may still be starting, forward to an existing instance, or have no window.
+// A URI request may also be accepted by an existing default handler without
+// spawning a process or yielding a matched window; that is a successful result.
 message LaunchApplicationResponse {
   // The startup notification ID given to the program (DESKTOP_STARTUP_ID).
   string startup_id = 1;
@@ -328,6 +342,9 @@ message OpenUriResponse {
   optional uint64 window_id = 2;
   // The session revision at which the startup sequence ended.
   uint64 revision = 3;
+  // The initial spawned process, when one was observable. Unset for a
+  // successful request handled by an existing application over D-Bus.
+  optional uint32 pid = 4;
 }
 
 // A process of the session.
