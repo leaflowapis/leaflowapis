@@ -54,6 +54,9 @@ message CaptureScreenshotRequest {
   uint32 max_height = 5;
   // The image format: "image/png" (W3C PNG), "image/jpeg" (ISO/IEC 10918-1)
   // or "image/webp" (RFC 9649). Empty: the session chooses.
+  // PNG/WebP 保留单窗口及弹层合成的透明度，包括 Shape 区域外的透明像素；
+  // 画布没有窗口的区域仍为不透明黑色。JPEG 仅适用于实际不透明的合成结果；
+  // 否则返回 INVALID_ARGUMENT / IMAGE_FORMAT_LOSES_TRANSPARENCY，不静默丢失 alpha。
   string mime_type = 6;
   // The quality of a lossy format, 1 to 100. 0: the session's default.
   uint32 quality = 7;
