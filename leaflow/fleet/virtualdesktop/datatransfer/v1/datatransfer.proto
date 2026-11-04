@@ -86,6 +86,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/data
 // 到期或按钮已释放而取消；仍受当前参与端的对应方向及文件权限约束。
 // 明确取消、来源丢失、参与端失权或连接结束仍释放相关读取期和来源；通道存活时
 // 目标仍发送失败的 DragFinish，断线后不重放。
+// COPY 的数据代理已持续持有全部声明格式后，可以先完成来源的原生拖放握手：
+// 原生格式按需取得并保留可重复读取的完整表示，文件引用由 filetransfer 持有。
+// 不得为了提前握手而丢弃未取得的格式或预先把文件计为已保存。原生握手结束不是
+// DragFinish 或 FileTransferResult；网络传送和文件保存仍分别等待其完整回执。
+// MOVE 不得使用这一步提前触发来源删除原文件。
 
 // Data of one format.
 message DataTransferItem {
