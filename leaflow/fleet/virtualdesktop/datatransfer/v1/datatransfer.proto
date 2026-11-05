@@ -115,6 +115,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/virtualdesktop/data
 // 注册格式。设备描述也是表示身份，枚举、读取、缓存和重建不得合并不同 device。
 // 各次原生枚举交出独立、可由 COM 分配器释放的副本；不得预读正文来取得该声明。
 // 设备描述仅供保留和匹配，不得据此加载来源驱动或创建来源设备，也不进入日志。
+// 本机介质与以完整媒体类型名提供的原始 HGLOBAL/IStream 字节表示可同时存在；
+// 两者声明同一跨机格式时优先读取原始序列化字节，不得先经过本机 GDI 编组而改变
+// 像素、色表、掩码或其它记录。两种本机表示共用同一媒体类型、读取期和数据通道。
 // 接收端从记录重建介质，绝不把原生句柄、指针、COM 接口或源文件路径当正文。
 // CF_HDROP(id=15)、FileContents、FileGroupDescriptor、PIDL、FileName 等文件/路径格式及
 // 拖放控制格式仍归 filetransfer 或拖放适配，不得用此媒体类型绕过文件引用和权限。
