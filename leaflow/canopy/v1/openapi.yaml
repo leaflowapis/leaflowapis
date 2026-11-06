@@ -43,6 +43,12 @@ servers:
 security:
   - bearerAuth: []
 paths:
+  /v1/videos:
+    $ref: ./videos.yaml#/paths/~1v1~1videos
+  /v1/videos/{video}:
+    $ref: ./videos.yaml#/paths/~1v1~1videos~1{video}
+  /v1/videos/{video}/content:
+    $ref: ./videos.yaml#/paths/~1v1~1videos~1{video}~1content
   /v1/responses:
     $ref: ./responses.yaml#/paths/~1v1~1responses
   /v1/responses/{response}:
