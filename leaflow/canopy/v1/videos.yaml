@@ -139,6 +139,15 @@ components:
         audio:
           type: boolean
           description: Whether the output has audio; separate from a reference_audio input.
+        prompt_extend:
+          type: boolean
+        watermark:
+          type: boolean
+        seed:
+          type: integer
+          format: int64
+        negative_prompt:
+          type: string
       required: [model]
       additionalProperties: true
     VideoTask:
