@@ -7,8 +7,8 @@ paths:
       description: |-
         Create an asynchronous video task in the verified project. Model and upstream support
         determine the accepted duration, resolution and references. Poll the returned task id.
-        `reference_media` is a Canopy extension for ordered, typed image, video and audio URLs;
-        OpenAI clients can send it with extra_body. Existing `input_reference` remains a first frame.
+        `reference_media` is a Canopy extension for ordered, typed image, video and audio URLs.
+        Existing `input_reference` remains a first frame.
         The runtime also accepts OpenAI multipart uploads; send reference_media as a JSON text field.
         No remote reference is downloaded or retained by Canopy during request preparation.
       requestBody:
