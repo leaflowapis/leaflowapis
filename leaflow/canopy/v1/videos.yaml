@@ -150,6 +150,31 @@ components:
           type: string
       required: [model]
       additionalProperties: true
+    VideoUsage:
+      type: object
+      description: Provider measurements on a task; only completed tasks are settled.
+      properties:
+        seconds:
+          type: number
+          format: double
+          minimum: 0
+          description: Output duration, kept for compatibility.
+        resolution:
+          type: string
+        input_seconds:
+          type: number
+          format: double
+          minimum: 0
+        output_seconds:
+          type: number
+          format: double
+          minimum: 0
+        billable_seconds:
+          type: number
+          format: double
+          minimum: 0
+          description: Total measured input and output video duration, not a monetary quote.
+      additionalProperties: true
     VideoTask:
       type: object
       properties:
@@ -162,6 +187,8 @@ components:
           enum: [queued, in_progress, completed, failed]
         model:
           type: string
+        usage:
+          $ref: '#/components/schemas/VideoUsage'
         seconds:
           type: string
           description: Output duration, not the duration of input references.
