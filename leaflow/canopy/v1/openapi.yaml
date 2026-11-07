@@ -1257,6 +1257,10 @@ components:
           type: number
           format: double
           minimum: 0
+        input_image_quantity:
+          type: string
+          pattern: '^[0-9]+$'
+          description: Recorded input quantity for the input_images meter, independent of its Billing price. Absent when unmeasured or not separately metered.
         input_images:
           type: integer
           format: int64
