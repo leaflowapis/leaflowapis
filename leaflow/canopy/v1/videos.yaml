@@ -16,16 +16,16 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/VideoCreateRequest'
+              $ref: "#/components/schemas/VideoCreateRequest"
       responses:
-        '200':
+        "200":
           description: Video task accepted
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VideoTask'
+                $ref: "#/components/schemas/VideoTask"
         default:
-          $ref: '#/components/responses/VideoError'
+          $ref: "#/components/responses/VideoError"
   /v1/videos/{video}:
     get:
       operationId: get-video
@@ -33,16 +33,16 @@ paths:
       tags: [Inference]
       description: Read an existing task owned by the verified project; does not create another video.
       parameters:
-        - $ref: '#/components/parameters/Video'
+        - $ref: "#/components/parameters/Video"
       responses:
-        '200':
+        "200":
           description: Current video task
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/VideoTask'
+                $ref: "#/components/schemas/VideoTask"
         default:
-          $ref: '#/components/responses/VideoError'
+          $ref: "#/components/responses/VideoError"
   /v1/videos/{video}/content:
     get:
       operationId: get-video-content
@@ -50,20 +50,20 @@ paths:
       tags: [Inference]
       description: Stream a completed video owned by the verified project. Supports HTTP Range.
       parameters:
-        - $ref: '#/components/parameters/Video'
+        - $ref: "#/components/parameters/Video"
         - name: Range
           in: header
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Video bytes
           content:
             video/mp4:
               schema:
                 type: string
                 format: binary
-        '206':
+        "206":
           description: Requested byte range
           content:
             video/mp4:
@@ -71,7 +71,7 @@ paths:
                 type: string
                 format: binary
         default:
-          $ref: '#/components/responses/VideoError'
+          $ref: "#/components/responses/VideoError"
 components:
   parameters:
     Video:
@@ -135,7 +135,7 @@ components:
           minItems: 1
           maxItems: 20
           items:
-            $ref: '#/components/schemas/VideoReferenceMedia'
+            $ref: "#/components/schemas/VideoReferenceMedia"
         audio:
           type: boolean
           description: Whether the output has audio; separate from a reference_audio input.
@@ -188,7 +188,7 @@ components:
         model:
           type: string
         usage:
-          $ref: '#/components/schemas/VideoUsage'
+          $ref: "#/components/schemas/VideoUsage"
         seconds:
           type: string
           description: Output duration, not the duration of input references.
