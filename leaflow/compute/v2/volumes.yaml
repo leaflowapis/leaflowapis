@@ -494,7 +494,7 @@ components:
             `VOLUME_SOURCE_CONFLICT`
           $ref: ./identifiers.yaml#/components/schemas/VolumeBackupId
         billing:
-          description: Required unless `instance_id` is given, which takes the instance's terms when this is omitted.
+          description: The selected Billing price for this component. Required even when joining an existing subscription; Billing checks compatibility.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
         checkout:
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
@@ -502,6 +502,7 @@ components:
           description: Buy the volume for this instance of the project; see the operation.
           $ref: ./identifiers.yaml#/components/schemas/InstanceId
       required:
+        - billing
         - volume_type_id
         - name
       additionalProperties: false

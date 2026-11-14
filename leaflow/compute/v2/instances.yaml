@@ -1347,9 +1347,7 @@ components:
           description: An instance type currently on sale. Required unless the launch template names one.
           $ref: ./identifiers.yaml#/components/schemas/InstanceTypeId
         billing:
-          description:
-            The terms of each instance, and the usage type and period every component bought with it
-            shares.
+          description: The selected Billing price for this component. Required even when joining an existing subscription; Billing checks compatibility.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
       required:
         - billing
@@ -1459,9 +1457,10 @@ components:
             - detach
           default: delete
         billing:
-          description: Its own terms, to choose a different termination policy; `compute.billing` when omitted.
+          description: The selected Billing price for this component. Required even when joining an existing subscription; Billing checks compatibility.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
       required:
+        - billing
         - type
         - image_id
         - volume_type_id
@@ -1492,9 +1491,10 @@ components:
             - detach
           default: delete
         billing:
-          description: Its own terms, to choose a different termination policy; `compute.billing` when omitted.
+          description: The selected Billing price for this component. Required even when joining an existing subscription; Billing checks compatibility.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
       required:
+        - billing
         - volume_type_id
         - size_gib
       additionalProperties: false
@@ -1585,11 +1585,10 @@ components:
           $ref: ./elastic-ips.yaml#/components/schemas/InternetChargeType
           default: bandwidth
         billing:
-          description:
-            The terms of the elastic IP's network item, `compute.billing` when omitted; they follow the rule shared
-            by every component of the purchase. Its address item is always pay-as-you-go and is exempt from that rule.
+          description: The selected Billing price for this component. Required even when joining an existing subscription; Billing checks compatibility.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
       required:
+        - billing
         - type
         - line_id
         - bandwidth_mbps

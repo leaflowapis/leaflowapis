@@ -641,10 +641,7 @@ components:
         line_id:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIpLineId
         billing:
-          description:
-            The terms of the network item, which pays for the bandwidth or the traffic. The address item is
-            always pay-as-you-go and takes no terms. Traffic is only sold pay-as-you-go. Required unless `instance_id`
-            is given, which takes the instance's terms when this is omitted.
+          description: The selected Billing price for this component. Required even when joining an existing subscription; Billing checks compatibility.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice
         checkout:
           $ref: ./billing-terms.yaml#/components/schemas/CheckoutOptions
@@ -652,6 +649,7 @@ components:
           description: Buy the elastic IP for this instance of the project; see the operation.
           $ref: ./identifiers.yaml#/components/schemas/InstanceId
       required:
+        - billing
         - bandwidth_mbps
         - line_id
       additionalProperties: false
