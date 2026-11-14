@@ -523,7 +523,7 @@ components:
           maximum: 1000
         internet_charge_type:
           $ref: ./internet-bandwidths.yaml#/components/schemas/InternetBandwidthChargeType
-          default: bandwidth
+          description: Omitted values use bandwidth charging.
       required:
         - line_id
         - bandwidth_mbps
