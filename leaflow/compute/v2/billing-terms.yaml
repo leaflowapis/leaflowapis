@@ -1,14 +1,16 @@
 components:
   schemas:
     BillingPeriod:
+      description:
+        The period a licensed component is paid for in advance, given as the `interval` and `interval_count` of
+        a licensed price of its plan in Billing. A period the plan has no price for is refused with 409
+        `BILLING_OPTION_UNAVAILABLE`, `meta.component` naming the component.
       type: object
       properties:
         unit:
-          type: string
-          enum:
-            - month
-            - year
+          $ref: ../../billing/type/v1/price.yaml#/components/schemas/Interval
         count:
+          description: How many units of `unit` the period covers.
           type: integer
           format: int32
           minimum: 1
