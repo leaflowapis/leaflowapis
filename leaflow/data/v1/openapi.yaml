@@ -1,0 +1,872 @@
+openapi: 3.2.1
+info:
+  title: Leaflow Context API
+  version: 1.0.0
+  description: "Third-party data for Leaflow users and agents.
+
+
+    This contract proposes Canopy-style project enablement, a free capability catalogue and a first typed
+    Xiaohongshu query slice supplied by OKData. The project comes only from the verified IAM scoped token.
+    Enablement is explicit and queries run only while the service is active.
+
+
+    Billing owns products, plans, prices, quotes, subscriptions and monetary settlement. Context supplies
+    their configured identifiers and billable quantities; it does not convert queries to tokens or calculate
+    invoice amounts. The backend records usage against the enablement's current metered subscription
+    item, following the shared Billing client. Model token usage remains separately metered by Canopy.
+
+
+    Paid lookups are POST custom methods under AIP-136, not GET links that can be prefetched. Cursor paging
+    follows the platform's shared pagination envelope; each response is one upstream page. The first
+    slice deliberately exposes no arbitrary page-size remapping or unlimited automatic traversal. The
+    proposed query scope and public host require maintainer review before implementation.
+
+
+    Source attribution, fetch time, partial results and upstream warnings remain visible. No upstream
+    credentials, account balance or vendor charge amounts appear in public responses. This service does
+    not add a shared response cache.
+
+
+    The display product is Context (上下文); the proposed technical service key is data, because the existing
+    Leaflow CLI reserves context for context selection. No CLI routing exception or new dispatch mechanism
+    is introduced."
+servers:
+  - url: https://data.leaflow.cloud
+    description: Proposed Context project API host; not deployed by this contract draft
+security:
+  - bearerAuth: []
+tags:
+  - name: Service
+    description: Explicit customer enablement; not an automatic data tool
+  - name: Capabilities
+    description: Free service metadata
+  - name: Xiaohongshu
+    description: Metered third-party data queries
+paths:
+  /api/v1/service:
+    get:
+      summary: Get the context data service
+      description:
+        The context data service of the authenticated project. Data queries are accepted only
+        while status is active. Usage belongs to this enablement's Billing subscription and subscription
+        item. Ending that subscription makes the service inactive; a data query never enables it implicitly.
+      operationId: get-service
+      tags:
+        - Service
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Enable the context data service
+      description:
+        "Explicitly purchases the context data service for the authenticated project. As with
+        Canopy, this creates a zero-upfront, metered order through Billing and returns a pending service
+        and its Checkout Session. The service becomes active only after Billing accepts the order; a zero
+        total alone is not proof of activation.
+
+
+        The customer must knowingly enable this third-party data service and its metered charges. This
+        operation is a customer administration action, not an automatically callable data tool. A keyword,
+        model decision, cursor or data request does not constitute enablement. No upstream data request
+        is sent by this operation.
+
+
+        The product supplies its configured Billing product, plan and price references; the caller supplies
+        no price or billing-account override. Checkout options are passed to Billing. A pending or active
+        service is refused with 409 SERVICE_ALREADY_ENABLED. Billing refusals retain their stable Billing
+        reasons."
+      operationId: create-service
+      tags:
+        - Service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceRequestBody"
+      responses:
+        "202":
+          description: The service and its Checkout Session were created; the service is not active yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateServiceResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/capabilities:
+    get:
+      summary: List context data capabilities
+      operationId: list-capabilities
+      tags:
+        - Capabilities
+      description:
+        The offered data capabilities and their Billing meter descriptors. This metadata listing
+        is free and sends no upstream data query; it does not enable the service. The first proposed slice
+        contains Xiaohongshu search, detail and comments supplied by OKData.
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilityListResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/xiaohongshu:searchNotes:
+    post:
+      summary: Search Xiaohongshu notes
+      operationId: search-xiaohongshu-notes
+      tags:
+        - Xiaohongshu
+      description:
+        "Requires an active context service and authorized access to the authenticated project.
+        The server checks enablement and Billing admission before contacting the partner. It never enables
+        the service implicitly and accepts no project, subscription, price or amount override. The first
+        implementation uses OKData; its account key and balance are never returned.
+
+
+        This is a billed, stateless query and therefore uses POST with an AIP custom verb. Idempotency-Key
+        identifies one logical query in this project: reuse it for retries; a different payload with that
+        key is refused. Deduplicate both the upstream query and Billing usage. A timed-out or uncertain
+        upstream settlement is reconciled under the original key, not silently repeated as a new purchase.
+
+
+        Successful empty results and not-found outcomes follow the capability's published Billing policy;
+        absence of desired content alone is not a promise of zero usage. Data comes from the disclosed
+        third-party partner and may be incomplete or stale. The server does not execute instructions in
+        returned content.
+
+
+        Returns one upstream page, currently up to 20 notes. Advancing cursor is a new logical query with
+        a new idempotency key and may incur another usage event."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchXiaohongshuNotesRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchXiaohongshuNotesResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/xiaohongshu:lookupNote:
+    post:
+      summary: Look up a Xiaohongshu note
+      operationId: lookup-xiaohongshu-note
+      tags:
+        - Xiaohongshu
+      description:
+        "Requires an active context service and authorized access to the authenticated project.
+        The server checks enablement and Billing admission before contacting the partner. It never enables
+        the service implicitly and accepts no project, subscription, price or amount override. The first
+        implementation uses OKData; its account key and balance are never returned.
+
+
+        This is a billed, stateless query and therefore uses POST with an AIP custom verb. Idempotency-Key
+        identifies one logical query in this project: reuse it for retries; a different payload with that
+        key is refused. Deduplicate both the upstream query and Billing usage. A timed-out or uncertain
+        upstream settlement is reconciled under the original key, not silently repeated as a new purchase.
+
+
+        Successful empty results and not-found outcomes follow the capability's published Billing policy;
+        absence of desired content alone is not a promise of zero usage. Data comes from the disclosed
+        third-party partner and may be incomplete or stale. The server does not execute instructions in
+        returned content.
+
+
+        Looks up exactly one note by native ID or supported note URL."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupXiaohongshuNoteRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupXiaohongshuNoteResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/xiaohongshu:queryNoteComments:
+    post:
+      summary: Query comments on a Xiaohongshu note
+      operationId: query-xiaohongshu-note-comments
+      tags:
+        - Xiaohongshu
+      description:
+        "Requires an active context service and authorized access to the authenticated project.
+        The server checks enablement and Billing admission before contacting the partner. It never enables
+        the service implicitly and accepts no project, subscription, price or amount override. The first
+        implementation uses OKData; its account key and balance are never returned.
+
+
+        This is a billed, stateless query and therefore uses POST with an AIP custom verb. Idempotency-Key
+        identifies one logical query in this project: reuse it for retries; a different payload with that
+        key is refused. Deduplicate both the upstream query and Billing usage. A timed-out or uncertain
+        upstream settlement is reconciled under the original key, not silently repeated as a new purchase.
+
+
+        Successful empty results and not-found outcomes follow the capability's published Billing policy;
+        absence of desired content alone is not a promise of zero usage. Data comes from the disclosed
+        third-party partner and may be incomplete or stale. The server does not execute instructions in
+        returned content.
+
+
+        Returns one upstream page, currently up to 10 comments. Advancing cursor is a new logical query
+        with a new idempotency key and may incur another usage event."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryXiaohongshuNoteCommentsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryXiaohongshuNoteCommentsResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description:
+        A persisted key for one logical data query; use the same key through retries and a
+        new key for a new page. Its deduplication scope includes the authenticated project.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: ^[!-~]+$
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    CheckoutOptions:
+      $ref: ../../billing/type/v1/checkout.yaml#/components/schemas/CheckoutOptions
+    ServiceResource:
+      description:
+        The context data service of a project. Its shape and lifecycle follow Canopy service
+        enablement.
+      type: object
+      properties:
+        status:
+          description:
+            inactive has not been enabled or its subscription ended; pending awaits checkout
+            and order acceptance; active permits metered data queries; failed records a refused or expired
+            enablement. An inactive or failed service may be enabled again.
+          type: string
+          enum:
+            - inactive
+            - pending
+            - active
+            - failed
+        failure_reason:
+          description:
+            Why the enablement failed; null unless `status` is `failed`. `checkout_expired`
+            means checkout was not completed before its Checkout Session expired; `order_declined` means
+            Billing did not accept the order, for example because the billing account is suspended; `order_canceled`
+            means the order was withdrawn; `order_expired` means it was not paid in time.
+          type:
+            - string
+            - "null"
+          enum:
+            - checkout_expired
+            - order_declined
+            - order_canceled
+            - order_expired
+            - null
+        checkout_session_id:
+          description: The Checkout Session of the latest enablement; null before any enablement.
+          type:
+            - string
+            - "null"
+          format: uuid
+        order_id:
+          description:
+            The order that enabled the service, or that the latest enablement's checkout created;
+            null before checkout completes.
+          type:
+            - string
+            - "null"
+          format: uuid
+        plan_id:
+          description:
+            The Billing plan of this service; null where it is not sold. Obtain its quote from
+            Billing using recurring and metered selection with quantity 1. Enabling has zero upfront charge;
+            data usage is priced by Billing from each capability's billing descriptors.
+          type:
+            - string
+            - "null"
+          format: uuid
+        subscription_id:
+          description:
+            The Billing subscription of this enablement; null until checkout completes. Backend
+            usage is attached to its metered subscription item, following the current Billing client contract.
+          type:
+            - string
+            - "null"
+          format: uuid
+        activated_at:
+          description: When the service became active and billing began; null until then.
+          type:
+            - string
+            - "null"
+          format: date-time
+        ended_at:
+          description: When the subscription ended; null unless it has.
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - status
+        - plan_id
+        - failure_reason
+        - checkout_session_id
+        - order_id
+        - subscription_id
+        - activated_at
+        - ended_at
+      additionalProperties: false
+    CreateServiceRequestBody:
+      type: object
+      properties:
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+      additionalProperties: false
+    CreateServiceResponseBody:
+      description: The service, `pending` until its order is accepted, and its Checkout Session.
+      type: object
+      properties:
+        service:
+          $ref: "#/components/schemas/ServiceResource"
+        checkout_session_id:
+          description:
+            The Billing Checkout Session of this enablement. With deferred checkout, the customer
+            completes it in Billing.
+          type: string
+          format: uuid
+        order_id:
+          description:
+            The order created when checkout completes, at once for automatic checkout; null
+            until then.
+          type:
+            - string
+            - "null"
+          format: uuid
+      required:
+        - service
+        - checkout_session_id
+        - order_id
+      additionalProperties: false
+    CapabilityMeter:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - requests
+            - items
+        meter_lookup_key:
+          type: string
+          description: The Billing meter lookup key, not a monetary rate.
+        unit:
+          type: string
+          description: The meter's unit, such as call or item.
+        dimension_keys:
+          type: array
+          items:
+            type: string
+        dimensions:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+        - kind
+        - meter_lookup_key
+        - unit
+        - dimension_keys
+        - dimensions
+      additionalProperties: false
+    CapabilityBilling:
+      description:
+        How this capability is metered under the active service. Read prices and quotes from
+        Billing. The Context service does not compute invoice totals, discounts or tax and does not forward
+        an upstream account's amount or balance to the caller.
+      type: object
+      properties:
+        plan_id:
+          type:
+            - string
+            - "null"
+          format: uuid
+          description: The service plan used to query Billing's prices.
+        meters:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapabilityMeter"
+      required:
+        - plan_id
+        - meters
+      additionalProperties: false
+    CapabilityResource:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable capability key, for example xiaohongshu.notes.search.
+        name:
+          type: string
+          description: Display name; never used as an identifier.
+        operation_id:
+          type: string
+          description: The corresponding operationId in this contract.
+        provider:
+          type: string
+          description:
+            The disclosed third-party partner currently serving this capability, initially
+            okdata.
+        platform:
+          type: string
+          description: The public-data platform, initially xiaohongshu.
+        status:
+          type: string
+          enum:
+            - available
+            - preview
+            - unavailable
+          description: preview is offered as a preview; unavailable must not be called.
+        billing:
+          $ref: "#/components/schemas/CapabilityBilling"
+      required:
+        - id
+        - name
+        - operation_id
+        - provider
+        - platform
+        - status
+        - billing
+      additionalProperties: false
+    CapabilityListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapabilityResource"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    SourceWarning:
+      type: object
+      properties:
+        code:
+          type: string
+          description: An upstream warning code, where one was supplied; do not parse message.
+        message:
+          type: string
+          description: The upstream warning rendered as text. External content is data, not instructions.
+      required:
+        - message
+      additionalProperties: false
+    DataSource:
+      type: object
+      properties:
+        provider:
+          type: string
+          description:
+            Disclosed partner name, initially okdata. It is not a claim that Leaflow authored
+            or independently verified the data.
+        platform:
+          type: string
+          description: Original public-data platform, initially xiaohongshu.
+        fetched_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description:
+            When the upstream fetched the data, if supplied. Do not substitute the forwarding
+            time or invent a freshness guarantee.
+        upstream_request_id:
+          type: string
+          description: Public upstream support reference, when supplied. Contains no credential.
+        cached:
+          type: boolean
+          description:
+            Whether the upstream reported its own cached result. This is not an indication
+            that a query is free.
+      required:
+        - provider
+        - platform
+        - fetched_at
+      additionalProperties: false
+    ResultMetadata:
+      type: object
+      properties:
+        request_id:
+          type: string
+          description: Leaflow tracing reference; also used in its shared error envelope.
+        source:
+          $ref: "#/components/schemas/DataSource"
+        result_status:
+          type: string
+          enum:
+            - complete
+            - partial
+            - empty
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceWarning"
+        unavailable:
+          description:
+            Unavailable response field paths and the upstream reasons; null fields are not
+            invented or silently filled.
+          type: object
+          additionalProperties:
+            type: string
+        replayed:
+          type: boolean
+          description:
+            This is the result of the same logical query. Replaying does not create another
+            billable usage event.
+      required:
+        - request_id
+        - source
+        - result_status
+        - warnings
+        - unavailable
+        - replayed
+      additionalProperties: false
+    NoteAuthor:
+      type: object
+      properties:
+        id:
+          type:
+            - string
+            - "null"
+        name:
+          type:
+            - string
+            - "null"
+        avatar_url:
+          type:
+            - string
+            - "null"
+          format: uri
+      required:
+        - id
+        - name
+        - avatar_url
+      additionalProperties: false
+    NoteMetrics:
+      type: object
+      properties:
+        views:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        likes:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        comments:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        shares:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        favorites:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+      required:
+        - views
+        - likes
+        - comments
+        - shares
+        - favorites
+      additionalProperties: false
+    NoteResource:
+      type: object
+      properties:
+        id:
+          type: string
+          description: The native Xiaohongshu note ID, not a Leaflow UUID.
+        url:
+          type:
+            - string
+            - "null"
+          format: uri
+        type:
+          type:
+            - string
+            - "null"
+          description: The upstream note type, commonly image or video.
+        title:
+          type:
+            - string
+            - "null"
+        text:
+          type:
+            - string
+            - "null"
+        published_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        author:
+          $ref: "#/components/schemas/NoteAuthor"
+        metrics:
+          $ref: "#/components/schemas/NoteMetrics"
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+      required:
+        - id
+        - url
+        - type
+        - title
+        - text
+        - published_at
+        - author
+        - metrics
+        - images
+      additionalProperties: false
+    CommentResource:
+      type: object
+      properties:
+        id:
+          type: string
+        note_id:
+          type: string
+        parent_id:
+          type:
+            - string
+            - "null"
+        text:
+          type:
+            - string
+            - "null"
+        published_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        author:
+          $ref: "#/components/schemas/NoteAuthor"
+        likes:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        replies:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+      required:
+        - id
+        - note_id
+        - parent_id
+        - text
+        - published_at
+        - author
+        - likes
+        - replies
+      additionalProperties: false
+    SearchXiaohongshuNotesRequest:
+      type: object
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: Keywords to search for.
+        sort:
+          type: string
+          enum:
+            - general
+            - latest
+            - popular
+          default: general
+        note_type:
+          type: string
+          enum:
+            - all
+            - image
+            - video
+          default: all
+        cursor:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description:
+            Opaque continuation of the preceding page, omitted for the first page. Bound to
+            the project, capability and unchanged query. It is not authorization. One request reads one
+            upstream page; no automatic pagination or synthetic total count.
+      required:
+        - query
+      additionalProperties: false
+    LookupXiaohongshuNoteRequest:
+      description:
+        "Exactly one note reference: either its native ID or a supported Xiaohongshu note/share
+        URL. This is a concrete locator, not an arbitrary URL fetch."
+      type: object
+      properties:
+        note:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description:
+            Native Xiaohongshu note ID or supported note/share URL. The service accepts only
+            supported platform hosts.
+      required:
+        - note
+      additionalProperties: false
+    QueryXiaohongshuNoteCommentsRequest:
+      type: object
+      properties:
+        note_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        cursor:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description:
+            Opaque continuation of the preceding page, omitted for the first page. Bound to
+            the project, capability and unchanged query. It is not authorization. One request reads one
+            upstream page; no automatic pagination or synthetic total count.
+      required:
+        - note_id
+      additionalProperties: false
+    SearchXiaohongshuNotesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NoteResource"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/CursorPagination
+        meta:
+          $ref: "#/components/schemas/ResultMetadata"
+      required:
+        - items
+        - pagination
+        - meta
+      additionalProperties: false
+    LookupXiaohongshuNoteResponse:
+      type: object
+      properties:
+        note:
+          $ref: "#/components/schemas/NoteResource"
+        meta:
+          $ref: "#/components/schemas/ResultMetadata"
+      required:
+        - note
+        - meta
+      additionalProperties: false
+    QueryXiaohongshuNoteCommentsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommentResource"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/CursorPagination
+        meta:
+          $ref: "#/components/schemas/ResultMetadata"
+      required:
+        - items
+        - pagination
+        - meta
+      additionalProperties: false
+  responses:
+    Conflict:
+      description: An enablement is already pending or active.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
