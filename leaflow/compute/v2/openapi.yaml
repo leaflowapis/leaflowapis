@@ -376,24 +376,14 @@ components:
       $ref: ./internet-lines.yaml#/components/schemas/InternetLineListResponseBody
     DeleteElasticIpResponseBody:
       $ref: ./elastic-ips.yaml#/components/schemas/DeleteElasticIpResponseBody
-    InternetChargeType:
-      $ref: ./internet-bandwidths.yaml#/components/schemas/InternetBandwidthChargeType
     Ipv4HostAddress:
       $ref: ./elastic-ips.yaml#/components/schemas/Ipv4HostAddress
     ElasticIp:
       $ref: ./elastic-ips.yaml#/components/schemas/ElasticIp
-    TrafficUsage:
-      $ref: ./elastic-ips.yaml#/components/schemas/TrafficUsage
-    TrafficUsageListResponseBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/TrafficUsageListResponseBody
     ElasticIpListResponseBody:
       $ref: ./elastic-ips.yaml#/components/schemas/ElasticIpListResponseBody
     CreateElasticIpRequestBody:
       $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIpRequestBody
-    ChangeElasticIpBandwidthRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/ChangeElasticIpBandwidthRequestBody
-    ChangeElasticIpChargeTypeRequestBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/ChangeElasticIpChargeTypeRequestBody
     AssociateElasticIpRequestBody:
       $ref: ./elastic-ips.yaml#/components/schemas/AssociateElasticIpRequestBody
     InstanceAssociationTarget:
@@ -402,8 +392,6 @@ components:
       $ref: ./elastic-ips.yaml#/components/schemas/NetworkInterfaceAddressAssociationTarget
     CreateElasticIpResponseBody:
       $ref: ./elastic-ips.yaml#/components/schemas/CreateElasticIpResponseBody
-    ElasticIpChangeResponseBody:
-      $ref: ./elastic-ips.yaml#/components/schemas/ElasticIpChangeResponseBody
     ElasticIpAssociation:
       $ref: ./elastic-ips.yaml#/components/schemas/ElasticIpAssociation
     InstanceId:
