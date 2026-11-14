@@ -95,8 +95,7 @@ components:
           minLength: 0
           maxLength: 255
         address_billing:
-          description:
-            The address product, metered for the full holding duration regardless of association or bandwidth purchase.
+          description: The address product, metered for the full holding duration regardless of association or bandwidth purchase.
           allOf:
             - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
         bandwidth_billing:

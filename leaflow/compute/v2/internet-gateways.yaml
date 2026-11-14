@@ -4,21 +4,21 @@ paths:
       operationId: list-internet-gateways
       summary: List internet gateways
       tags:
-      - internet-gateways
+        - internet-gateways
       parameters:
-      - name: virtual_private_cloud_id
-        in: query
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudId
-      - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
-      - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: virtual_private_cloud_id
+          in: query
+          schema:
+            $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudId
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InternetGatewayListResponseBody'
+                $ref: "#/components/schemas/InternetGatewayListResponseBody"
         default: &id001
           description: Error
           content:
@@ -29,8 +29,9 @@ paths:
       operationId: create-internet-gateway
       summary: Create an internet gateway
       tags:
-      - internet-gateways
-      description: Reserves an unbilled VPC connection through the selected line’s exit network. Compatible lines share this connection. It
+        - internet-gateways
+      description:
+        Reserves an unbilled VPC connection through the selected line’s exit network. Compatible lines share this connection. It
         is attached when a bandwidth service needs it; creating it grants no public
         access.
       requestBody:
@@ -38,54 +39,54 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateInternetGatewayRequestBody'
+              $ref: "#/components/schemas/CreateInternetGatewayRequestBody"
       responses:
-        '201':
+        "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InternetGateway'
+                $ref: "#/components/schemas/InternetGateway"
         default: *id001
   /api/v2/internet-gateways/{internetGatewayId}:
     get:
       operationId: get-internet-gateway
       summary: Get an internet gateway
       tags:
-      - internet-gateways
+        - internet-gateways
       parameters: &id002
-      - name: internetGatewayId
-        in: path
-        required: true
-        schema:
-          $ref: ./identifiers.yaml#/components/schemas/InternetGatewayId
+        - name: internetGatewayId
+          in: path
+          required: true
+          schema:
+            $ref: ./identifiers.yaml#/components/schemas/InternetGatewayId
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InternetGateway'
+                $ref: "#/components/schemas/InternetGateway"
         default: *id001
     patch:
       operationId: update-internet-gateway
       summary: Update an internet gateway
       tags:
-      - internet-gateways
+        - internet-gateways
       parameters: *id002
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateInternetGatewayRequestBody'
+              $ref: "#/components/schemas/UpdateInternetGatewayRequestBody"
       responses:
-        '200':
+        "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InternetGateway'
+                $ref: "#/components/schemas/InternetGateway"
         default: *id001
     delete:
       operationId: delete-internet-gateway
@@ -93,10 +94,10 @@ paths:
       description: Refused while any EIP association or unreleased IPv6 bandwidth
         service uses this connection.
       tags:
-      - internet-gateways
+        - internet-gateways
       parameters: *id002
       responses:
-        '204':
+        "204":
           description: Deleted
         default: *id001
 components:
@@ -125,21 +126,21 @@ components:
         status:
           type: string
           enum:
-          - pending
-          - available
-          - deleted
+            - pending
+            - available
+            - deleted
         created_at:
           type: string
           format: date-time
       required:
-      - id
-      - project_id
-      - region_id
-      - virtual_private_cloud_id
-      - name
-      - description
-      - status
-      - created_at
+        - id
+        - project_id
+        - region_id
+        - virtual_private_cloud_id
+        - name
+        - description
+        - status
+        - created_at
       additionalProperties: false
     CreateInternetGatewayRequestBody:
       type: object
@@ -151,9 +152,9 @@ components:
         name: *id005
         description: *id006
       required:
-      - virtual_private_cloud_id
-      - line_id
-      - name
+        - virtual_private_cloud_id
+        - line_id
+        - name
       additionalProperties: false
     UpdateInternetGatewayRequestBody:
       type: object
@@ -168,10 +169,10 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/InternetGateway'
+            $ref: "#/components/schemas/InternetGateway"
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:
-      - items
-      - pagination
+        - items
+        - pagination
       additionalProperties: false

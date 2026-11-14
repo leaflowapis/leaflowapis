@@ -179,16 +179,16 @@ components:
       description: Internet gateway TypeID.
       minLength: 30
       maxLength: 30
-      pattern: '^igw_[0-7][0-9a-hjkmnp-tv-z]{25}$'
+      pattern: "^igw_[0-7][0-9a-hjkmnp-tv-z]{25}$"
     InternetBandwidthId:
       type: string
       description: Independent internet bandwidth TypeID.
       minLength: 36
       maxLength: 36
-      pattern: '^bandwidth_[0-7][0-9a-hjkmnp-tv-z]{25}$'
+      pattern: "^bandwidth_[0-7][0-9a-hjkmnp-tv-z]{25}$"
     IpPrefixAllocationId:
       type: string
       description: Held IP prefix TypeID.
       minLength: 45
       maxLength: 45
-      pattern: '^ipprefixallocation_[0-7][0-9a-hjkmnp-tv-z]{25}$'
+      pattern: "^ipprefixallocation_[0-7][0-9a-hjkmnp-tv-z]{25}$"
