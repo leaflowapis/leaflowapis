@@ -1,0 +1,742 @@
+openapi: 3.2.1
+info:
+  title: Leaflow OKData API
+  version: 1.0.0
+  description: |-
+    Third-party data supplied by OKData for Leaflow projects. Enable OKData before making metered
+    queries. Data may be incomplete or outdated.
+servers:
+  - url: https://okdata.leaflow.cloud
+security:
+  - bearerAuth: []
+tags:
+  - name: Enablement
+    description: Project activation
+  - name: Capabilities
+    description: Available data queries
+  - name: Xiaohongshu
+    description: Xiaohongshu notes and comments
+paths:
+  /api/v1/enablement:
+    get:
+      summary: Get OKData enablement
+      description: Returns the current project's enablement. Metered queries require an active enablement.
+      operationId: get-enablement
+      tags:
+        - Enablement
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnablementResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Enable OKData
+      description: |-
+        Enables OKData for this project with the customer's consent. There is no activation fee;
+        queries are billed under its subscription.
+
+        Returns `pending` with a Checkout Session. It becomes `active` once checkout is complete and
+        the order is accepted.
+
+        Refused with 409 `ENABLEMENT_ALREADY_EXISTS` while an enablement is pending or active.
+      operationId: create-enablement
+      tags:
+        - Enablement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEnablementRequestBody"
+      responses:
+        "202":
+          description: The enablement and Checkout Session were created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateEnablementResponseBody"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/capabilities:
+    get:
+      summary: List OKData capabilities
+      description: |-
+        Lists available data queries and their billing information. This operation is free and does not
+        enable OKData.
+      operationId: list-capabilities
+      tags:
+        - Capabilities
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapabilityListResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/xiaohongshu:searchNotes:
+    post:
+      summary: Search Xiaohongshu notes
+      description: |-
+        Searches Xiaohongshu notes. Requires an active enablement. Returns one page of up to 20 notes; each
+        page is a separate metered query.
+      operationId: search-xiaohongshu-notes
+      tags:
+        - Xiaohongshu
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchXiaohongshuNotesRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchXiaohongshuNotesResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/xiaohongshu:lookupNote:
+    post:
+      summary: Look up a Xiaohongshu note
+      description: Looks up one Xiaohongshu note by ID or supported note URL. Requires an active enablement.
+      operationId: lookup-xiaohongshu-note
+      tags:
+        - Xiaohongshu
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupXiaohongshuNoteRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LookupXiaohongshuNoteResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/xiaohongshu:queryNoteComments:
+    post:
+      summary: Query comments on a Xiaohongshu note
+      description: |-
+        Returns one page of up to 10 comments on a Xiaohongshu note. Requires an active enablement. Each
+        page is a separate metered query.
+      operationId: query-xiaohongshu-note-comments
+      tags:
+        - Xiaohongshu
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QueryXiaohongshuNoteCommentsRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryXiaohongshuNoteCommentsResponse"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+        pattern: ^[!-~]+$
+      description: |-
+        Use a new key for each query or page. Keys are scoped to the project and valid for 24 hours.
+
+        Retry with the same key and request. A completed query returns the previous result at no
+        extra charge. A different request returns 409 `IDEMPOTENCY_CONFLICT`; a query still running
+        returns 409 `QUERY_IN_PROGRESS`.
+
+        After the key expires, a retry is a new query and may be charged.
+
+        An inactive enablement returns 403 `ENABLEMENT_REQUIRED`. An expired cursor returns 410
+        `CURSOR_EXPIRED` when starting a new query.
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    CheckoutOptions:
+      $ref: ../../billing/type/v1/checkout.yaml#/components/schemas/CheckoutOptions
+    EnablementResource:
+      description: OKData activation status for a project.
+      type: object
+      properties:
+        status:
+          description: |-
+            inactive: not enabled; pending: awaiting checkout or order acceptance; active: queries are allowed;
+            failed: activation did not complete.
+          type: string
+          enum:
+            - inactive
+            - pending
+            - active
+            - failed
+        failure_reason:
+          description: Why activation failed. Null unless status is failed.
+          type:
+            - string
+            - "null"
+          enum:
+            - checkout_expired
+            - order_declined
+            - order_canceled
+            - order_expired
+            - null
+        checkout_session_id:
+          description: The Checkout Session for the latest activation. Null before activation is requested.
+          type:
+            - string
+            - "null"
+          format: uuid
+        order_id:
+          description: The associated order. Null until checkout completes.
+          type:
+            - string
+            - "null"
+          format: uuid
+        plan_id:
+          description: The Billing plan for this enablement. Null if unavailable.
+          type:
+            - string
+            - "null"
+          format: uuid
+        subscription_id:
+          description: The associated subscription. Null until checkout completes.
+          type:
+            - string
+            - "null"
+          format: uuid
+        activated_at:
+          description: When the enablement became active. Null until then.
+          type:
+            - string
+            - "null"
+          format: date-time
+        ended_at:
+          description: When the subscription ended. Null while it has not ended.
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - status
+        - plan_id
+        - failure_reason
+        - checkout_session_id
+        - order_id
+        - subscription_id
+        - activated_at
+        - ended_at
+      additionalProperties: false
+    CreateEnablementRequestBody:
+      type: object
+      properties:
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+      additionalProperties: false
+    CreateEnablementResponseBody:
+      description: The pending enablement and its Checkout Session.
+      type: object
+      properties:
+        enablement:
+          $ref: "#/components/schemas/EnablementResource"
+        checkout_session_id:
+          description: The Checkout Session to complete.
+          type: string
+          format: uuid
+        order_id:
+          description: The resulting order. Null until checkout completes.
+          type:
+            - string
+            - "null"
+          format: uuid
+      required:
+        - enablement
+        - checkout_session_id
+        - order_id
+      additionalProperties: false
+    CapabilityMeter:
+      type: object
+      properties:
+        kind:
+          type: string
+          enum:
+            - requests
+            - items
+        meter_lookup_key:
+          description: Billing meter lookup key.
+          type: string
+        unit:
+          description: Metering unit, such as call or item.
+          type: string
+        dimension_keys:
+          type: array
+          items:
+            type: string
+        dimensions:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+        - kind
+        - meter_lookup_key
+        - unit
+        - dimension_keys
+        - dimensions
+      additionalProperties: false
+    CapabilityBilling:
+      description: Billing references for this capability. Prices and quotes are available from Billing.
+      type: object
+      properties:
+        plan_id:
+          description: The Billing plan associated with this capability.
+          type:
+            - string
+            - "null"
+          format: uuid
+        meters:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapabilityMeter"
+      required:
+        - plan_id
+        - meters
+      additionalProperties: false
+    CapabilityResource:
+      type: object
+      properties:
+        id:
+          description: Capability identifier, such as xiaohongshu.notes.search.
+          type: string
+        name:
+          description: Display name.
+          type: string
+        operation_id:
+          description: The operationId for this query.
+          type: string
+        provider:
+          description: Data supplier, such as okdata.
+          type: string
+        platform:
+          description: Source platform, such as xiaohongshu.
+          type: string
+        status:
+          description: Whether the query is available, in preview or unavailable.
+          type: string
+          enum:
+            - available
+            - preview
+            - unavailable
+        billing:
+          $ref: "#/components/schemas/CapabilityBilling"
+      required:
+        - id
+        - name
+        - operation_id
+        - provider
+        - platform
+        - status
+        - billing
+      additionalProperties: false
+    CapabilityListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CapabilityResource"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    SourceWarning:
+      type: object
+      properties:
+        code:
+          description: Optional warning code.
+          type: string
+        message:
+          description: Warning message.
+          type: string
+      required:
+        - message
+      additionalProperties: false
+    DataSource:
+      type: object
+      properties:
+        provider:
+          description: Third-party data supplier.
+          type: string
+        platform:
+          description: Original data platform.
+          type: string
+        fetched_at:
+          description: When the data was fetched. Null if the supplier does not report it.
+          type:
+            - string
+            - "null"
+          format: date-time
+        upstream_request_id:
+          description: Supplier request reference for support.
+          type: string
+        cached:
+          description: Whether the supplier reports a cached result.
+          type: boolean
+      required:
+        - provider
+        - platform
+        - fetched_at
+      additionalProperties: false
+    ResultMetadata:
+      type: object
+      properties:
+        request_id:
+          description: Request reference for support.
+          type: string
+        source:
+          $ref: "#/components/schemas/DataSource"
+        result_status:
+          type: string
+          enum:
+            - complete
+            - partial
+            - empty
+        warnings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SourceWarning"
+        unavailable:
+          description: Fields unavailable from the supplier and their reasons.
+          type: object
+          additionalProperties:
+            type: string
+        replayed:
+          description: True when returning a previous result for the same idempotency key. No new usage is recorded.
+          type: boolean
+      required:
+        - request_id
+        - source
+        - result_status
+        - warnings
+        - unavailable
+        - replayed
+      additionalProperties: false
+    NoteAuthor:
+      type: object
+      properties:
+        id:
+          type:
+            - string
+            - "null"
+        name:
+          type:
+            - string
+            - "null"
+        avatar_url:
+          type:
+            - string
+            - "null"
+          format: uri
+      required:
+        - id
+        - name
+        - avatar_url
+      additionalProperties: false
+    NoteMetrics:
+      type: object
+      properties:
+        views:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        likes:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        comments:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        shares:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        favorites:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+      required:
+        - views
+        - likes
+        - comments
+        - shares
+        - favorites
+      additionalProperties: false
+    NoteResource:
+      type: object
+      properties:
+        id:
+          description: Xiaohongshu note ID.
+          type: string
+        url:
+          type:
+            - string
+            - "null"
+          format: uri
+        type:
+          description: Note type, such as image or video.
+          type:
+            - string
+            - "null"
+        title:
+          type:
+            - string
+            - "null"
+        text:
+          type:
+            - string
+            - "null"
+        published_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        author:
+          $ref: "#/components/schemas/NoteAuthor"
+        metrics:
+          $ref: "#/components/schemas/NoteMetrics"
+        images:
+          type: array
+          items:
+            type: string
+            format: uri
+      required:
+        - id
+        - url
+        - type
+        - title
+        - text
+        - published_at
+        - author
+        - metrics
+        - images
+      additionalProperties: false
+    CommentResource:
+      type: object
+      properties:
+        id:
+          type: string
+        note_id:
+          type: string
+        parent_id:
+          type:
+            - string
+            - "null"
+        text:
+          type:
+            - string
+            - "null"
+        published_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        author:
+          $ref: "#/components/schemas/NoteAuthor"
+        likes:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+        replies:
+          type:
+            - integer
+            - "null"
+          format: int64
+          minimum: 0
+      required:
+        - id
+        - note_id
+        - parent_id
+        - text
+        - published_at
+        - author
+        - likes
+        - replies
+      additionalProperties: false
+    SearchXiaohongshuNotesRequest:
+      type: object
+      properties:
+        query:
+          description: Keywords to search for.
+          type: string
+          minLength: 1
+          maxLength: 1024
+        sort:
+          type: string
+          enum:
+            - general
+            - latest
+            - popular
+          default: general
+        note_type:
+          type: string
+          enum:
+            - all
+            - image
+            - video
+          default: all
+        cursor:
+          description: Continuation from the previous response. Omit for the first page; keep the same query when using it.
+          type: string
+          minLength: 1
+          maxLength: 1024
+      required:
+        - query
+      additionalProperties: false
+    LookupXiaohongshuNoteRequest:
+      type: object
+      properties:
+        note:
+          description: Xiaohongshu note ID or supported note/share URL.
+          type: string
+          minLength: 1
+          maxLength: 2048
+      required:
+        - note
+      additionalProperties: false
+    QueryXiaohongshuNoteCommentsRequest:
+      type: object
+      properties:
+        note_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+        cursor:
+          description: Continuation from the previous response. Omit for the first page; keep the same query when using it.
+          type: string
+          minLength: 1
+          maxLength: 1024
+      required:
+        - note_id
+      additionalProperties: false
+    SearchXiaohongshuNotesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NoteResource"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/CursorPagination
+        meta:
+          $ref: "#/components/schemas/ResultMetadata"
+      required:
+        - items
+        - pagination
+        - meta
+      additionalProperties: false
+    LookupXiaohongshuNoteResponse:
+      type: object
+      properties:
+        note:
+          $ref: "#/components/schemas/NoteResource"
+        meta:
+          $ref: "#/components/schemas/ResultMetadata"
+      required:
+        - note
+        - meta
+      additionalProperties: false
+    QueryXiaohongshuNoteCommentsResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CommentResource"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/CursorPagination
+        meta:
+          $ref: "#/components/schemas/ResultMetadata"
+      required:
+        - items
+        - pagination
+        - meta
+      additionalProperties: false
+  responses:
+    Conflict:
+      description: An enablement is already pending or active.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
