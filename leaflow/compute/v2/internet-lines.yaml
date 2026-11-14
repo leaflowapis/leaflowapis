@@ -96,15 +96,13 @@ components:
           maxLength: 255
         address_billing:
           description:
-            The address line every elastic IP of this line has. It is always metered, and meters the
-            address while no network interface holds it.
+            The address product, metered for the full holding duration regardless of association or bandwidth purchase.
           allOf:
             - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
         bandwidth_billing:
           description:
-            The network line every elastic IP of this line has, which pays its bandwidth, prepaid or used
-            while associated, or its traffic. Metered, the line's quantity is 1 and the bandwidth or the traffic is
-            what its meters read, by the elastic IP's `internet_charge_type`.
+            The independent bandwidth product. Duration billing runs while enabled regardless of address association;
+            traffic billing measures actual outbound bytes only.
           allOf:
             - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
         min_bandwidth_mbps:

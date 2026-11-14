@@ -252,6 +252,11 @@ components:
           type: string
         ipv4_cidr:
           type: string
+        ipv6_internet_line_id:
+          description: The internet line supplying this VPC's IPv6 prefix; null when IPv6 has no commercial line. Use its bandwidth product when purchasing VPC IPv6 bandwidth.
+          anyOf:
+            - $ref: ./identifiers.yaml#/components/schemas/InternetLineId
+            - type: "null"
         ipv6_cidr:
           description:
             The /56 routed to the virtual private cloud, from which each of its subnets takes a /64; null
