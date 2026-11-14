@@ -37,6 +37,8 @@ servers:
 security:
   - scopedTokenAuth: []
 tags:
+  - name: internet-bandwidths
+    description: Independently billed internet bandwidth services.
   - name: internet-gateways
     description: Unbilled VPC internet connections.
   - name: availability-zones
@@ -86,6 +88,12 @@ tags:
   - name: volumes
     description: Volumes resources and operations.
 paths:
+  /api/v2/internet-bandwidths:
+    $ref: ./internet-bandwidths.yaml#/paths/~1api~1v2~1internet-bandwidths
+  /api/v2/internet-bandwidths/{internetBandwidthId}:
+    $ref: ./internet-bandwidths.yaml#/paths/~1api~1v2~1internet-bandwidths~1{internetBandwidthId}
+  /api/v2/internet-bandwidths/{internetBandwidthId}/traffic-usage:
+    $ref: ./internet-bandwidths.yaml#/paths/~1api~1v2~1internet-bandwidths~1{internetBandwidthId}~1traffic-usage
   /api/v2/internet-gateways:
     $ref: ./internet-gateways.yaml#/paths/~1api~1v2~1internet-gateways
   /api/v2/internet-gateways/{internetGatewayId}:
