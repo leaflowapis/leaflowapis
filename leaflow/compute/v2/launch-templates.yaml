@@ -515,7 +515,7 @@ components:
       type: object
       properties:
         line_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIpLineId
+          $ref: ./identifiers.yaml#/components/schemas/InternetLineId
         bandwidth_mbps:
           type: integer
           format: int64

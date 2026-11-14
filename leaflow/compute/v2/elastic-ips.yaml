@@ -26,7 +26,7 @@ paths:
       description: |-
         Select an elastic IP line. The elastic IP is bought through a Billing Checkout Session, and no address is allocated before its order is accepted.
 
-        The line has to have an address left, counted before anything is ordered: refused with 409 `ELASTIC_IP_LINE_EXHAUSTED` when every address it sells is held or already promised to a purchase waiting for its order. Two purchases checked at the same moment can both pass on the last address; the later one ends `failed` with `provisioning_failed` and its charge is refunded.
+        The line has to have an address left, counted before anything is ordered: refused with 409 `INTERNET_LINE_EXHAUSTED` when every address it sells is held or already promised to a purchase waiting for its order. Two purchases checked at the same moment can both pass on the last address; the later one ends `failed` with `provisioning_failed` and its charge is refunded.
 
         Returns the elastic IP as `pending` with its Checkout Session; `address` is null until the address is allocated after the order is accepted. A requested `address` is not held while pending; if it is no longer available then, the elastic IP ends `failed` with `provisioning_failed` and its charge is refunded.
 
@@ -428,7 +428,7 @@ components:
         id:
           $ref: ./identifiers.yaml#/components/schemas/ElasticIpId
         line_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIpLineId
+          $ref: ./identifiers.yaml#/components/schemas/InternetLineId
         region_id:
           $ref: ./identifiers.yaml#/components/schemas/RegionId
         status:
@@ -639,7 +639,7 @@ components:
           minimum: 1
           maximum: 1000
         line_id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIpLineId
+          $ref: ./identifiers.yaml#/components/schemas/InternetLineId
         billing:
           description: The selected Billing price for this component. Required even when joining an existing subscription; Billing checks compatibility.
           $ref: ./billing-terms.yaml#/components/schemas/BillingChoice

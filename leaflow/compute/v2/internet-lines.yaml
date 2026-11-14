@@ -1,20 +1,20 @@
 paths:
-  /api/v2/elastic-ip-lines:
+  /api/v2/internet-lines:
     get:
-      operationId: list-elastic-ip-lines
+      operationId: list-internet-lines
       security:
         - {}
         - scopedTokenAuth: []
       summary: List and search elastic IP lines
       tags:
-        - elastic-ip-lines
+        - internet-lines
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ElasticIpLineListResponseBody"
+                $ref: "#/components/schemas/InternetLineListResponseBody"
         default:
           description: Error
           content:
@@ -44,22 +44,22 @@ paths:
             maxLength: 255
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
-  /api/v2/elastic-ip-lines/{elasticIpLineId}:
+  /api/v2/internet-lines/{internetLineId}:
     get:
-      operationId: get-elastic-ip-line
+      operationId: get-internet-line
       security:
         - {}
         - scopedTokenAuth: []
       summary: Get an elastic IP line
       tags:
-        - elastic-ip-lines
+        - internet-lines
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ElasticIpLine"
+                $ref: "#/components/schemas/InternetLine"
         default:
           description: Error
           content:
@@ -70,20 +70,20 @@ paths:
         Includes lines off sale that existing elastic IPs are on. No inventory or gateway facts are
         returned.
       parameters:
-        - name: elasticIpLineId
+        - name: internetLineId
           in: path
           required: true
           schema:
-            $ref: ./identifiers.yaml#/components/schemas/ElasticIpLineId
+            $ref: ./identifiers.yaml#/components/schemas/InternetLineId
 components:
   schemas:
-    ElasticIpLine:
+    InternetLine:
       description: |-
         The network an elastic IP is bought on: the bandwidth that can be chosen, and the two Billing Plans every elastic IP of the line is paid under in one order. The address item is always used and meters the address while it is held idle, associated with nothing; the network item pays the bandwidth, prepaid or used while associated, or the traffic sent. Contains no supply ranges, gateways or backend execution state.
       type: object
       properties:
         id:
-          $ref: ./identifiers.yaml#/components/schemas/ElasticIpLineId
+          $ref: ./identifiers.yaml#/components/schemas/InternetLineId
         region_id:
           $ref: ./identifiers.yaml#/components/schemas/RegionId
         name:
@@ -100,7 +100,7 @@ components:
             address while no network interface holds it.
           allOf:
             - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
-        internet_billing:
+        bandwidth_billing:
           description:
             The network line every elastic IP of this line has, which pays its bandwidth, prepaid or used
             while associated, or its traffic. Metered, the line's quantity is 1 and the bandwidth or the traffic is
@@ -145,7 +145,7 @@ components:
         - name
         - description
         - address_billing
-        - internet_billing
+        - bandwidth_billing
         - min_bandwidth_mbps
         - max_bandwidth_mbps
         - sale_status
@@ -153,13 +153,13 @@ components:
         - created_at
         - updated_at
       additionalProperties: false
-    ElasticIpLineListResponseBody:
+    InternetLineListResponseBody:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/ElasticIpLine"
+            $ref: "#/components/schemas/InternetLine"
         pagination:
           $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
       required:

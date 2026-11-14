@@ -39,7 +39,7 @@ security:
 tags:
   - name: availability-zones
     description: Availability zones, the placement unit of volumes and instances.
-  - name: elastic-ip-lines
+  - name: internet-lines
     description: Public network products; prices and checkout belong to Billing.
   - name: elastic-ips
     description: Elastic IP resources, bandwidth and associations.
@@ -88,10 +88,10 @@ paths:
     $ref: ./availability-zones.yaml#/paths/~1api~1v2~1availability-zones
   /api/v2/availability-zones/{availabilityZoneId}:
     $ref: ./availability-zones.yaml#/paths/~1api~1v2~1availability-zones~1{availabilityZoneId}
-  /api/v2/elastic-ip-lines:
-    $ref: ./elastic-ip-lines.yaml#/paths/~1api~1v2~1elastic-ip-lines
-  /api/v2/elastic-ip-lines/{elasticIpLineId}:
-    $ref: ./elastic-ip-lines.yaml#/paths/~1api~1v2~1elastic-ip-lines~1{elasticIpLineId}
+  /api/v2/internet-lines:
+    $ref: ./internet-lines.yaml#/paths/~1api~1v2~1internet-lines
+  /api/v2/internet-lines/{internetLineId}:
+    $ref: ./internet-lines.yaml#/paths/~1api~1v2~1internet-lines~1{internetLineId}
   /api/v2/elastic-ips:
     $ref: ./elastic-ips.yaml#/paths/~1api~1v2~1elastic-ips
   /api/v2/elastic-ips/{elasticIpId}:
@@ -275,10 +275,10 @@ components:
       $ref: ./billing-terms.yaml#/components/schemas/BillingMeter
     BillingCancellation:
       $ref: ./billing-terms.yaml#/components/schemas/BillingCancellation
-    ElasticIpLine:
-      $ref: ./elastic-ip-lines.yaml#/components/schemas/ElasticIpLine
-    ElasticIpLineListResponseBody:
-      $ref: ./elastic-ip-lines.yaml#/components/schemas/ElasticIpLineListResponseBody
+    InternetLine:
+      $ref: ./internet-lines.yaml#/components/schemas/InternetLine
+    InternetLineListResponseBody:
+      $ref: ./internet-lines.yaml#/components/schemas/InternetLineListResponseBody
     DeleteElasticIpResponseBody:
       $ref: ./elastic-ips.yaml#/components/schemas/DeleteElasticIpResponseBody
     InternetChargeType:
@@ -323,8 +323,8 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudIdOrWildcard
     ElasticIpId:
       $ref: ./identifiers.yaml#/components/schemas/ElasticIpId
-    ElasticIpLineId:
-      $ref: ./identifiers.yaml#/components/schemas/ElasticIpLineId
+    InternetLineId:
+      $ref: ./identifiers.yaml#/components/schemas/InternetLineId
     RegionId:
       $ref: ./identifiers.yaml#/components/schemas/RegionId
     InstanceTypeId:
