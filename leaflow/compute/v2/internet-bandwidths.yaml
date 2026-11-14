@@ -368,6 +368,10 @@ components:
           maximum: 1000000
         internet_charge_type:
           $ref: "#/components/schemas/InternetBandwidthChargeType"
+        proration_date:
+          type: string
+          format: date-time
+          description: The quote's proration instant, forwarded unchanged for an automatic prepaid ceiling change. Deferred checkout is repriced when completed. Refused for metered or charge-type changes.
         checkout:
           $ref: ../../billing/type/v1/checkout.yaml#/components/schemas/CheckoutOptions
       required: []
