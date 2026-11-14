@@ -49,8 +49,8 @@ components:
       pattern: ^eip_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
     InternetLineId:
       type: string
-      minLength: 34
-      maxLength: 34
+      minLength: 31
+      maxLength: 31
       pattern: ^line_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute InternetLine TypeID. UUID text is not accepted.
     RegionId:
