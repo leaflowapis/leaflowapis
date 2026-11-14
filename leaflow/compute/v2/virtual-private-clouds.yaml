@@ -244,6 +244,11 @@ components:
     VirtualPrivateCloud:
       type: object
       properties:
+        mtu:
+          description: Actual MTU observed on the Neutron network; null until provisioned and observed. This does not assert the MTU of existing guest interfaces.
+          type: [integer, "null"]
+          format: int64
+          minimum: 1
         id:
           $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudId
         region_id:
@@ -294,6 +299,7 @@ components:
             - $ref: ./latest-operations.yaml#/components/schemas/LatestOperation
             - type: "null"
       required:
+        - mtu
         - id
         - region_id
         - name
