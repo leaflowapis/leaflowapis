@@ -40,9 +40,13 @@ paths:
     post:
       summary: Enable OKData
       description: |-
-        Enable OKData for the current project with explicit consent to metered charges. Returns a pending
-        enablement and a Checkout Session. Activation completes after checkout and order acceptance. Returns
-        409 ENABLEMENT_ALREADY_EXISTS if already pending or active.
+        Enables OKData for this project with the customer's consent. There is no activation fee;
+        queries are billed under its subscription.
+
+        Returns `pending` with a Checkout Session. It becomes `active` once checkout is complete and
+        the order is accepted.
+
+        Refused with 409 `ENABLEMENT_ALREADY_EXISTS` while an enablement is pending or active.
       operationId: create-enablement
       tags:
         - Enablement
@@ -195,8 +199,16 @@ components:
         maxLength: 255
         pattern: ^[!-~]+$
       description: |-
-        Identifies one query. Reuse the key and request body when retrying. Use a new key for each new query
-        or page. A different body with the same key is refused.
+        Use a new key for each query or page. Keys are scoped to the project and valid for 24 hours.
+
+        Retry with the same key and request. A completed query returns the previous result at no
+        extra charge. A different request returns 409 `IDEMPOTENCY_CONFLICT`; a query still running
+        returns 409 `QUERY_IN_PROGRESS`.
+
+        After the key expires, a retry is a new query and may be charged.
+
+        An inactive enablement returns 403 `ENABLEMENT_REQUIRED`. An expired cursor returns 410
+        `CURSOR_EXPIRED` when starting a new query.
   schemas:
     Error:
       $ref: ../../type/v1/error.yaml#/components/schemas/Error
