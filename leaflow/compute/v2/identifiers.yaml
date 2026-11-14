@@ -174,3 +174,9 @@ components:
       maxLength: 33
       pattern: ^sgrule_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute SecurityGroupRule TypeID. UUID text is not accepted.
+    InternetGatewayId:
+      type: string
+      description: Internet gateway TypeID.
+      minLength: 30
+      maxLength: 30
+      pattern: '^igw_[0-7][0-9a-hjkmnp-tv-z]{25}$'

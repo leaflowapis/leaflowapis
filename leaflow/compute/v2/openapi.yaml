@@ -37,6 +37,8 @@ servers:
 security:
   - scopedTokenAuth: []
 tags:
+  - name: internet-gateways
+    description: Unbilled VPC internet connections.
   - name: availability-zones
     description: Availability zones, the placement unit of volumes and instances.
   - name: internet-lines
@@ -84,6 +86,10 @@ tags:
   - name: volumes
     description: Volumes resources and operations.
 paths:
+  /api/v2/internet-gateways:
+    $ref: ./internet-gateways.yaml#/paths/~1api~1v2~1internet-gateways
+  /api/v2/internet-gateways/{internetGatewayId}:
+    $ref: ./internet-gateways.yaml#/paths/~1api~1v2~1internet-gateways~1{internetGatewayId}
   /api/v2/availability-zones:
     $ref: ./availability-zones.yaml#/paths/~1api~1v2~1availability-zones
   /api/v2/availability-zones/{availabilityZoneId}:
