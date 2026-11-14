@@ -11,7 +11,7 @@ info:
 
 
     Every request carries a scoped token; see the `scopedTokenAuth` security scheme. The catalog reads, which list
-    and retrieve regions, availability zones, instance types, volume types, public images and elastic IP lines,
+    and retrieve regions, availability zones, instance types, volume types, public images and internet lines,
     also answer without a token, so a visitor can configure a purchase and price it with Billing before signing
     in. A token given to them is still verified, and an invalid one is refused.
 

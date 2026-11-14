@@ -5,7 +5,7 @@ paths:
       security:
         - {}
         - scopedTokenAuth: []
-      summary: List and search elastic IP lines
+      summary: List and search internet lines
       tags:
         - internet-lines
       responses:
@@ -22,8 +22,7 @@ paths:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
       description:
-        Lists the lines on sale. A line is the network an elastic IP is bought on, with the bandwidth that
-        can be chosen and the two Billing Plans its elastic IPs are paid under. Region is optional. Prices, commercial
+        Lists the commercial internet lines on sale. A line can supply IPv4 and IPv6, with selectable bandwidth ceilings and separate address and bandwidth Billing Plans. Region is optional. Prices, commercial
         terms and checkout are read directly from Billing. `q` searches the names and descriptions of the lines on
         sale; filters combine with AND, and pagination is independent of them.
       parameters:
@@ -50,7 +49,7 @@ paths:
       security:
         - {}
         - scopedTokenAuth: []
-      summary: Get an elastic IP line
+      summary: Get an internet line
       tags:
         - internet-lines
       responses:
@@ -66,9 +65,7 @@ paths:
             application/json:
               schema:
                 $ref: ../../type/v1/error.yaml#/components/schemas/Error
-      description:
-        Includes lines off sale that existing elastic IPs are on. No inventory or gateway facts are
-        returned.
+      description: Returns a line currently on sale. Lines off sale are not exposed by this public catalog endpoint. No inventory or gateway facts are returned.
       parameters:
         - name: internetLineId
           in: path
@@ -79,7 +76,7 @@ components:
   schemas:
     InternetLine:
       description: |-
-        The network an elastic IP is bought on: the bandwidth that can be chosen, and the two Billing Plans every elastic IP of the line is paid under in one order. The address item is always used and meters the address while it is held idle, associated with nothing; the network item pays the bandwidth, prepaid or used while associated, or the traffic sent. Contains no supply ranges, gateways or backend execution state.
+        A regional commercial internet offering that can supply both IPv4 addresses and IPv6 prefixes. Address and bandwidth services have independent subscriptions. IPv4 addresses are billed for their full holding duration. Mbps duration is billed while bandwidth service is enabled, regardless of address association; traffic billing measures actual outbound bytes. Billing owns prices and checkout.
       type: object
       properties:
         id:
@@ -105,27 +102,24 @@ components:
           allOf:
             - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
         min_bandwidth_mbps:
-          description: The least bandwidth an elastic IP of this line can be bought with, in Mbps.
+          description: The least bandwidth a service on this line can be bought with, in Mbps.
           type: integer
           format: int64
         max_bandwidth_mbps:
           description:
-            The most bandwidth an elastic IP of this line can be bought with, in Mbps, at most 1000. An elastic
+            The most bandwidth a service on this line can be bought with, in Mbps, at most 1000. An elastic
             IP associated with an instance is also held to the instance type's `max_bandwidth_mbps`.
           type: integer
           format: int64
         sale_status:
-          description:
-            "`on_sale` is offered for new elastic IPs; `off_sale` takes none, while the elastic IPs already
-            on it keep working."
+          description: "`on_sale` accepts new address and bandwidth purchases; `off_sale` refuses new purchases while existing services continue."
           type: string
           enum:
             - on_sale
             - off_sale
         traffic_sale_status:
           description:
-            Whether an elastic IP of this line can be bought with `internet_charge_type` `traffic`, billed by
-            the bytes it sends. `off_sale` refuses that with `ELASTIC_IP_TRAFFIC_UNAVAILABLE`.
+            Whether bandwidth services on this line can use `internet_charge_type: traffic`, billed by actual outbound bytes. `off_sale` refuses new traffic-billed bandwidth purchases.
           type: string
           enum:
             - on_sale
