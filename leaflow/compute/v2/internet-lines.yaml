@@ -118,7 +118,7 @@ components:
             - on_sale
             - off_sale
         traffic_sale_status:
-          description:
+          description: >-
             Whether bandwidth services on this line can use `internet_charge_type: traffic`, billed by actual outbound bytes. `off_sale` refuses new traffic-billed bandwidth purchases.
           type: string
           enum:
