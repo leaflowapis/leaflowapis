@@ -62,7 +62,7 @@ tags:
     description: Project API keys.
   - name: Model
     description: Callable model catalogue and billing metadata.
-  - name: Enablement
+  - name: Enable
     description: Project service enablement.
   - name: Usage
     description: Recorded requests and token or media usage.

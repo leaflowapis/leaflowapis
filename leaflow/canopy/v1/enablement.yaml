@@ -8,7 +8,7 @@ paths:
         When the project is deleted, its API keys are revoked and the subscription is canceled; the enablement then reads `inactive` with `ended_at` set.
       operationId: get-enablement
       tags:
-        - Enablement
+        - Enable
       responses:
         "200":
           description: OK
@@ -26,7 +26,7 @@ paths:
         Refused with 409 `SERVICE_ALREADY_ENABLED` while an enablement is pending or active. A refusal of the order by Billing is returned with Billing's code, such as `BILLING_PRICE_UNAVAILABLE` when the service has no price in the currency of the project's billing account.
       operationId: create-enablement
       tags:
-        - Enablement
+        - Enable
       requestBody:
         required: true
         content:
