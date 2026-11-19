@@ -1,0 +1,81 @@
+paths:
+  /v1/responses:
+    post:
+      operationId: create-response
+      tags:
+        - Inference
+      summary: Create a model response
+      description:
+        Returns JSON, or Responses SSE events when `stream` is true. Accepted for every chat
+        model, whichever protocol its providers speak. Responses are not stored, so `store` must be false;
+        send the output items of a response back unchanged, in their order, as input to the next request.
+        Reasoning items carry `encrypted_content`, which has to be returned as received. WebSocket clients
+        connect with GET /v1/responses and send response.create events; one response may be active on a
+        connection at a time, and `previous_response_id` continues a response created earlier on the same
+        connection. The connection stays on its initial model and provider credential.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResponseCreate"
+      responses:
+        "200":
+          description: Native model response or Responses SSE events.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResponseResource"
+            text/event-stream:
+              schema:
+                type: string
+                format: binary
+        default: &id001_1
+          description: OpenAI error object.
+          content:
+            application/json:
+              schema:
+                $ref: ./inference.yaml#/components/schemas/InferenceError
+components:
+  schemas:
+    ResponseCreate:
+      type: object
+      properties:
+        model:
+          type: string
+        input: {}
+        instructions:
+          type:
+            - string
+            - "null"
+        store:
+          description: Must be false. True is refused with 400 `RESPONSES_STORE_UNSUPPORTED`.
+          type: boolean
+          default: false
+        stream:
+          type: boolean
+          default: false
+        previous_response_id:
+          description:
+            Continues a response created earlier on the same WebSocket connection. Over HTTP no response can be
+            continued, and a request carrying it is refused with 404 `RESPONSE_NOT_FOUND`.
+          type:
+            - string
+            - "null"
+        reasoning:
+          type: object
+          additionalProperties: true
+        tools:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        max_output_tokens:
+          type: integer
+          minimum: 1
+      additionalProperties: true
+      description: Native Responses request. Only caller-executed function and custom tools are
+        supported. background, conversation and WebSocket-only fields are rejected over HTTP.
+    ResponseResource:
+      type: object
+      additionalProperties: true

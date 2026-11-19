@@ -1,0 +1,184 @@
+paths:
+  /api/v2/internet-lines:
+    get:
+      operationId: list-internet-lines
+      security:
+        - {}
+        - scopedTokenAuth: []
+      summary: List and search internet lines
+      tags:
+        - internet-lines
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternetLineListResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+      description:
+        Lists the lines on sale. A line is the network that elastic IPs and the IPv6 CIDR blocks of virtual
+        private clouds are bought on, with the bandwidth that can be chosen and the Billing Plans they are paid under. Region is optional. Prices, commercial terms and checkout are read directly from Billing. `q` searches the names and descriptions of the lines on
+        sale; filters combine with AND, and pagination is independent of them.
+      parameters:
+        - name: region_id
+          in: query
+          required: false
+          schema:
+            $ref: ./identifiers.yaml#/components/schemas/RegionId
+        - name: q
+          in: query
+          required: false
+          description:
+            Search text matched against line names and descriptions; combined with the other filters using
+            AND.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+  /api/v2/internet-lines/{internetLineId}:
+    get:
+      operationId: get-internet-line
+      security:
+        - {}
+        - scopedTokenAuth: []
+      summary: Get an internet line
+      tags:
+        - internet-lines
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InternetLine"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: ../../type/v1/error.yaml#/components/schemas/Error
+      description: Includes lines off sale that existing elastic IPs or virtual private clouds are on.
+      parameters:
+        - name: internetLineId
+          in: path
+          required: true
+          schema:
+            $ref: ./identifiers.yaml#/components/schemas/InternetLineId
+components:
+  schemas:
+    InternetLine:
+      description: |-
+        The network that elastic IPs and the IPv6 CIDR blocks of virtual private clouds are bought on: the bandwidth that can be chosen, and the Billing Plans they are paid under. An elastic IP is paid under both of its Plans in one order: the address item meters the address while it is associated with nothing, and the internet item pays the bandwidth, prepaid or used while associated, or the traffic sent. An IPv6 CIDR block of a virtual private cloud is paid by the bytes its addresses send, under `ipv6_billing`.
+      type: object
+      properties:
+        id:
+          $ref: ./identifiers.yaml#/components/schemas/InternetLineId
+        region_id:
+          $ref: ./identifiers.yaml#/components/schemas/RegionId
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        description:
+          type: string
+          minLength: 0
+          maxLength: 255
+        address_billing:
+          description:
+            The order line every elastic IP of this line has for its address. It is always metered, and meters
+            the address while no network interface holds it.
+          allOf:
+            - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
+        internet_billing:
+          description:
+            The order line that pays an elastic IP of this line by its `internet_charge_type`, the bandwidth
+            prepaid or metered while associated, or the traffic. Metered, its quantity is 1 and its meters read the
+            bandwidth or the traffic.
+          allOf:
+            - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
+        ipv6_billing:
+          description:
+            The order line of an IPv6 CIDR block of this line, always metered by the bytes its addresses send to
+            the internet; null when the line supplies no IPv6.
+          anyOf:
+            - $ref: ./billing-terms.yaml#/components/schemas/BillingComponent
+            - type: "null"
+        min_bandwidth_mbps:
+          description: The least bandwidth that can be bought on this line, in Mbps.
+          type: integer
+          format: int64
+        max_bandwidth_mbps:
+          description:
+            The most bandwidth that can be bought on this line, in Mbps, at most 1000. An elastic IP associated
+            with an instance is also held to the instance type's `max_bandwidth_mbps`.
+          type: integer
+          format: int64
+        sale_status:
+          description:
+            "`on_sale` accepts new elastic IPs and IPv6 CIDR blocks; `off_sale` accepts none, while
+            what is already on the line keeps working."
+          type: string
+          enum:
+            - on_sale
+            - off_sale
+        traffic_sale_status:
+          description:
+            Whether an elastic IP of this line can be bought with `internet_charge_type` `traffic`, billed by
+            the bytes it sends.
+            `off_sale` refuses it with `INTERNET_LINE_TRAFFIC_UNAVAILABLE`.
+          type: string
+          enum:
+            - on_sale
+            - off_sale
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - region_id
+        - name
+        - description
+        - address_billing
+        - internet_billing
+        - ipv6_billing
+        - min_bandwidth_mbps
+        - max_bandwidth_mbps
+        - sale_status
+        - traffic_sale_status
+        - created_at
+        - updated_at
+      additionalProperties: false
+    InternetLineListResponseBody:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InternetLine"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    InternetChargeType:
+      type: string
+      description: What the internet item of an elastic IP charges for.
+        `bandwidth` charges for the bandwidth ceiling, prepaid for a period or by the Mbit/s-second while the address
+        is associated.
+        `traffic` charges for the bytes sent to the internet, pay-as-you-go only, while the bandwidth is only a ceiling.
+        Inbound traffic is never charged.
+      enum:
+        - bandwidth
+        - traffic

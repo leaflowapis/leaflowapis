@@ -1,0 +1,157 @@
+paths:
+  /api/v1/entitlements:
+    get:
+      summary: List entitlements
+      description: Capabilities granted by live subscriptions and active feature grants; members of a project list its entitlements with `project_ids`. A capability not held is not listed, and one stops being listed when the subscription or grant providing it ends.
+      operationId: list-entitlements
+      tags:
+        - entitlements
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
+        - name: product_id
+          in: query
+          required: false
+          schema:
+            $ref: ./products.yaml#/components/schemas/ProductId
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EntitlementList"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/feature-grants:
+    get:
+      summary: List feature grants
+      description: Features held by a billing account for a period, for example through a membership. While a grant is active, every project whose current billing account holds it has the feature, in addition to its subscriptions' features.
+      operationId: list-feature-grants
+      tags:
+        - entitlements
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
+        - name: product_id
+          in: query
+          required: false
+          schema:
+            $ref: ./products.yaml#/components/schemas/ProductId
+        - name: status
+          in: query
+          required: false
+          description: Only feature grants in these statuses; omit for every status. Comma-separated, for example `status=scheduled,active`.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 4
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/FeatureGrantStatus"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureGrantList"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    FeatureGrantStatus:
+      description: Derived from the validity period. scheduled means valid_from has not yet arrived.
+      type: string
+      enum:
+        - scheduled
+        - active
+        - expired
+        - voided
+    FeatureGrant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        billing_account_id:
+          type: integer
+          format: int64
+        product:
+          $ref: ./products.yaml#/components/schemas/Product
+        feature:
+          $ref: ./openapi.yaml#/components/schemas/ObjectIdentity
+        name:
+          type: string
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          description: Null means the grant does not expire.
+          type:
+            - string
+            - "null"
+          format: date-time
+        status:
+          $ref: "#/components/schemas/FeatureGrantStatus"
+      required:
+        - id
+        - billing_account_id
+        - product
+        - feature
+        - name
+        - valid_from
+        - valid_until
+        - status
+      additionalProperties: false
+    FeatureGrantList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureGrant"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    Entitlement:
+      type: object
+      properties:
+        product:
+          $ref: ./products.yaml#/components/schemas/Product
+        feature:
+          $ref: ./openapi.yaml#/components/schemas/ObjectIdentity
+        name:
+          type: string
+        enabled:
+          type: boolean
+        expires_at:
+          description: When the providing subscription item ends with its current term. Absent for a metered item.
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - product
+        - feature
+        - enabled
+    EntitlementList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Entitlement"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination

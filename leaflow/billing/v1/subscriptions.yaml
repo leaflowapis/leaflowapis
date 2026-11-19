@@ -1,0 +1,728 @@
+paths:
+  /api/v1/subscriptions:
+    get:
+      summary: List subscriptions
+      description: Subscriptions paid by your billing accounts; members of a project list its subscriptions with `project_ids`. Each subscription includes its items. Deleted subscriptions are not listed.
+      operationId: list-subscriptions
+      tags:
+        - subscriptions
+      parameters:
+        - name: expiring_before
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: subscription_ids
+          in: query
+          required: false
+          description: Only these subscriptions, such as those of the resources shown on one page. Comma-separated.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 200
+            uniqueItems: true
+            items:
+              type: string
+              format: uuid
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
+        - name: status
+          in: query
+          required: false
+          description: Only subscriptions in these statuses; omit for every status. Comma-separated, for example `status=active,suspended`.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 7
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/SubscriptionStatus"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubscriptionList"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/subscriptions/{subscriptionId}:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
+    get:
+      summary: Get subscription
+      description: A subscription paid by your billing account or of a project you are a member of, with its items. Deleted subscriptions are reported as not found.
+      operationId: get-subscription
+      tags:
+        - subscriptions
+      responses:
+        "200":
+          description: Purchase and renewal agreement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    patch:
+      summary: Update subscription
+      description: |-
+        Changes the subscription's settings given in the request; settings left out keep their values. `auto_renew`
+        turns automatic renewal on or off for the whole subscription, or, on a trialing subscription, whether the trial
+        converts to paid. Turning it off does not shorten current_term_end and still allows manual renewal.
+
+        `auto_renew` is refused with 409 `BILLING_SUBSCRIPTION_AUTO_RENEW_INACTIVE` for a pending or provisioning
+        subscription, 409 `BILLING_SUBSCRIPTION_AUTO_RENEW_FIXED` for a subscription with only metered items, which
+        continues until it is canceled, and 409 `BILLING_SUBSCRIPTION_OPERATION_PENDING` with `meta.cancellation_id`
+        while a cancellation of the whole subscription is open: creating it turned renewal off, and withdrawing it does
+        not turn renewal back on. Open to the owner of the subscription's current billing account and to members of its
+        project with the project permission `billing:finance.manage`.
+      operationId: update-subscription
+      tags:
+        - subscriptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubscriptionUpdate"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Subscription"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    delete:
+      summary: Delete subscription
+      description: Hides a canceled or terminated subscription from your subscription list and detail by setting deleted_at; its status, ended_at, items and history are kept. Only the owner of the subscription's current billing account can delete it. A subscription that has not ended is refused with 409 `BILLING_SUBSCRIPTION_NOT_ENDED` and `status`. Repeating it keeps the original deleted_at. It sends no cleanup command and creates no refund.
+      operationId: delete-subscription
+      tags:
+        - subscriptions
+      responses:
+        "204":
+          description: Hidden from subscription reads; financial history is kept.
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/subscriptions/{subscriptionId}:cancel:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
+    post:
+      summary: Cancel subscription
+      description: |-
+        Requests cancellation of every continuing item of the subscription on their agreed terms, with the same rules
+        as creating a cancellation, the monthly refund quota and its 422 `BILLING_CANCELLATION_REFUND_QUOTA_EXCEEDED`
+        included. Give the `proration_date` and `refundable_amount` of preview-cancellation for these items. Open to
+        the owner of the subscription's current billing account and to members of its project with the project
+        permission `billing:finance.manage`.
+
+        Immediate cancellation asks the owning service to release the resources now; period-end cancellation keeps the
+        subscription in service until its current term ends. The subscription becomes canceled when the service
+        confirms the release; follow the returned cancellation. To cancel some items, or items released together across
+        subscriptions, use create-cancellation; pending or provisioning purchases are canceled through their order.
+        Repeating the request while the cancellation is open returns it.
+      operationId: cancel-subscription
+      tags:
+        - subscriptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelSubscriptionRequest"
+      responses:
+        "202":
+          description: Cancellation requested; cleanup and any refund can still be pending.
+          content:
+            application/json:
+              schema:
+                $ref: ./cancellations.yaml#/components/schemas/Cancellation
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/subscriptions/{subscriptionId}:renew:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
+    post:
+      summary: Renew subscription
+      description: |-
+        Buys further periods for the whole subscription from current_term_end and pays for them at once: every
+        continuing licensed item renews, at its agreed recurring amount or, with a different interval, at the price each
+        item currently sells that term for, and the new terms are fixed on the order. Items with an open cancellation end
+        with the current term and are left out. Paid periods keep their value. A trialing subscription converts to paid
+        this way; renewed after its trial expired, its first paid period starts at payment.
+
+        Without `payment_method_id`, the renewal is paid from credit grants and balance as `use_credits` and
+        `use_balance` allow; when they cannot cover it, the request fails with `BILLING_INSUFFICIENT_FUNDS` and no
+        order is left. To apply a promotion code, pay later, or renew several subscriptions in one order, create a
+        renewal Checkout Session.
+
+        Open to the owner of the subscription's current billing account and to members of its project with the
+        project permission `billing:finance.manage`. Only the owner can pay with `payment_method_id`.
+
+        Keep order_id and read the order after an unknown outcome; creating it again conflicts.
+      operationId: renew-subscription
+      tags:
+        - subscriptions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenewRequest"
+      responses:
+        "409":
+          description: "The order already exists, or the subscription has an operation in progress, refused with `BILLING_SUBSCRIPTION_OPERATION_PENDING`: a pending renewal, a pending or paid change of an item waiting to switch, an open cancellation of the whole subscription or a committed reclaim."
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/Error
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./payments.yaml#/components/schemas/PaymentResult
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/subscriptions/{subscriptionId}/renewal-options:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/SubscriptionId
+    get:
+      summary: List the terms the subscription can be renewed for
+      description: The current agreement first, then each other term every continuing licensed item sells in the subscription's currency. The current option keeps each item's recurring_amount; other options use current prices, each item taking the price of that term with its own cancellation policy, or the only price of that term. Amounts exclude tax and discounts. Open to the owner of the subscription's current billing account and to members of its project.
+      operationId: list-renewal-options
+      tags:
+        - subscriptions
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenewalOptionList"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    CancelSubscriptionRequest:
+      type: object
+      properties:
+        mode:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationMode
+        proration_date:
+          description: For immediate cancellation, the preview's `proration_date`, the whole second the refund is computed as of. Now when omitted.
+          type: string
+          format: date-time
+        expected_refundable_amount:
+          description: The preview's `refundable_amount`, including an explicit zero.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - type: string
+              pattern: ^[0-9]{1,15}([.][0-9]{1,10})?$
+        reason:
+          type: string
+          maxLength: 1024
+      required:
+        - mode
+        - expected_refundable_amount
+      additionalProperties: false
+    ScheduledChange:
+      description: "The next accepted period-end change of the item: the target terms, applied at effective_at."
+      type: object
+      properties:
+        order_id:
+          type: string
+          format: uuid
+        status:
+          $ref: ./orders.yaml#/components/schemas/OrderStatus
+        effective_at:
+          description: When the target terms take effect, normally the end of the current paid period.
+          type: string
+          format: date-time
+        plan_id:
+          type: string
+          format: uuid
+        plan_name:
+          type: string
+        price_id:
+          type: string
+          format: uuid
+        quantity:
+          type: string
+        unit_label:
+          description: The plan's unit label when the change was placed, which a licensed quantity counts, such as GiB or Mbps. Absent for a metered item and when the plan had none.
+          type: string
+        recurring_amount:
+          description: The target licensed renewal amount before tax.
+          type: string
+        currency:
+          type: string
+        interval:
+          type: string
+          enum:
+            - day
+            - month
+            - year
+        interval_count:
+          type: integer
+          minimum: 1
+      required:
+        - order_id
+        - status
+        - effective_at
+        - plan_id
+        - plan_name
+        - price_id
+        - quantity
+        - recurring_amount
+        - currency
+        - interval
+        - interval_count
+    SubscriptionRestriction:
+      description: An operation prevented on the subscription. `billing.subscriptions.use` stops the service. `renew` prevents renewal and paying a renewal order. `modify` prevents placing a change order. `cancel` prevents cancellation. `terminate` prevents immediate termination.
+      type: string
+      enum:
+        - billing.subscriptions.use
+        - billing.subscriptions.renew
+        - billing.subscriptions.modify
+        - billing.subscriptions.cancel
+        - billing.subscriptions.terminate
+    SubscriptionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Subscription"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+    SubscriptionStatus:
+      description: "`pending`: the order has not been accepted. `provisioning`: the owning service accepted the order and is delivering. `active`: delivery was confirmed; payment alone does not make a subscription active. `trialing`: in a free trial, in service, with its licensed items not charged until `trial_end`; metered usage is charged as usual. `suspended`: service is stopped while a lien restricts its use. `canceled`: cancellation of every item completed, or an undelivered purchase was canceled or failed. `terminated`: an operator or the owning service ended it immediately."
+      type: string
+      enum:
+        - pending
+        - provisioning
+        - active
+        - trialing
+        - suspended
+        - canceled
+        - terminated
+    Subscription:
+      description: |-
+        A billing relationship that renews as a whole, as a Stripe subscription: one term, one renewal date, one
+        automatic renewal setting and one service state for all of its items. The owning service decides which order
+        lines form one subscription, such as a machine and the volumes and elastic IP bought with it; a resource bought
+        on its own has its own. A purchase creates pending subscriptions and items whose IDs are returned on the order
+        items and stay the same through checkout, delivery, renewals and changes.
+
+        Pending and provisioning subscriptions grant no service. A subscription becomes provisioning when the owning
+        service accepts the order, and active, or trialing during a free trial, when the service confirms delivery,
+        which sets started_at; payment changes neither. Renewing buys further periods for every continuing licensed
+        item at once; items cannot be renewed on their own, but each can be changed or canceled alone.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        billing_account_id:
+          description: The billing account that made the purchase. Renewals of a project subscription are charged to the project's current billing account.
+          type: integer
+          format: int64
+        account:
+          $ref: ./accounts.yaml#/components/schemas/AccountIdentity
+        product_id:
+          $ref: ./products.yaml#/components/schemas/ProductId
+        product:
+          $ref: ./products.yaml#/components/schemas/Product
+        project_id:
+          description: The project it is for. Absent for an account-level purchase, such as a membership.
+          type:
+            - string
+            - "null"
+          format: uuid
+        project:
+          description: The project and its current name. Absent for an account-level purchase or when the project cannot be read; `project_id` still identifies it.
+          oneOf:
+            - $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
+            - type: "null"
+        currency:
+          type: string
+        status:
+          $ref: "#/components/schemas/SubscriptionStatus"
+        interval:
+          description: The renewal term of its licensed items, `interval_count` intervals long; `none` when every item is metered.
+          type: string
+          enum:
+            - none
+            - day
+            - month
+            - year
+        interval_count:
+          type: integer
+          minimum: 1
+        current_term_end:
+          description: "When the subscription renews or expires: the end of the free trial or of the last period bought for its licensed items, moved by renewing in advance. Null until the subscription becomes active, even when its purchase has been paid, and when every item is metered."
+          type:
+            - string
+            - "null"
+          format: date-time
+        current_period_start:
+          description: Start of the service period in effect now. Null when none is, including when every item is metered.
+          type:
+            - string
+            - "null"
+          format: date-time
+        current_period_end:
+          description: End of the service period in effect now; renewing in advance moves `current_term_end`, not this. Null when no period is in effect, including when every item is metered.
+          type:
+            - string
+            - "null"
+          format: date-time
+        billing_cycle_anchor:
+          type: string
+          format: date-time
+        auto_renew:
+          description: Whether the subscription renews automatically, or converts to paid when its free trial ends. Without licensed items it continues until it is canceled; then this is true until a cancellation is requested, and cannot be set.
+          type: boolean
+        trial_start:
+          description: Start of the free trial; null without one. During the trial the licensed items are free, while metered usage is charged as usual.
+          type:
+            - string
+            - "null"
+          format: date-time
+        trial_end:
+          description: End of the free trial; null without one. It is `current_term_end` until the first paid period is bought.
+          type:
+            - string
+            - "null"
+          format: date-time
+        trial_settings:
+          description: How the free trial ends; null without one.
+          oneOf:
+            - $ref: "#/components/schemas/TrialSettings"
+            - type: "null"
+        restrictions:
+          description: The operations currently prevented on the subscription, sorted; it is suspended while this contains `billing.subscriptions.use`.
+          type: array
+          items:
+            $ref: "#/components/schemas/SubscriptionRestriction"
+        default_payment_method_id:
+          description: The saved payment method automatic renewal charges after balance and credits, before the account's default payment method. Set when a purchase, renewal or change is paid with a saved payment method. Used only while it belongs to the account paying the renewal.
+          type:
+            - string
+            - "null"
+          format: uuid
+        items:
+          description: Every item, ended ones included, oldest first.
+          type: array
+          items:
+            $ref: "#/components/schemas/SubscriptionItem"
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          description: When service started. Null until a new subscription becomes active, also after payment.
+          type:
+            - string
+            - "null"
+          format: date-time
+        ended_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - id
+        - billing_account_id
+        - account
+        - product_id
+        - product
+        - currency
+        - status
+        - interval
+        - auto_renew
+        - items
+    SubscriptionItem:
+      description: One priced part of a subscription, as a Stripe subscription item, such as the instance, a volume or the bandwidth of an elastic IP. It renews with its subscription and can be changed or canceled alone.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        subscription_id:
+          type: string
+          format: uuid
+        plan_id:
+          type: string
+          format: uuid
+        plan_name:
+          type: string
+        price_id:
+          type: string
+          format: uuid
+        type:
+          $ref: ./prices.yaml#/components/schemas/PriceType
+        usage_type:
+          $ref: ./prices.yaml#/components/schemas/UsageType
+        dimensions:
+          description: The dimension values of what was bought, such as region and instance type. Empty when the purchase gave none.
+          type: object
+          additionalProperties:
+            type: string
+        quantity:
+          type: string
+        unit_label:
+          description: The plan's current unit label, which a licensed item's quantity counts, such as GiB or Mbps. Absent for a metered item and when the plan has none.
+          type: string
+        recurring_amount:
+          description: This item's renewal amount, after continuing discounts and before tax. A pending item shows base terms until paying the order fixes any new discount. Absent for metered and one-time items.
+          type: string
+        renewal_discounts_enabled:
+          description: Whether new account discounts may apply to this item in future renewals. A fixed operator renewal agreement disables automatic discounts; catalog repricing or a newly selected purchase agreement enables them.
+          type: boolean
+        cancellation_policy:
+          $ref: ./prices.yaml#/components/schemas/CancellationPolicy
+        refund_policy:
+          $ref: ./prices.yaml#/components/schemas/RefundPolicy
+        short_rate_multiplier:
+          description: Refund policy `short_rate` only, as on the price bought.
+          type: string
+        short_rate_threshold_seconds:
+          description: Refund policy `short_rate` only, as on the price bought.
+          type: integer
+          format: int64
+        list_amount:
+          description: "Licensed recurring only, the frozen reference amount preserved by renewal at the agreed amount; see the order item."
+          type: string
+        list_interval:
+          description: "Unit of the frozen list_amount. Present exactly when list_amount has a value; uses Billing's interval vocabulary. It is the reference price unit, not necessarily the purchased period unit."
+          type: string
+          enum:
+            - day
+            - month
+            - year
+        coupon_id:
+          type: string
+          format: uuid
+        coupon:
+          $ref: ./openapi.yaml#/components/schemas/ObjectIdentity
+        discounted_renewals_remaining:
+          type: integer
+          minimum: 0
+        order_item_id:
+          description: The order item that created it.
+          type: string
+          format: uuid
+        cancellation:
+          $ref: ./cancellations.yaml#/components/schemas/SubscriptionItemCancellation
+        scheduled_change:
+          description: The accepted period-end change scheduled for this item; null when there is none.
+          oneOf:
+            - $ref: "#/components/schemas/ScheduledChange"
+            - type: "null"
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          description: When the item's service started. Null until its delivery is confirmed.
+          type:
+            - string
+            - "null"
+          format: date-time
+        ended_at:
+          description: When the item ended, alone or with its subscription.
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - id
+        - subscription_id
+        - plan_id
+        - plan_name
+        - price_id
+        - type
+        - usage_type
+        - dimensions
+        - quantity
+    TrialSettings:
+      description: How a free trial ends, as Stripe's trial_settings.
+      type: object
+      properties:
+        end_behavior:
+          $ref: "#/components/schemas/TrialEndBehavior"
+      required:
+        - end_behavior
+    TrialEndBehavior:
+      type: object
+      properties:
+        missing_payment_method:
+          description: "What happens when the trial ends while automatic renewal is off. With it on, the first paid period is charged to the account's funds or saved payment method, and this applies only when that charge fails. `cancel`: the subscription ends and its resources are released. `pause`: service stops, and renewing before the retention period ends restores it, with the first paid period starting at payment. `create_invoice`: as `pause`, and an invoice for the first paid period is issued to pay."
+          type: string
+          enum:
+            - cancel
+            - pause
+            - create_invoice
+        retention_seconds:
+          description: How long a subscription stopped at the end of its trial keeps its resources before they are reclaimed; null for the platform's retention period. Must be null with `cancel`, which releases the resources when the trial ends.
+          type:
+            - integer
+            - "null"
+          format: int64
+      required:
+        - missing_payment_method
+        - retention_seconds
+    SubscriptionUpdate:
+      description: The settings to change; settings left out keep their values.
+      type: object
+      properties:
+        auto_renew:
+          type: boolean
+      minProperties: 1
+      additionalProperties: false
+    RenewRequest:
+      type: object
+      properties:
+        order_id:
+          description: The order ID, chosen by the caller. Creating it again conflicts; read the order after an unknown outcome.
+          type: string
+          format: uuid
+        periods:
+          description: How many further periods to buy for every renewed item, each at the price it already renews at. To buy a longer term at its own price, give `interval` and `interval_count` instead.
+          type: integer
+          default: 1
+          minimum: 1
+        interval_count:
+          description: |-
+            Renew for a term of this length instead, at the price currently sold for it. Give
+            `interval` with it.
+
+            Leaving both out renews every item at the price it already bills at, which a later price
+            change does not affect. Naming a term that differs from the current one is a fresh
+            choice, so every item is bought at today's price for that term, with its own cancellation
+            policy or, without one, the only price of that term. Naming the current term changes
+            nothing. A term an item does not sell is refused with 409 `BILLING_RENEWAL_PRICE_UNAVAILABLE`
+            and `meta.subscription_item_id`; prices the rule cannot choose between, with 409
+            `BILLING_RENEWAL_OPTION_AMBIGUOUS` unless `cancellation_policy` is given.
+
+            List the terms on offer with the renewal options operation.
+          type: integer
+          minimum: 1
+        interval:
+          description: The unit interval_count counts in.
+          type: string
+          enum:
+            - day
+            - month
+            - year
+        cancellation_policy:
+          description: With `interval` and `interval_count`, renews every item at its price of that term with this cancellation policy.
+          allOf:
+            - $ref: ./prices.yaml#/components/schemas/CancellationPolicy
+        payment_method_id:
+          type: string
+          format: uuid
+        use_balance:
+          description: Whether to pay from the balance, with or without `payment_method_id`.
+          type: boolean
+          default: true
+        use_credits:
+          description: Whether to pay from eligible credit grants before the balance.
+          type: boolean
+          default: true
+        return_url:
+          type: string
+      required:
+        - order_id
+      additionalProperties: false
+    RenewalOption:
+      description: One term the whole subscription can renew for. Every continuing licensed item renews at it; items with an open cancellation end with the current term and are left out.
+      type: object
+      properties:
+        interval:
+          type: string
+          enum:
+            - day
+            - month
+            - year
+        interval_count:
+          description: How many intervals one renewal covers.
+          type: integer
+        current:
+          description: The term the subscription renews at now; renewing for it keeps every item's agreed price.
+          type: boolean
+        amount:
+          description: One period for every item, before tax and discounts.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        currency:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RenewalOptionItem"
+      required:
+        - interval
+        - interval_count
+        - current
+        - amount
+        - currency
+        - items
+    RenewalOptionItem:
+      description: What one item renews at under a renewal option.
+      type: object
+      properties:
+        subscription_item_id:
+          type: string
+          format: uuid
+        price_id:
+          description: The price the item renews at; null on the current option, which keeps the agreed amount.
+          type:
+            - string
+            - "null"
+          format: uuid
+        amount:
+          description: One period of this item, before tax and discounts.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        cancellation_policy:
+          $ref: ./prices.yaml#/components/schemas/CancellationPolicy
+        refund_policy:
+          $ref: ./prices.yaml#/components/schemas/RefundPolicy
+        short_rate_multiplier:
+          description: Refund policy `short_rate` only.
+          type: string
+        short_rate_threshold_seconds:
+          description: Refund policy `short_rate` only.
+          type: integer
+          format: int64
+      required:
+        - subscription_item_id
+        - price_id
+        - amount
+    RenewalOptionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RenewalOption"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination

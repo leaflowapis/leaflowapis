@@ -1,0 +1,324 @@
+openapi: 3.2.1
+info:
+  title: Leaflow Canopy API
+  version: 1.0.0
+  description: |-
+    Canopy model inference, API keys, model catalogue, service enablement and recorded usage.
+
+    Project inference is served on this host at each protocol's own endpoints:
+
+    - OpenAI: `/v1/chat/completions`, `/v1/responses`, `/v1/decisions` and `/v1/embeddings`; use
+      `https://canopy.leaflow.cloud/v1` as the OpenAI SDK base URL.
+    - Anthropic: `/v1/messages`; use `https://canopy.leaflow.cloud` as the Anthropic SDK base URL.
+    - Gemini: `/v1beta/models/{model}:generateContent` and `:streamGenerateContent`.
+    - TypeSafe System One: `/v1/systemone`; use `https://canopy.leaflow.cloud` as the TypeSafe SDK base URL.
+
+    Every chat model accepts all four chat protocols: Chat Completions, Responses, Messages and Gemini
+    generateContent. A request is forwarded unchanged, apart from the model name and the credentials, when a
+    provider of the model speaks the protocol it was sent in; otherwise it is translated into a protocol a
+    provider speaks, and the response is translated back. Content that cannot be translated, such as a tool
+    that runs on another provider's servers or a reference to a file stored with another provider, is refused
+    with 400 rather than dropped. Reasoning settings such as `reasoning_effort` are passed through as written;
+    a model's `capabilities` lists the values it accepts.
+
+    Responses is stateless: `store` must be false, and a response cannot be retrieved after it is returned.
+    Send the output items of a response back unchanged, in their order, as input to the next request.
+
+    Every decision model accepts both decision protocols (`/v1/decisions` and `/v1/systemone`), isolated from
+    chat protocols, translating between them when no native route is available.
+
+    What a model does follows from its `input_modalities`, `output_modalities` and the media blocks of its
+    `capabilities`. Embeddings, images, audio and videos are accepted for a model whose providers serve them.
+
+    Management operations use `/api/v1`. The management model catalogue names how each model is billed in Billing;
+    `/v1/models` returns the OpenAI model format with Canopy capabilities and parameter limits.
+
+    ## Authentication
+
+    Every request carries a scoped token; see the `bearerAuth` security scheme.
+
+    Management and project inference accept the same verified IAM scoped token. The token is the
+    sole billing project authority; `OpenAI-Project` and historical identity headers cannot
+    override it. These endpoints do not accept a Canopy API key. The separate API-key gateway
+    accepts Canopy API keys and serves the same endpoints.
+
+    ## Conventions
+
+    - **The plaintext of an API key is returned once.** The `secret` appears in the response that issues it and is returned by no other endpoint. A key that has been lost has to be revoked and reissued.
+    - **Disabling and revoking are distinct.** A disabled key may be enabled again at any time, while a revocation is irreversible and is intended for a key that has been exposed. Neither removes the record, and the usage the key accrued remains readable.
+    - **A usage query must carry a time range**, spanning no more than 31 days for individual request records (which are retained for 90 days), or 400 days for aggregated usage endpoints (which are retained for 400 days). `from` and `to` carry a timezone offset, which the server does not infer.
+    - **The request and response bodies do not appear in the ledger.** They are not recorded. Quote the request `id` when reporting a problem.
+    - **Usage may be estimated.** The upstream provider does not report usage on every request. Where it does not, `usage_source` is `estimated` and the figures are derived from the character classes of the payload, to within roughly fifteen per cent.
+    - **The service is enabled before use.** A project enables the model platform once, through `create-service`; the forwarding endpoints refuse its requests until the service is `active`. Requests are then billed under the service's subscription by the tokens they use, at the rates Billing holds for each model's `billing`.
+servers:
+  - url: https://canopy.leaflow.cloud
+    description: Canopy management and project inference
+security:
+  - bearerAuth: []
+tags:
+  - name: Inference
+    description: Model inference and media generation endpoints.
+  - name: APIKey
+    description: Project API keys.
+  - name: Model
+    description: Callable model catalogue and billing metadata.
+  - name: Service
+    description: Project service enablement.
+  - name: Usage
+    description: Recorded requests and token or media usage.
+paths:
+  /v1/audio/speech:
+    $ref: ./audio.yaml#/paths/~1v1~1audio~1speech
+  /v1/audio/transcriptions:
+    $ref: ./audio.yaml#/paths/~1v1~1audio~1transcriptions
+  /v1/audio/translations:
+    $ref: ./audio.yaml#/paths/~1v1~1audio~1translations
+  /v1/images/generations:
+    $ref: ./images.yaml#/paths/~1v1~1images~1generations
+  /v1/images/edits:
+    $ref: ./images.yaml#/paths/~1v1~1images~1edits
+  /v1/videos:
+    $ref: ./videos.yaml#/paths/~1v1~1videos
+  /v1/videos/{video}:
+    $ref: ./videos.yaml#/paths/~1v1~1videos~1{video}
+  /v1/videos/{video}/content:
+    $ref: ./videos.yaml#/paths/~1v1~1videos~1{video}~1content
+  /v1/decisions:
+    $ref: ./decisions.yaml#/paths/~1v1~1decisions
+  /v1/systemone:
+    $ref: ./decisions.yaml#/paths/~1v1~1systemone
+  /v1/responses:
+    $ref: ./responses.yaml#/paths/~1v1~1responses
+  /v1/chat/completions:
+    $ref: ./inference.yaml#/paths/~1v1~1chat~1completions
+  /v1/embeddings:
+    $ref: ./inference.yaml#/paths/~1v1~1embeddings
+  /v1/messages:
+    $ref: ./inference.yaml#/paths/~1v1~1messages
+  /v1beta/models/{model}:generateContent:
+    $ref: ./inference.yaml#/paths/~1v1beta~1models~1{model}:generateContent
+  /v1beta/models/{model}:streamGenerateContent:
+    $ref: ./inference.yaml#/paths/~1v1beta~1models~1{model}:streamGenerateContent
+  /v1/models:
+    $ref: ./inference.yaml#/paths/~1v1~1models
+  /v1/models/{model}:
+    $ref: ./inference.yaml#/paths/~1v1~1models~1{model}
+  /api/v1/keys:
+    $ref: ./api-keys.yaml#/paths/~1api~1v1~1keys
+  /api/v1/keys/{keyId}:
+    $ref: ./api-keys.yaml#/paths/~1api~1v1~1keys~1{keyId}
+  /api/v1/keys/{keyId}:disable:
+    $ref: ./api-keys.yaml#/paths/~1api~1v1~1keys~1{keyId}:disable
+  /api/v1/keys/{keyId}:enable:
+    $ref: ./api-keys.yaml#/paths/~1api~1v1~1keys~1{keyId}:enable
+  /api/v1/keys/{keyId}:revoke:
+    $ref: ./api-keys.yaml#/paths/~1api~1v1~1keys~1{keyId}:revoke
+  /api/v1/rate-limit:
+    $ref: ./api-keys.yaml#/paths/~1api~1v1~1rate-limit
+  /api/v1/models:
+    $ref: ./models.yaml#/paths/~1api~1v1~1models
+  /api/v1/models:lookup:
+    $ref: ./models.yaml#/paths/~1api~1v1~1models:lookup
+  /api/v1/models/{modelId}:
+    $ref: ./models.yaml#/paths/~1api~1v1~1models~1{modelId}
+  /api/v1/requests:
+    $ref: ./requests.yaml#/paths/~1api~1v1~1requests
+  /api/v1/requests/{requestId}:
+    $ref: ./requests.yaml#/paths/~1api~1v1~1requests~1{requestId}
+  /api/v1/service:
+    $ref: ./services.yaml#/paths/~1api~1v1~1service
+  /api/v1/usage/by-api-key:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1usage~1by-api-key
+  /api/v1/usage/by-model:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1usage~1by-model
+  /api/v1/usage/by-source:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1usage~1by-source
+  /api/v1/usage/summary:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1usage~1summary
+  /api/v1/usage/timeline:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1usage~1timeline
+  /api/v1/usage/by-api-key/timeline:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1usage~1by-api-key~1timeline
+  /api/v1/usage/by-source/timeline:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1usage~1by-source~1timeline
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The request conflicts with the current state of the service. The codes are described where they apply.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    ChatCompletionRequest:
+      $ref: ./inference.yaml#/components/schemas/ChatCompletionRequest
+    ChatCompletion:
+      $ref: ./inference.yaml#/components/schemas/ChatCompletion
+    EmbeddingRequest:
+      $ref: ./inference.yaml#/components/schemas/EmbeddingRequest
+    EmbeddingResponse:
+      $ref: ./inference.yaml#/components/schemas/EmbeddingResponse
+    Model:
+      $ref: ./inference.yaml#/components/schemas/Model
+    ModelList:
+      $ref: ./inference.yaml#/components/schemas/ModelList
+    InferenceError:
+      $ref: ./inference.yaml#/components/schemas/InferenceError
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    OffsetPagination:
+      $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+    CursorPagination:
+      $ref: ../../type/v1/pagination.yaml#/components/schemas/CursorPagination
+    RateLimitResource:
+      $ref: ./api-keys.yaml#/components/schemas/RateLimitResource
+    APIKeyResource:
+      $ref: ./api-keys.yaml#/components/schemas/APIKeyResource
+    ModelAliases:
+      $ref: ./api-keys.yaml#/components/schemas/ModelAliases
+    APIKeyList:
+      $ref: ./api-keys.yaml#/components/schemas/APIKeyList
+    CreateAPIKeyRequestBody:
+      $ref: ./api-keys.yaml#/components/schemas/CreateAPIKeyRequestBody
+    IssuedAPIKeyResource:
+      $ref: ./api-keys.yaml#/components/schemas/IssuedAPIKeyResource
+    UpdateAPIKeyRequestBody:
+      $ref: ./api-keys.yaml#/components/schemas/UpdateAPIKeyRequestBody
+    ModelResource:
+      $ref: ./models.yaml#/components/schemas/ModelResource
+    ModelBilling:
+      $ref: ./models.yaml#/components/schemas/ModelBilling
+    ModelMeter:
+      $ref: ./models.yaml#/components/schemas/ModelMeter
+    ModelListResponseBody:
+      $ref: ./models.yaml#/components/schemas/ModelListResponseBody
+    ServiceResource:
+      $ref: ./services.yaml#/components/schemas/ServiceResource
+    CreateServiceRequestBody:
+      $ref: ./services.yaml#/components/schemas/CreateServiceRequestBody
+    CreateServiceResponseBody:
+      $ref: ./services.yaml#/components/schemas/CreateServiceResponseBody
+    CheckoutOptions:
+      $ref: ./services.yaml#/components/schemas/CheckoutOptions
+    ReasoningDiagnostics:
+      $ref: ./requests.yaml#/components/schemas/ReasoningDiagnostics
+    MediaUsage:
+      $ref: ./usage.yaml#/components/schemas/MediaUsage
+    MediaUsageDetails:
+      $ref: ./requests.yaml#/components/schemas/MediaUsageDetails
+    RequestResource:
+      $ref: ./requests.yaml#/components/schemas/RequestResource
+    RequestTaskResource:
+      $ref: ./requests.yaml#/components/schemas/RequestTaskResource
+    RequestList:
+      $ref: ./requests.yaml#/components/schemas/RequestList
+    APIKeyUsageResource:
+      $ref: ./usage.yaml#/components/schemas/APIKeyUsageResource
+    APIKeyUsageListResponseBody:
+      $ref: ./usage.yaml#/components/schemas/APIKeyUsageListResponseBody
+    APIKeyUsageBucketResource:
+      $ref: ./usage.yaml#/components/schemas/APIKeyUsageBucketResource
+    APIKeyUsageTimelineResponseBody:
+      $ref: ./usage.yaml#/components/schemas/APIKeyUsageTimelineResponseBody
+    ModelUsageResource:
+      $ref: ./usage.yaml#/components/schemas/ModelUsageResource
+    ModelUsageListResponseBody:
+      $ref: ./usage.yaml#/components/schemas/ModelUsageListResponseBody
+    SourceUsageResource:
+      $ref: ./usage.yaml#/components/schemas/SourceUsageResource
+    SourceUsageListResponseBody:
+      $ref: ./usage.yaml#/components/schemas/SourceUsageListResponseBody
+    SourceUsageBucketResource:
+      $ref: ./usage.yaml#/components/schemas/SourceUsageBucketResource
+    SourceUsageTimelineResponseBody:
+      $ref: ./usage.yaml#/components/schemas/SourceUsageTimelineResponseBody
+    TotalsResource:
+      $ref: ./usage.yaml#/components/schemas/TotalsResource
+    UsageBucketResource:
+      $ref: ./usage.yaml#/components/schemas/UsageBucketResource
+    UsageTimelineResponseBody:
+      $ref: ./usage.yaml#/components/schemas/UsageTimelineResponseBody
+  parameters:
+    FromRequired:
+      name: from
+      in: query
+      required: true
+      description: Start of the range, inclusive. RFC 3339, carrying a timezone offset.
+      explode: false
+      schema:
+        type: string
+        format: date-time
+    ToRequired:
+      name: to
+      in: query
+      required: true
+      description: End of the range, exclusive. RFC 3339, carrying a timezone offset.
+      explode: false
+      schema:
+        type: string
+        format: date-time
+    ModelIdQuery:
+      name: model_id
+      in: query
+      description: Restricts the result to the specified model.
+      explode: false
+      schema:
+        type: string
+        maxLength: 128
+    ApiKeyIdQuery:
+      name: api_key_id
+      in: query
+      description: Restricts the result to the specified API key.
+      explode: false
+      schema:
+        type: string
+        format: uuid
+    RequestStatusQuery:
+      name: status
+      in: query
+      description: Restricts the result to requests in the specified status.
+      explode: false
+      schema:
+        type: string
+        enum:
+          - in_flight
+          - succeeded
+          - refused
+          - upstream_failed
+          - client_aborted
+    RequestSourceQuery:
+      name: source
+      in: query
+      description: Restricts the result to requests from the specified source (`api_key`, `project_token`, or an internal service name such as `assistant` or `fleet`).
+      explode: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    ObjectIdQuery:
+      name: object_id
+      in: query
+      description: Restricts the result to requests associated with a managed task or object, such as `video_01j...`, `batch_01j...` or `ftjob_01j...`; a bare UUID is also accepted.
+      explode: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    BucketQuery:
+      name: bucket
+      in: query
+      description: Length of each bucket (`1h`, `1d` / `24h`, `1M` calendar month in `from`'s timezone offset, or any Go duration). At most 400 buckets.
+      explode: false
+      schema:
+        type: string
+        default: 1h
+        maxLength: 16

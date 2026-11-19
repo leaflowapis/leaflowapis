@@ -1,0 +1,1968 @@
+openapi: 3.2.1
+info:
+  title: Leaflow Account API
+  version: 1.0.0
+  description: |-
+    Everything that comes before a project is chosen: registration, the account itself, the projects the caller belongs to, and entry into one of them.
+
+    ## Authentication
+
+    Every request carries `Authorization: Bearer <access token>`, obtained by signing in at auth.leaflow.net. The endpoints that need no token say so.
+
+    ## Entering a project
+
+    1. `QUERY /account/v1/projects` searches the projects the caller belongs to. The first call registers the account, taking the name and email address from the sign-in claims.
+    2. `POST /account/v1/projects/{projectId}/scoped-tokens` returns a scoped token for the project chosen.
+    3. Every other service is called with that scoped token.
+
+    A scoped token cannot be renewed. Repeat step 2 for a new one, and sign in again at auth.leaflow.net once the access token itself has expired.
+
+    ## Applications
+
+    An application registered by a project signs its users in at auth.leaflow.net in the same manner as any other OAuth client. To call the Leaflow API on behalf of a user, the application requests the `iam` scope, and the user must then authorize the application for each project in which it is to act:
+
+    1. The application directs the user to the authorization page of the console:
+
+       ```
+       https://console.leaflow.net/applications/authorize?client_id=<client_id>&redirect_uri=<redirect_uri>&state=<state>
+       ```
+
+       All three parameters are required. The `redirect_uri` is URL-encoded and must exactly match one of the redirect URIs registered for the application; a custom scheme registered for a public application is accepted in the same way. If a parameter is missing, if the `redirect_uri` does not match, or if the application does not exist or is not active, the page reports the problem to the user and does not redirect. A user who is not signed in, or who has not yet completed registration and accepted the agreements, does so first and then returns to the page.
+    2. The user selects a project and confirms the authorization. The console calls `POST /account/v1/me/authorized-applications` and returns the user to the `redirect_uri` with the query parameters `project_id` and `state`. If the user declines, the console returns the user to the `redirect_uri` with `error=access_denied` and `state`. In both cases the existing query parameters of the `redirect_uri` are retained, and a parameter of the same name is replaced. The application must verify that `state` equals the value it supplied before it uses the response.
+    3. The application exchanges its access token for a scoped token at `POST /account/v1/projects/{projectId}/scoped-tokens`, as described in the preceding section.
+
+    Within an authorized project, the application holds exactly the permissions of the user in that project and none beyond them. The user may revoke an authorization at any time at https://console.leaflow.net/account/applications, and an authorization ends when the user leaves the project.
+
+    An access token issued to an application is accepted only by `create-scoped-token`, `list-authorized-applications` and `revoke-authorized-application`. Every other endpoint rejects it with 403 `APPLICATION_TOKEN_NOT_ACCEPTED`; consequently, an application cannot authorize itself.
+
+    ## SSH keys
+
+    The SSH keys of an account belong to its holder rather than to any project, and a key is active on one account at most. Keys shared by a project, such as one used by CI, belong to the project instead and are managed through the IAM API.
+
+    ## Project slugs
+
+    Every project carries a `slug`, the label naming it in its address. Until a custom slug is chosen the slug is the project's `id`, and the address under the `id` keeps working after a custom slug is chosen. `GET /account/v1/projects/by-slug/{slug}` finds the project named by either label.
+
+    Looking up slugs and claiming custom slugs are rate limited per account. A request over the limit fails with 429, and `meta.retry_after_seconds` on the error states how many seconds to wait before retrying.
+servers:
+  - url: https://account.leaflow.cloud
+    description: Account, agreements, projects and scoped tokens
+security:
+  - bearerAuth: []
+paths:
+  /account/v1/settings:
+    get:
+      summary: Get registration and project creation settings
+      description: |-
+        No token required.
+
+        While `registration_mode` is not `OPEN`, `POST /account/v1/me:register` answers 403: `CLOSED` refuses everyone, and `INVITE_ONLY` accepts only an email address holding a project invitation. `project_creation_mode` behaves the same way, and `VERIFIED_ONLY` requires identity verification to have completed.
+
+        Both quotas are `0` when unlimited. The decision itself is made at the moment of writing.
+      operationId: get-settings
+      tags:
+        - Setting
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SettingsResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/locales:
+    get:
+      summary: List countries and languages for registration
+      description: |-
+        No token required: the registration page renders both lists before an account exists.
+
+        Country names and their order follow `Accept-Language`. A name is rendered in the requested language and the list is ordered by the rules of that language rather than by code point. Simplified Chinese applies when the header is absent.
+
+        Retired codes such as the Soviet Union and Yugoslavia, and codes that denote no country such as the European Union, are not listed.
+      operationId: list-locales
+      tags:
+        - Account
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LocaleOptionsResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/agreements:
+    get:
+      summary: List the agreements registration requires
+      description: |-
+        No token required. Send the `type` and `version` of each one back unchanged to `POST /account/v1/me:register`.
+
+        The array is empty while no agreement is in force, and registration then takes no `consents`.
+      operationId: list-agreements
+      tags:
+        - Agreement
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgreementListResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/consents:
+    get:
+      summary: List the agreements the caller has consented to
+      description: Every record, most recent first, including versions that are no longer current.
+      operationId: list-consents
+      tags:
+        - Agreement
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConsentListResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Consent to the current agreements
+      description: |-
+        Call this once a new version is published, which is whenever `pending_agreements` on `GET /account/v1/me` is not empty.
+
+        Only the version currently in force is accepted; consenting to an earlier one answers 409. Submitting the same version twice is not an error and leaves the first record in place.
+      operationId: accept-agreements
+      tags:
+        - Agreement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptConsentsRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me:register:
+    post:
+      summary: Register an account
+      description: |-
+        Call this after signing in at auth.leaflow.net, carrying the access token. The name and email address are taken from the sign-in claims and are not read from the request body.
+
+        `consents` must cover every agreement returned by `GET /account/v1/agreements`, at the same versions. A missing agreement answers 400 and a stale version answers 409, in which case fetch the list again. An account that already exists answers 409, and one that has been deleted answers 410 `USER_DELETED`: the same sign-in cannot register again.
+      operationId: register
+      tags:
+        - Account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me:
+    get:
+      summary: Get the current account
+      description: |-
+        `pending_agreements` holds the agreements not yet consented to. While it is not empty, obtain consent and call `POST /account/v1/me/consents`.
+
+        `status` is `DELETING` while a deletion is open; see `GET /account/v1/me/deletion`. A deleted account answers 410 `USER_DELETED`.
+      operationId: get-account
+      tags:
+        - Account
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      summary: Update the country and language of the current account
+      description: The name and email address cannot be changed here. They come from the identity provider, and a change would be overwritten at the next sign-in.
+      operationId: update-account
+      tags:
+        - Account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Request deletion of the current account
+      description: |-
+        The account is frozen at once: it can no longer enter a project or change anything in one. The answer is 202 with `state` `checking` while the services holding data for the account are asked whether it can be closed. Poll `GET /account/v1/me/deletion` until `state` leaves `checking`, which normally takes a few seconds.
+
+        - If any service refuses, the account returns to use, `state` becomes `none`, and `rejected_at` and `objections` say why.
+        - Otherwise `state` becomes `scheduled`, and the account is deleted at `scheduled_at`, fifteen days after the request. The conditions are checked once more at that time.
+
+        The deletion can be cancelled with `POST /account/v1/me:undelete` until `scheduled_at`, and not after. Once carried out it cannot be undone, and the same sign-in cannot register again. Any remaining balance and prepaid benefits are forfeited, which `acknowledge_forfeiture` confirms.
+
+        Requesting again while a deletion is open returns it unchanged. Fails with 412 `USER_OWNS_PROJECTS` while `blocking_projects` is not empty, and with 401 `INSUFFICIENT_USER_AUTHENTICATION` unless the caller signed in within the last `meta.max_age` seconds; sign in again with that `max_age` and retry.
+      operationId: request-account-deletion
+      tags:
+        - Account
+      parameters:
+        - name: acknowledge_forfeiture
+          in: query
+          required: true
+          description: Must be true. Confirms that any remaining balance and prepaid benefits are forfeited when the deletion is carried out.
+          schema:
+            type: boolean
+            const: true
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountDeletionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/deletion:
+    get:
+      summary: Get the deletion of the current account
+      description: |-
+        `state` is `none` while no deletion is open. `blocking_projects` lists the projects the caller still owns; a deletion cannot be requested while it is not empty, so each of them must be transferred or deleted first.
+
+        Conditions held by other services, such as an unpaid balance or a billing account still paying for a project, are not listed here. Read them from those services before requesting; they are checked again after the request, and a refusal shows up in `rejected_at` and `objections`.
+      operationId: get-account-deletion
+      tags:
+        - Account
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountDeletionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me:undelete:
+    post:
+      summary: Cancel the deletion of the current account
+      description: Returns the account to use. Cancelling when no deletion is open returns `state` `none`. Fails with 409 `ACCOUNT_DELETION_NOT_CANCELLABLE` once `scheduled_at` has passed.
+      operationId: cancel-account-deletion
+      tags:
+        - Account
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccountDeletionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/identity-verification:
+    get:
+      summary: Get identity verification status
+      description: The status is `UNVERIFIED` rather than 404 when nothing has been submitted. The legal name and the document number appear in no response.
+      operationId: get-identity-verification
+      tags:
+        - Account
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityVerificationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Submit identity verification
+      description: A submission awaiting review, and an account already verified, are both refused. A rejected submission may be corrected and sent again.
+      operationId: submit-identity-verification
+      tags:
+        - Account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitIdentityVerificationRequestBody"
+      responses:
+        "202":
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IdentityVerificationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/ssh-keys:
+    get:
+      summary: List the SSH keys of the current account
+      description: Most recent first.
+      operationId: list-ssh-keys
+      tags:
+        - SSHKey
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+        - name: status
+          in: query
+          description: Both kinds are returned while this is absent
+          explode: false
+          schema:
+            description: Both kinds are returned while this is absent
+            type: string
+            enum:
+              - ACTIVE
+              - REVOKED
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageSSHKeyResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Add an SSH key to the current account
+      description: Fails with 409 `SSH_KEY_ALREADY_EXISTS` while the same key is active on any account, this one included, and with 412 `SSH_KEY_QUOTA_EXCEEDED` while the account already holds 50 active keys.
+      operationId: create-ssh-key
+      tags:
+        - SSHKey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSSHKeyRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SSHKeyResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/ssh-keys/{keyId}:
+    get:
+      summary: Get an SSH key of the current account
+      operationId: get-ssh-key
+      tags:
+        - SSHKey
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SSHKeyResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    patch:
+      summary: Rename an SSH key of the current account
+      description: Only the name can change. The key, its type and its fingerprint are three statements about one thing, and changing one of them would leave the row describing a key that does not exist.
+      operationId: rename-ssh-key
+      tags:
+        - SSHKey
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenameSSHKeyRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SSHKeyResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      summary: Revoke an SSH key of the current account
+      description: |-
+        The row remains and its status becomes `REVOKED`, so it stays answerable afterwards which key was trusted at the time.
+
+        The same key can then be added again, to this account or another.
+      operationId: revoke-ssh-key
+      tags:
+        - SSHKey
+      parameters:
+        - name: keyId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SSHKeyResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/applications/{clientId}:
+    get:
+      summary: Get an application by its client ID
+      description: |-
+        Returns the application requesting authorization, so that the authorization page can identify the requester. Any authenticated account may read it, since the `client_id` is part of every authorization request.
+
+        A deleted application is reported as not found. A disabled application is returned with `status` `DISABLED` and cannot be authorized.
+
+        The authorization page returns the user only to a `redirect_uri` that exactly matches one of `redirect_uris`; if none matches, the user is not redirected.
+      operationId: get-application
+      tags:
+        - Application
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApplicationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/authorized-applications:
+    get:
+      summary: List the applications the current account has authorized
+      description: |-
+        Returns one item for each application and project, most recent first. An authorization is omitted once it has been revoked, once the membership under which it was granted has ended, or once the application has been deleted.
+
+        When called with an access token issued to an application, only the authorizations of that application are returned.
+      operationId: list-authorized-applications
+      tags:
+        - Application
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageAuthorizedApplicationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Authorize an application to act in a project
+      description: |-
+        Permits the application to exchange the access tokens of this account for scoped tokens of the project. Within the project, the application then holds exactly the permissions of this account and none beyond them.
+
+        The caller must be a member of the project. Repeating the request returns the existing authorization. Authorizing a disabled application fails with 412 `APPLICATION_DISABLED`.
+
+        An access token issued to an application is rejected, so that an application cannot authorize itself.
+      operationId: authorize-application
+      tags:
+        - Application
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthorizeApplicationRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizedApplicationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/authorized-applications/{authorizationId}:
+    delete:
+      summary: Revoke an application's authorization
+      description: |-
+        After revocation, the application can no longer exchange tokens for the project. A scoped token already issued to it remains valid until it expires. Repeating the request returns the same authorization.
+
+        When called with an access token issued to an application, only the authorizations of that application can be revoked; this allows an application to disconnect itself.
+      operationId: revoke-authorized-application
+      tags:
+        - Application
+      parameters:
+        - name: authorizationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthorizedApplicationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/invitations:
+    get:
+      summary: List invitations addressed to the caller
+      description: Matched against the email address of the current account.
+      operationId: list-my-invitations
+      tags:
+        - Invitation
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageInvitationResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/invitations/by-token:
+    get:
+      summary: Preview an invitation by its token
+      description: |-
+        No token required: whoever follows the link in an invitation email has usually not signed in, and may hold no account at all.
+
+        The recipient address is masked (`t***@example.com`).
+
+        A token that does not exist, one already redeemed, one revoked and one expired all answer the same 404.
+      operationId: preview-invitation-by-token
+      tags:
+        - Invitation
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: The token carried by the invitation link
+          explode: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InvitationPreviewResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/invitations:accept:
+    post:
+      summary: Accept an invitation by its token
+      description: A token that does not match, and an invitation that no longer stands, answer the same way.
+      operationId: accept-invitation-by-token
+      tags:
+        - Invitation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcceptInvitationByTokenRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptedInvitationResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/me/invitations/{invitationId}:accept:
+    post:
+      summary: Accept an invitation listed against the caller
+      description: No token is required; the invitation is addressed to the email address of the current account.
+      operationId: accept-invitation
+      tags:
+        - Invitation
+      parameters:
+        - name: invitationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcceptedInvitationResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/projects:
+    get:
+      summary: List the projects the caller belongs to
+      description: Superseded by `QUERY /account/v1/projects`, which filters by status and pages by page number. Projects whose deletion has finished are excluded unless `include_deleted` is true; projects being deleted are included.
+      operationId: list-projects
+      deprecated: true
+      tags:
+        - Project
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+        - name: keyword
+          in: query
+          description: Matches against name, slug or description, and against the id when it is a complete project id
+          explode: false
+          schema:
+            description: Matches against name, slug or description, and against the id when it is a complete project id
+            type: string
+            maxLength: 128
+        - name: include_deleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageProjectAccessResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    query:
+      summary: Search the projects the caller belongs to
+      description: |-
+        Projects the caller belongs to, most recently created first. The conditions in the body are combined with AND. Without `statuses`, only active projects are returned; projects being deleted and deleted projects are returned only when asked for by status.
+      operationId: search-projects
+      tags:
+        - Project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchProjectsRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAccessList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Create a project
+      description: |-
+        The caller becomes its owner. The project is created with the built-in `OWNER` and `ADMIN` roles and a `member` role carrying no permissions.
+
+        A custom `slug` may be chosen here; without one the slug is the new project's `id`. A custom slug is refused with:
+
+        - 400 `PROJECT_SLUG_INVALID` when it does not follow the format described on `slug`;
+        - 422 `PROJECT_SLUG_RESERVED` when the name is reserved;
+        - 409 `PROJECT_SLUG_TAKEN` when another project, including a deleted one, holds it;
+        - 429 `PROJECT_SLUG_CLAIM_RATE_LIMITED` when the account has attempted to claim custom slugs too often. Attempts count whether or not they succeed; creating a project without a custom slug does not count.
+      operationId: create-project
+      tags:
+        - Project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAccessResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/projects/by-slug/{slug}:
+    get:
+      summary: Get a project by its slug
+      description: |-
+        Returns a project the caller belongs to, found by an address label: a custom slug is compared exactly, and a label in the form of a project id finds the project with that id, whether or not it has since chosen a custom slug.
+
+        A deleted project is returned, answering that it is gone. Fails with:
+
+        - 400 `PROJECT_SLUG_INVALID` when the value cannot be a slug;
+        - 404 `PROJECT_NOT_FOUND` when no project holds the slug;
+        - 403 `PROJECT_MEMBERSHIP_REQUIRED` when the caller is not a member of the project;
+        - 429 `PROJECT_SLUG_LOOKUP_RATE_LIMITED` when the account has looked up slugs too often. This operation shares its limit with `GET /account/v1/project-slugs/{slug}/availability`.
+      operationId: get-project-by-slug
+      tags:
+        - Project
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 63
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAccessResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/projects/{projectId}:
+    get:
+      summary: Get a project
+      description: |-
+        Returns a project the caller belongs to. A deleted project is returned, answering that it is gone. Fails with:
+
+        - 404 `PROJECT_NOT_FOUND` when no project has the id;
+        - 403 `PROJECT_MEMBERSHIP_REQUIRED` when the caller is not a member of the project.
+      operationId: get-project
+      tags:
+        - Project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectAccessResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/project-slugs/{slug}/availability:
+    get:
+      summary: Check whether a custom slug can be chosen
+      description: |-
+        Reports whether a custom slug can be chosen now. Nothing is reserved by asking: the slug is claimed only by creating a project with it or by setting it, either of which may still fail with 409 `PROJECT_SLUG_TAKEN`.
+
+        Fails with:
+
+        - 400 `PROJECT_SLUG_INVALID` when the value does not follow the format of a custom slug;
+        - 429 `PROJECT_SLUG_LOOKUP_RATE_LIMITED` when the account has looked up slugs too often. This operation shares its limit with `GET /account/v1/projects/by-slug/{slug}`.
+      operationId: get-project-slug-availability
+      tags:
+        - Project
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 63
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSlugAvailabilityResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /account/v1/projects/{projectId}/scoped-tokens:
+    post:
+      summary: Exchange the access token for a scoped token
+      description: |-
+        Once a project has been chosen, exchange the access token for a scoped token for that project.
+
+        **Only an access token issued by auth.leaflow.net is accepted; a scoped token is not.** Once a scoped token has expired, obtain a fresh access token at auth.leaflow.net and call this endpoint again.
+
+        The exchange confirms that the account is usable, that the project exists, and that the caller is a member of it. A caller who is not a member obtains no token.
+
+        A scoped token states identity only — the user and the project — and **carries no permissions**. Permissions are evaluated on every request, so a change of role takes effect immediately rather than at the next expiry.
+
+        A project that is suspended, banned or being deleted still issues tokens; those states restrict writes, and the project remains readable.
+
+        An access token issued to an application is exchanged only for a project for which the user has authorized that application. Otherwise, the exchange fails with 403 `APPLICATION_AUTHORIZATION_REQUIRED`, whose `meta` contains the `client_id` and the `project_id`; the application should then direct the user to the authorization page. For a disabled application the exchange fails with 412 `APPLICATION_DISABLED`, and for a deleted application with 404 `APPLICATION_NOT_FOUND`, even if its access token has not yet expired.
+      operationId: create-scoped-token
+      tags:
+        - ScopedToken
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScopedTokenResponseBody"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/AccessToken
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    SettingsResource:
+      type: object
+      properties:
+        max_members_per_project:
+          description: Maximum number of members a project may hold; 0 means unlimited
+          type: integer
+          format: int64
+        max_projects_per_user:
+          description: Maximum number of projects an account may own; 0 means unlimited. Deleted projects do not count
+          type: integer
+          format: int64
+        project_creation_mode:
+          description: VERIFIED_ONLY requires identity verification to have completed; a submission under review does not qualify
+          type: string
+          enum:
+            - OPEN
+            - VERIFIED_ONLY
+            - CLOSED
+        registration_mode:
+          description: INVITE_ONLY accepts only an email address holding a project invitation
+          type: string
+          enum:
+            - OPEN
+            - INVITE_ONLY
+            - CLOSED
+      required:
+        - registration_mode
+        - project_creation_mode
+        - max_projects_per_user
+        - max_members_per_project
+      additionalProperties: false
+    AgreementResource:
+      type: object
+      properties:
+        effective_at:
+          description: From this moment on, registration requires this version
+          type: string
+          format: date-time
+        type:
+          type: string
+          enum:
+            - TERMS
+            - PRIVACY
+            - DPA
+        url:
+          description: Where the text is published
+          type: string
+        version:
+          description: Send this value back unchanged when consenting
+          type: string
+      required:
+        - type
+        - version
+        - url
+        - effective_at
+      additionalProperties: false
+    AgreementListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/AgreementResource"
+      required:
+        - items
+      additionalProperties: false
+    ConsentResource:
+      type: object
+      properties:
+        consented_at:
+          type: string
+          format: date-time
+        method:
+          description: OFFLINE is a consent given off the platform and recorded by an operator
+          type: string
+          enum:
+            - CLICKWRAP
+            - OFFLINE
+        type:
+          type: string
+          enum:
+            - TERMS
+            - PRIVACY
+            - DPA
+        version:
+          type: string
+      required:
+        - type
+        - version
+        - consented_at
+        - method
+      additionalProperties: false
+    ConsentListResponseBody:
+      type: object
+      properties:
+        items:
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/ConsentResource"
+      required:
+        - items
+      additionalProperties: false
+    ConsentBody:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - TERMS
+            - PRIVACY
+            - DPA
+        version:
+          type: string
+          minLength: 1
+          maxLength: 32
+      required:
+        - type
+        - version
+      additionalProperties: false
+    AcceptConsentsRequestBody:
+      type: object
+      properties:
+        consents:
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/ConsentBody"
+      required:
+        - consents
+      additionalProperties: false
+    AccountResource:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        email:
+          type: string
+        email_verified_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        first_name:
+          description: Taken from the sign-in claims; may be empty
+          type: string
+        id:
+          description: The subject issued by the identity provider
+          type: string
+        last_name:
+          description: Taken from the sign-in claims; may be empty
+          type: string
+        country:
+          description: ISO 3166-1 alpha-2. Empty on an account that registered before this was required; such an account continues to work and can set it from the settings page
+          type: string
+        locale:
+          description: Empty while never set, in which case `Accept-Language` applies, and the platform default when that is absent as well
+          type: string
+        pending_agreements:
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/AgreementResource"
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - SUSPENDED
+            - BANNED
+            - DELETING
+      required:
+        - id
+        - email
+        - first_name
+        - last_name
+        - status
+        - email_verified_at
+        - created_at
+        - pending_agreements
+      additionalProperties: false
+    AccountDeletionState:
+      description: "`none` while no deletion is open. `checking` while the services holding data for the account are asked whether it can be closed. `scheduled` once they agree; it is carried out at `scheduled_at` and can be cancelled until then. `executing` once `scheduled_at` has passed; it can no longer be cancelled"
+      type: string
+      enum:
+        - none
+        - checking
+        - scheduled
+        - executing
+    AccountDeletionResource:
+      type: object
+      properties:
+        state:
+          $ref: "#/components/schemas/AccountDeletionState"
+        requested_at:
+          description: Null while `state` is `none`
+          type:
+            - string
+            - "null"
+          format: date-time
+        scheduled_at:
+          description: When the deletion is carried out. Null while `state` is `none`
+          type:
+            - string
+            - "null"
+          format: date-time
+        requested_by_operator:
+          description: True when an operator requested the deletion rather than the account holder. False while `state` is `none`
+          type: boolean
+        blocking_projects:
+          description: Projects the caller owns that are not being deleted. A deletion cannot be requested while this is not empty
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectResource"
+        rejected_at:
+          description: When the most recent request was turned down. Null unless the most recent request was turned down
+          type:
+            - string
+            - "null"
+          format: date-time
+        objections:
+          description: Why the most recent request was turned down. Empty unless `rejected_at` is set
+          type: array
+          items:
+            $ref: "#/components/schemas/AccountDeletionObjectionResource"
+      required:
+        - state
+        - requested_at
+        - scheduled_at
+        - requested_by_operator
+        - blocking_projects
+        - rejected_at
+        - objections
+      additionalProperties: false
+    AccountDeletionObjectionResource:
+      type: object
+      properties:
+        service:
+          description: The service that refused, such as `billing`
+          type: string
+        code:
+          description: A stable code defined by that service, such as `ARREARS`. The service documents what each code means and how to resolve it
+          type: string
+      required:
+        - service
+        - code
+      additionalProperties: false
+    RegisterRequestBody:
+      type: object
+      properties:
+        consents:
+          description: Must cover every agreement currently in force, at the versions returned by GET /account/v1/agreements
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/ConsentBody"
+        country:
+          description: ISO 3166-1 alpha-2 (CN, HK, US). Must denote a country or territory that exists; codes such as EU and ZZ hold a place in the standard without denoting one and are refused
+          type: string
+          minLength: 2
+          maxLength: 2
+        locale:
+          $ref: "#/components/schemas/Locale"
+      required:
+        - consents
+        - country
+        - locale
+      additionalProperties: false
+    LocaleOptionsResource:
+      type: object
+      properties:
+        countries:
+          type: array
+          items:
+            $ref: "#/components/schemas/CountryOption"
+        languages:
+          type: array
+          items:
+            $ref: "#/components/schemas/LanguageOption"
+      required:
+        - countries
+        - languages
+      additionalProperties: false
+    CountryOption:
+      type: object
+      properties:
+        code:
+          description: ISO 3166-1 alpha-2, sent back unchanged at registration
+          type: string
+        name:
+          description: The name rendered according to `Accept-Language`
+          type: string
+      required:
+        - code
+        - name
+      additionalProperties: false
+    LanguageOption:
+      type: object
+      properties:
+        code:
+          $ref: "#/components/schemas/Locale"
+        name:
+          description: The endonym of the language, written in that language itself. It does not follow `Accept-Language`
+          type: string
+      required:
+        - code
+        - name
+      additionalProperties: false
+    Locale:
+      description: The language used for the interface and for email. It is independent of `country`, and neither can be inferred from the other
+      type: string
+      enum:
+        - zh-Hans
+        - zh-Hant-HK
+        - en
+    UpdateAccountRequestBody:
+      description: Both fields are optional, and an omitted field is left unchanged
+      type: object
+      properties:
+        country:
+          description: As at registration
+          type: string
+          minLength: 2
+          maxLength: 2
+        locale:
+          $ref: "#/components/schemas/Locale"
+      additionalProperties: false
+    IdentityVerificationResource:
+      type: object
+      properties:
+        reject_reason:
+          type: string
+        status:
+          description: PERSONAL and ENTERPRISE are two kinds of subject rather than two levels, and are not ordered
+          type: string
+          enum:
+            - UNVERIFIED
+            - PENDING
+            - PERSONAL
+            - ENTERPRISE
+            - REJECTED
+        submitted_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        verified_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - status
+        - submitted_at
+        - verified_at
+        - reject_reason
+      additionalProperties: false
+    SubmitIdentityVerificationRequestBody:
+      type: object
+      properties:
+        id_number:
+          description: The document number. It is returned by no endpoint, and one number cannot be attached to two accounts
+          type: string
+          minLength: 6
+          maxLength: 64
+        real_name:
+          description: The legal name. It is returned by no endpoint
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+        - real_name
+        - id_number
+      additionalProperties: false
+    SSHKeyResource:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        fingerprint:
+          description: The SHA-256 fingerprint, as `ssh-keygen -l` prints it
+          type: string
+        id:
+          type: string
+          format: uuid
+        key_type:
+          description: The algorithm, such as `ssh-ed25519`
+          type: string
+        name:
+          type: string
+        public_key:
+          description: The key in OpenSSH format, without the comment it was added with
+          type: string
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - REVOKED
+      required:
+        - id
+        - name
+        - public_key
+        - fingerprint
+        - key_type
+        - status
+        - created_at
+      additionalProperties: false
+    LengthAwarePageSSHKeyResource:
+      type: object
+      properties:
+        items:
+          description: The items in this page
+          type: array
+          items:
+            $ref: "#/components/schemas/SSHKeyResource"
+        limit:
+          description: Maximum number of items in this page, echoing the request
+          type: integer
+          format: int64
+        offset:
+          description: Number of items skipped, echoing the request
+          type: integer
+          format: int64
+        total:
+          description: Total number of matches, not only this page
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false
+    CreateSSHKeyRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        public_key:
+          description: The public key in OpenSSH format. The type and the fingerprint are derived from it and cannot be changed. A certificate is refused, being a signature rather than a key
+          type: string
+          minLength: 1
+          maxLength: 16384
+      required:
+        - name
+        - public_key
+      additionalProperties: false
+    RenameSSHKeyRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+        - name
+      additionalProperties: false
+    ApplicationResource:
+      description: An application, as presented to an account that is asked to authorize it
+      type: object
+      properties:
+        client_id:
+          type: string
+        name:
+          type: string
+        redirect_uris:
+          description: The URIs to which the user may be returned; a `redirect_uri` must match one of them exactly
+          type: array
+          items:
+            type: string
+        status:
+          description: "`ARCHIVED` appears only within an authorization, after the application has been deleted"
+          type: string
+          enum:
+            - ACTIVE
+            - DISABLED
+            - ARCHIVED
+      required:
+        - client_id
+        - name
+        - redirect_uris
+        - status
+      additionalProperties: false
+    AuthorizedApplicationResource:
+      description: An application that the account has authorized to act in one of its projects
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        application:
+          $ref: "#/components/schemas/ApplicationResource"
+        project:
+          $ref: "#/components/schemas/ProjectResource"
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - REVOKED
+        created_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - application
+        - project
+        - status
+        - created_at
+      additionalProperties: false
+    LengthAwarePageAuthorizedApplicationResource:
+      type: object
+      properties:
+        items:
+          description: The items in this page
+          type: array
+          items:
+            $ref: "#/components/schemas/AuthorizedApplicationResource"
+        limit:
+          description: Maximum number of items in this page, echoing the request
+          type: integer
+          format: int64
+        offset:
+          description: Number of items skipped, echoing the request
+          type: integer
+          format: int64
+        total:
+          description: Total number of matches, not only this page
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false
+    AuthorizeApplicationRequestBody:
+      type: object
+      properties:
+        client_id:
+          type: string
+          minLength: 1
+          maxLength: 255
+        project_id:
+          type: string
+          format: uuid
+      required:
+        - client_id
+        - project_id
+      additionalProperties: false
+    InvitationPreviewResource:
+      description: What an invitation states before it is accepted. It carries neither the invitation id nor the full recipient address; the invitations listed against the current account are returned by `list-my-invitations`
+      type: object
+      properties:
+        email_masked:
+          description: The masked recipient address, enough for the recipient to recognise it
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        invited_by_name:
+          description: The display name of the sender, or their email address when no name is set
+          type: string
+        project_name:
+          type: string
+        role_names:
+          description: The display names of the roles granted on acceptance
+          type:
+            - array
+            - "null"
+          items:
+            type: string
+      required:
+        - project_name
+        - invited_by_name
+        - role_names
+        - email_masked
+        - expires_at
+      additionalProperties: false
+    InvitationResource:
+      type: object
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        email:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        invited_by:
+          description: The id of the account that issued the invitation
+          type: string
+        invited_by_name:
+          description: The display name of that account, or its email address when no name is set. It reflects the value at the time of reading rather than at the time the invitation was sent
+          type: string
+        project_id:
+          type: string
+          format: uuid
+        project_name:
+          description: The name of the target project
+          type: string
+        roles:
+          description: The role codes granted on acceptance
+          type:
+            - array
+            - "null"
+          items:
+            type: string
+        role_names:
+          description: The display names of those codes, in the same order
+          type:
+            - array
+            - "null"
+          items:
+            type: string
+      required:
+        - id
+        - project_id
+        - project_name
+        - email
+        - roles
+        - role_names
+        - invited_by
+        - invited_by_name
+        - expires_at
+        - created_at
+      additionalProperties: false
+    LengthAwarePageInvitationResource:
+      type: object
+      properties:
+        items:
+          description: The items in this page
+          type: array
+          items:
+            $ref: "#/components/schemas/InvitationResource"
+        limit:
+          description: Maximum number of items in this page, echoing the request
+          type: integer
+          format: int64
+        offset:
+          description: Number of items skipped, echoing the request
+          type: integer
+          format: int64
+        total:
+          description: Total number of matches, not only this page
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false
+    AcceptInvitationByTokenRequestBody:
+      type: object
+      properties:
+        token:
+          description: The token carried by the invitation link
+          type: string
+          minLength: 1
+          maxLength: 128
+      required:
+        - token
+      additionalProperties: false
+    ProjectTraitResource:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+        effect:
+          type: string
+          enum:
+            - NoWrite
+            - NoAccess
+        reason:
+          type: string
+      required:
+        - key
+        - value
+        - effect
+        - reason
+      additionalProperties: false
+    ProjectResource:
+      type: object
+      properties:
+        traits:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectTraitResource"
+        deletion_requested_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        deleted_at:
+          description: When the project was deleted
+          type:
+            - string
+            - "null"
+          format: date-time
+        description:
+          type: string
+        id:
+          type: string
+          format: uuid
+        slug:
+          description: The label naming the project in its address. It equals `id` until a custom slug is chosen. A custom slug does not change once set, and stays with the project after deletion
+          type: string
+          minLength: 1
+          maxLength: 36
+        status:
+          $ref: "#/components/schemas/ProjectStatus"
+        name:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - traits
+        - deletion_requested_at
+        - id
+        - slug
+        - status
+        - name
+        - description
+        - deleted_at
+        - created_by
+        - created_at
+        - updated_at
+      additionalProperties: false
+    AcceptedInvitationResponseBody:
+      type: object
+      properties:
+        project:
+          $ref: "#/components/schemas/ProjectResource"
+      required:
+        - project
+      additionalProperties: false
+    GrantResource:
+      type: object
+      properties:
+        admin:
+          type: boolean
+        owner:
+          type: boolean
+        roles:
+          description: The role codes held, for display only
+          type:
+            - array
+            - "null"
+          items:
+            type: string
+        rules:
+          description: "**Do not walk these rules to reach a decision.** They are compiled from every policy that applies to the caller, and serve to render what a user may do. Each request is decided by the service handling it"
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/RuleResource"
+      required:
+        - owner
+        - admin
+        - rules
+        - roles
+      additionalProperties: false
+    ResourceRefResource:
+      type: object
+      properties:
+        id:
+          description: A string rather than a UUID; a DNS zone, for one, is named by its domain. Matching is glob, so `*.example.com` covers a set of subdomains, while a value carrying no glob metacharacter matches exactly
+          type: string
+        type:
+          description: Of the form compute:instance or dns:zone, in the same namespace as permission names
+          type: string
+      required:
+        - type
+        - id
+      additionalProperties: false
+    RuleResource:
+      type: object
+      properties:
+        effect:
+          type: string
+          enum:
+            - allow
+            - deny
+        permissions:
+          description: A trailing wildcard is supported (compute:instance.*), and must carry the service prefix
+          type:
+            - array
+            - "null"
+          items:
+            type: string
+        resources:
+          description: Empty means the rule holds across the whole project. While it is not empty the rule holds only on those resources, and therefore answers no project-level question
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/ResourceRefResource"
+      required:
+        - effect
+        - permissions
+        - resources
+      additionalProperties: false
+    ProjectAccessResource:
+      type: object
+      properties:
+        grant:
+          $ref: "#/components/schemas/GrantResource"
+        project:
+          $ref: "#/components/schemas/ProjectResource"
+      required:
+        - project
+        - grant
+      additionalProperties: false
+    LengthAwarePageProjectAccessResource:
+      type: object
+      properties:
+        items:
+          description: The items in this page
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectAccessResource"
+        limit:
+          description: Maximum number of items in this page, echoing the request
+          type: integer
+          format: int64
+        offset:
+          description: Number of items skipped, echoing the request
+          type: integer
+          format: int64
+        total:
+          description: Total number of matches, not only this page
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false
+    CreateProjectRequestBody:
+      type: object
+      properties:
+        description:
+          type: string
+          maxLength: 2000
+        name:
+          type: string
+          minLength: 1
+          maxLength: 128
+        slug:
+          description: A custom slug of 6 to 32 characters made of lower-case letters, digits and single hyphens, beginning with a letter and ending with a letter or digit. Omitted or empty, the slug is the new project's `id`, and a custom slug can be set once later
+          type: string
+          maxLength: 32
+      required:
+        - name
+      additionalProperties: false
+    ProjectStatus:
+      description: "`active` until deletion is requested; `deleting` while the resources under the project are being removed, when `deletion_requested_at` is set; `deleted` once removal has finished, when `deleted_at` is set"
+      type: string
+      enum:
+        - active
+        - deleting
+        - deleted
+    SearchProjectsRequestBody:
+      type: object
+      properties:
+        keyword:
+          description: Matches against name, slug or description, and against the id when it is a complete project id
+          type: string
+          maxLength: 128
+        statuses:
+          description: The statuses to include. Omitted, only `active` projects are returned
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ProjectStatus"
+        page:
+          description: 1-based page number. Defaults to 1
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2147483647
+        page_size:
+          description: Items per page. Defaults to 50; at most 200
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 200
+      additionalProperties: false
+    ProjectAccessList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectAccessResource"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+    ProjectSlugAvailabilityResource:
+      type: object
+      properties:
+        slug:
+          description: The slug asked about
+          type: string
+        status:
+          description: "`available` when the slug can be chosen now, `reserved` when the name is reserved, and `taken` when a project, including a deleted one, holds it"
+          type: string
+          enum:
+            - available
+            - reserved
+            - taken
+      required:
+        - slug
+        - status
+      additionalProperties: false
+    ScopedTokenResponseBody:
+      type: object
+      properties:
+        expires_at:
+          description: When the token expires. Exchange for a new one before then rather than waiting for the first 401
+          type: string
+          format: date-time
+        expires_in:
+          description: Seconds remaining before expiry
+          type: integer
+          format: int64
+        grant:
+          $ref: "#/components/schemas/GrantResource"
+          description: "**A snapshot taken at the moment of the exchange. It is not carried in the token, and must not be cached.** It serves to render what a user may do; each request is decided again"
+        project:
+          $ref: "#/components/schemas/ProjectResource"
+          description: The project itself, so that no further lookup is needed after the exchange
+        token:
+          description: "The scoped token, to be sent as `Authorization: Bearer`"
+          type: string
+        token_type:
+          description: Always `Bearer`
+          type: string
+      required:
+        - token
+        - token_type
+        - expires_at
+        - expires_in
+        - project
+        - grant
+      additionalProperties: false

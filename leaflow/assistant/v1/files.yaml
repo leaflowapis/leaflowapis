@@ -1,0 +1,703 @@
+paths:
+  /api/v1/files:
+    post:
+      summary: Upload a file
+      description:
+        "The body is the file bytes themselves, not multipart, one file per request. The type
+        is determined from the content, not from Content-Type or from the name. Put the returned id in
+        a `file` part when sending a message.
+
+
+        An upload that no message ever references is a draft, and drafts are collected — `draftExpiresAt`
+        in the response says when this one goes. Sending a message with the id makes it permanent.
+
+
+        The returned `type` says how the assistant will see it. An `image` is read directly, and only
+        by models that accept image input. A small `text` file is placed inline in the message. A large
+        `text` file, and anything `binary`, arrives as a reference the assistant reads on demand — for
+        a binary that usually means downloading it onto one of the project's cloud instances."
+      operationId: upload-file
+      tags:
+        - File
+      parameters:
+        - name: filename
+          in: query
+          required: false
+          description:
+            The name to show and to give the assistant. Images do not need one; anything else
+            does, because the name is most of what says what the file is. Falls back to a generated name.
+          schema:
+            type: string
+            maxLength: 255
+      requestBody:
+        required: true
+        content:
+          "*/*":
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    query:
+      summary: Search files
+      description: |-
+        The caller's library in this project, most recently uploaded first: the files they attached to
+        messages, plus uploads that no message has referenced yet. Files that tools produced and
+        artifacts the assistant handed over are not listed here; artifacts are listed by
+        list-artifacts.
+
+        A file with no message referencing it is a draft: `draftExpiresAt` says when it is cleared.
+        Sending a message with the id makes it permanent and that field becomes null.
+
+        Files removed from the library are not listed, but conversations that already use them keep
+        them and download-by-id still works.
+      operationId: search-files
+      tags:
+        - File
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchFilesRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileListResponseBody"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/files/{file}:
+    get:
+      summary: Get a file
+      description: |-
+        Metadata for one file. The bytes are at /api/v1/files/{file}:download.
+
+        Returns 404 when the file does not exist, does not belong to the current user, or was removed
+        from the library. Removed files stay readable through their conversations but are no longer
+        described here.
+      operationId: get-file
+      tags:
+        - File
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    patch:
+      summary: Rename a file
+      description: |-
+        Changes the name shown in the library and given to the assistant. The bytes and the file id do
+        not change; conversations that already use it see the new name from their next request on.
+      operationId: update-file
+      tags:
+        - File
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFileRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    delete:
+      summary: Remove a file from the library
+      description: |-
+        Hides the file from the library. Conversations that already use it keep it: the file stays
+        readable by id and keeps rendering in their history. Its bytes are released when the project
+        is deleted. A draft is cleared for good when its expiry passes. Idempotent.
+      operationId: delete-file
+      tags:
+        - File
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: No Content
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/files/{file}:download:
+    get:
+      summary: Download a file
+      description:
+        "Returns the original bytes of a file, including one removed from the library, a file a tool
+        produced and an artifact version. The response carries long-lived cache headers because the
+        content never changes. Returns 404 when the file does not exist or does not belong to the
+        current user.
+
+
+        Only a file whose `type` is `image` comes back with its own image type and is usable as the
+        address of an `<img>`. Everything else is served as `application/octet-stream` with `Content-Disposition:
+        attachment`, deliberately: a file is arbitrary bytes under a name chosen elsewhere, and serving
+        it back inline would run it on this origin."
+      operationId: download-file
+      tags:
+        - File
+      parameters:
+        - name: file
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          headers:
+            Cache-Control:
+              description:
+                "Private and long-lived: these bytes are addressed by an id that is never reused,
+                so they never change; and they belong to one person, so they must not enter any shared
+                cache."
+              schema:
+                type: string
+            Content-Disposition:
+              description:
+                Present on everything that is not an image, carrying the original filename.
+                Absent on images, which are meant to be rendered in place.
+              schema:
+                type: string
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/upload-configuration:
+    get:
+      operationId: get-upload-configuration
+      summary: Get upload configuration
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadConfigurationResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/uploads:
+    post:
+      operationId: create-upload
+      summary: Create upload
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUploadRequestBody"
+    get:
+      operationId: list-uploads
+      summary: List uploads
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadListResponseBody"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/uploads/{upload}:
+    get:
+      operationId: get-upload
+      summary: Get upload
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      parameters:
+        - name: upload
+          in: path
+          required: true
+          schema:
+            type: string
+    patch:
+      operationId: update-upload
+      summary: Update upload
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      parameters:
+        - name: upload
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUploadRequestBody"
+    delete:
+      operationId: delete-upload
+      summary: Delete upload
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      parameters:
+        - name: upload
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/uploads/{upload}:cancel:
+    post:
+      operationId: cancel-upload
+      summary: Cancel upload
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      parameters:
+        - name: upload
+          in: path
+          required: true
+          schema:
+            type: string
+  /api/v1/uploads/{upload}:complete:
+    post:
+      operationId: complete-upload
+      summary: Complete upload
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      parameters:
+        - name: upload
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CompleteUploadRequestBody"
+  /api/v1/uploads/{upload}/parts/{part}:
+    put:
+      operationId: put-upload-part
+      summary: Put upload part
+      tags:
+        - Upload
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadPartResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+      parameters:
+        - name: upload
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: part
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+            maximum: 10000
+        - name: policyId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: X-Part-Size
+          in: header
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+components:
+  schemas:
+    FileResource:
+      description: A stored file, wherever it appears.
+      type: object
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        mediaType:
+          description: The IANA media type detected at intake, not the Content-Type the client sent.
+          type: string
+        type:
+          description: |-
+            How the assistant reads the file.
+
+            - `image` — read directly, and only by models that accept image input
+            - `text` — placed inline in the message when small enough, otherwise read on demand
+            - `binary` — never read directly; the assistant downloads it onto a host to work with it
+
+            Only an `image` can be shown in place; everything else is offered for download.
+          type: string
+          enum:
+            - image
+            - text
+            - binary
+        byteSize:
+          type: integer
+          format: int64
+        width:
+          description: Null unless type is image. Lets a client hold the space before the image loads.
+          type:
+            - integer
+            - "null"
+          format: int64
+        height:
+          description: Null unless type is image.
+          type:
+            - integer
+            - "null"
+          format: int64
+        draftExpiresAt:
+          description: |-
+            When this upload is cleared if no message ever references it. Null once a message, a tool
+            call or an artifact uses it; such a file is kept as long as what uses it is.
+          type:
+            - string
+            - "null"
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - filename
+        - mediaType
+        - type
+        - byteSize
+        - width
+        - height
+        - draftExpiresAt
+        - createdAt
+        - updatedAt
+      additionalProperties: false
+    FileCountsResource:
+      description: Counts over everything the criteria match, ignoring `ids` and the cursor.
+      type: object
+      properties:
+        total:
+          type: integer
+          format: int64
+        totalBytes:
+          type: integer
+          format: int64
+      required:
+        - total
+        - totalBytes
+      additionalProperties: false
+    FileListResponseBody:
+      type: object
+      properties:
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileResource"
+        nextCursor:
+          description: Null on the last page.
+          type:
+            - string
+            - "null"
+        counts:
+          description: Null unless `include` asked for it.
+          anyOf:
+            - $ref: "#/components/schemas/FileCountsResource"
+            - type: "null"
+      required:
+        - files
+        - nextCursor
+        - counts
+      additionalProperties: false
+    SearchFilesRequestBody:
+      type: object
+      properties:
+        ids:
+          description: Read these files. Cannot be combined with cursor.
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+        q:
+          description: Matches filenames, case-insensitively.
+          type: string
+          maxLength: 100
+        type:
+          description: How the assistant reads the file.
+          type: string
+          enum:
+            - image
+            - text
+            - binary
+        draft:
+          description: True for uploads no message references, false for the rest.
+          type: boolean
+        cursor:
+          type: string
+          maxLength: 1024
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        include:
+          description: Optional parts of the response. `counts` adds `counts`.
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+            enum:
+              - counts
+      additionalProperties: false
+    UpdateFileRequestBody:
+      type: object
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+        - filename
+      additionalProperties: false
+    UploadConfigurationResource:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        policyId:
+          type: string
+        maxFileBytes:
+          type: integer
+          format: int64
+        maxImageBytes:
+          type: integer
+          format: int64
+        partSizeBytes:
+          type: integer
+          format: int64
+        expirySeconds:
+          type: integer
+          format: int64
+      required:
+        - enabled
+        - policyId
+        - maxFileBytes
+        - maxImageBytes
+        - partSizeBytes
+        - expirySeconds
+      additionalProperties: false
+    UploadPartResource:
+      type: object
+      properties:
+        number:
+          type: integer
+          format: int64
+        byteSize:
+          type: integer
+          format: int64
+        etag:
+          type: string
+      required:
+        - number
+        - byteSize
+        - etag
+      additionalProperties: false
+    UploadResource:
+      type: object
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        byteSize:
+          type: integer
+          format: int64
+        partSizeBytes:
+          type: integer
+          format: int64
+        policyId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+        fileId:
+          description: The file the upload became. Null until the upload is complete.
+          type:
+            - string
+            - "null"
+        parts:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadPartResource"
+      required:
+        - id
+        - filename
+        - byteSize
+        - partSizeBytes
+        - policyId
+        - expiresAt
+        - status
+        - fileId
+        - parts
+      additionalProperties: false
+    UploadListResponseBody:
+      type: object
+      properties:
+        uploads:
+          type: array
+          items:
+            $ref: "#/components/schemas/UploadResource"
+      required:
+        - uploads
+      additionalProperties: false
+    CreateUploadRequestBody:
+      type: object
+      properties:
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 64
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        byteSize:
+          type: integer
+          format: int64
+        policyId:
+          type: string
+        maxFileBytes:
+          type: integer
+          format: int64
+        partSizeBytes:
+          type: integer
+          format: int64
+      required:
+        - requestId
+        - filename
+        - byteSize
+        - policyId
+        - maxFileBytes
+        - partSizeBytes
+      additionalProperties: false
+    UpdateUploadRequestBody:
+      type: object
+      properties:
+        filename:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+        - filename
+      additionalProperties: false
+    CompleteUploadRequestBody:
+      type: object
+      properties:
+        policyId:
+          type: string
+      required:
+        - policyId
+      additionalProperties: false

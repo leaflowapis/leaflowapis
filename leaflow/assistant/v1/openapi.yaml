@@ -1,0 +1,348 @@
+openapi: 3.2.1
+info:
+  title: Leaflow Assistant API
+  version: 2.0.0
+  description:
+    "Conversations with agents that operate the Leaflow platform, plus their folders, tasks,
+    files and
+
+    chat-app channels.
+
+
+    A conversation is a thread. A person talks to the main thread; the agent in it can start subagents,
+
+    which are threads too and run on their own: stopping the main thread does not stop them, and each
+
+    subagent tells its parent when it ends. A thread runs in turns; each turn records the model and
+
+    reasoning effort it used and its token usage.
+
+
+    Models come from the Canopy catalogue. A new thread uses the model it names, the caller's default
+
+    from /api/v1/settings, or the first catalogue model that can run an agent. Reasoning models take one
+
+    of three efforts — low, medium or high — which are sent to the model unchanged.
+
+
+    Read a thread's state with get-thread and its transcript with list-thread-items. Follow both live
+
+    through EventBus by subscribing to assistant.thread.frame and assistant.resource.updated; after a
+
+    reconnection or an assistant.workspace.invalidated message, read them again. list-thread-messages
+
+    outlines the person's messages for navigating a long conversation.
+
+
+    Upload large files with /api/v1/uploads: read /api/v1/upload-configuration first, send exact-sized
+
+    parts, then complete the upload and send its file id in a message.
+
+
+    Files the person attached are listed by search-files. Renaming or removing one does not change
+
+    the conversations that already use it; downloading keeps working. Files the assistant hands over
+
+    are artifacts: they appear on the tool call that created them and are listed by list-artifacts."
+servers:
+  - url: https://assistant.leaflow.cloud
+    description: Threads, messages and tool calls
+security:
+  - bearerAuth: []
+tags:
+  - name: Thread
+  - name: Item
+  - name: Turn
+  - name: Folder
+  - name: Task
+  - name: Setting
+  - name: File
+  - name: Upload
+  - name: Artifact
+  - name: Memory
+  - name: Skill
+  - name: Channel
+paths:
+  /api/v1/threads:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads
+  /api/v1/threads/{thread}:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}
+  /api/v1/threads/{thread}:interrupt:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}:interrupt
+  /api/v1/threads/{thread}:resume:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}:resume
+  /api/v1/threads/{thread}:compact:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}:compact
+  /api/v1/threads/{thread}:revert:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}:revert
+  /api/v1/threads/{thread}:markRead:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{thread}:markRead
+  /api/v1/threads/{thread}/items:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1items
+  /api/v1/threads/{thread}/items/{item}:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1items~1{item}
+  /api/v1/threads/{thread}/messages:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1messages
+  /api/v1/threads/{thread}/approvals:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1approvals
+  /api/v1/threads/{thread}/items/{item}:answer:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1items~1{item}:answer
+  /api/v1/threads/{thread}/items/{item}/result:
+    $ref: ./thread-items.yaml#/paths/~1api~1v1~1threads~1{thread}~1items~1{item}~1result
+  /api/v1/threads/{thread}/turns:
+    $ref: ./thread-turns.yaml#/paths/~1api~1v1~1threads~1{thread}~1turns
+  /api/v1/folders:
+    $ref: ./folders.yaml#/paths/~1api~1v1~1folders
+  /api/v1/folders/{folder}:
+    $ref: ./folders.yaml#/paths/~1api~1v1~1folders~1{folder}
+  /api/v1/folders/{folder}:move:
+    $ref: ./folders.yaml#/paths/~1api~1v1~1folders~1{folder}:move
+  /api/v1/folders/{folder}/threads/{thread}:
+    $ref: ./folders.yaml#/paths/~1api~1v1~1folders~1{folder}~1threads~1{thread}
+  /api/v1/tasks:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks
+  /api/v1/tasks/{task}:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}
+  /api/v1/tasks/{task}:run:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}:run
+  /api/v1/tasks/{task}:pause:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}:pause
+  /api/v1/tasks/{task}:resume:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}:resume
+  /api/v1/tasks/{task}:cancel:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}:cancel
+  /api/v1/tasks/{task}/runs:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1runs
+  /api/v1/tasks/{task}/runs/{run}:
+    $ref: ./tasks.yaml#/paths/~1api~1v1~1tasks~1{task}~1runs~1{run}
+  /api/v1/settings:
+    $ref: ./settings.yaml#/paths/~1api~1v1~1settings
+  /api/v1/files:
+    $ref: ./files.yaml#/paths/~1api~1v1~1files
+  /api/v1/files/{file}:
+    $ref: ./files.yaml#/paths/~1api~1v1~1files~1{file}
+  /api/v1/files/{file}:download:
+    $ref: ./files.yaml#/paths/~1api~1v1~1files~1{file}:download
+  /api/v1/upload-configuration:
+    $ref: ./files.yaml#/paths/~1api~1v1~1upload-configuration
+  /api/v1/uploads:
+    $ref: ./files.yaml#/paths/~1api~1v1~1uploads
+  /api/v1/uploads/{upload}:
+    $ref: ./files.yaml#/paths/~1api~1v1~1uploads~1{upload}
+  /api/v1/uploads/{upload}:cancel:
+    $ref: ./files.yaml#/paths/~1api~1v1~1uploads~1{upload}:cancel
+  /api/v1/uploads/{upload}:complete:
+    $ref: ./files.yaml#/paths/~1api~1v1~1uploads~1{upload}:complete
+  /api/v1/uploads/{upload}/parts/{part}:
+    $ref: ./files.yaml#/paths/~1api~1v1~1uploads~1{upload}~1parts~1{part}
+  /api/v1/artifacts:
+    $ref: ./artifacts.yaml#/paths/~1api~1v1~1artifacts
+  /api/v1/artifacts/{artifact}:
+    $ref: ./artifacts.yaml#/paths/~1api~1v1~1artifacts~1{artifact}
+  /api/v1/artifacts/{artifact}/versions:
+    $ref: ./artifacts.yaml#/paths/~1api~1v1~1artifacts~1{artifact}~1versions
+  /api/v1/artifacts/{artifact}/versions/{version}:
+    $ref: ./artifacts.yaml#/paths/~1api~1v1~1artifacts~1{artifact}~1versions~1{version}
+  /api/v1/memories:
+    $ref: ./memories.yaml#/paths/~1api~1v1~1memories
+  /api/v1/memories/{memory}:
+    $ref: ./memories.yaml#/paths/~1api~1v1~1memories~1{memory}
+  /api/v1/skills:
+    $ref: ./skills.yaml#/paths/~1api~1v1~1skills
+  /api/v1/skills/{skill}:
+    $ref: ./skills.yaml#/paths/~1api~1v1~1skills~1{skill}
+  /api/v1/bindings:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1bindings
+  /api/v1/bindings/{binding}:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1bindings~1{binding}
+  /api/v1/channels:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1channels
+  /api/v1/channels/{channel}:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1channels~1{channel}
+  /api/v1/channels/{channel}/binding-codes:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1channels~1{channel}~1binding-codes
+  /api/v1/channels/{channel}/rejections:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1channels~1{channel}~1rejections
+  /api/v1/channels/{channel}:rotateSecret:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1channels~1{channel}:rotateSecret
+  /api/v1/channels/{channel}:checkSender:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1channels~1{channel}:checkSender
+  /api/v1/channels/{channel}/weixin-logins:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1channels~1{channel}~1weixin-logins
+  /api/v1/platforms:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1platforms
+  /api/v1/weixin-logins/{login}:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1weixin-logins~1{login}
+  /api/v1/weixin-logins/{login}:verifyCode:
+    $ref: ./channels.yaml#/paths/~1api~1v1~1weixin-logins~1{login}:verifyCode
+  /api/v1/threads/{thread}/presence:
+    post:
+      summary: Renew client presence
+      description:
+        Renews an already announced browser client while the thread is open. It does not create or replace
+        the client catalogue.
+      operationId: renew-thread-presence
+      tags:
+        - Threads
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+      responses:
+        "204":
+          description: Presence renewed
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  parameters:
+    ThreadId:
+      name: thread
+      in: path
+      required: true
+      description: A thread id. Subagents are threads as well.
+      schema:
+        type: string
+        maxLength: 64
+    ItemId:
+      name: item
+      in: path
+      required: true
+      description: A transcript item id.
+      schema:
+        type: string
+        maxLength: 64
+    FolderId:
+      name: folder
+      in: path
+      required: true
+      description: A folder id.
+      schema:
+        type: string
+        maxLength: 64
+    TaskId:
+      name: task
+      in: path
+      required: true
+      description: A task id.
+      schema:
+        type: string
+        maxLength: 64
+    ArtifactId:
+      name: artifact
+      in: path
+      required: true
+      description: An artifact id.
+      schema:
+        type: string
+        maxLength: 64
+    ArtifactVersionId:
+      name: version
+      in: path
+      required: true
+      description: An artifact version id.
+      schema:
+        type: string
+        maxLength: 64
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    Usage:
+      description: Tokens reported by Canopy. Cache hit rate is cachedInputTokens / inputTokens.
+      type: object
+      properties:
+        inputTokens:
+          description: Prompt tokens, including cached ones.
+          type: integer
+          format: int64
+          minimum: 0
+        cachedInputTokens:
+          description: Prompt tokens read from the provider's cache.
+          type: integer
+          format: int64
+          minimum: 0
+        cacheWriteTokens:
+          description:
+            Prompt tokens written to the provider's cache. Zero for providers that do not report
+            it.
+          type: integer
+          format: int64
+          minimum: 0
+        outputTokens:
+          description: Output tokens, including reasoning.
+          type: integer
+          format: int64
+          minimum: 0
+        reasoningTokens:
+          description: Output tokens spent on reasoning.
+          type: integer
+          format: int64
+          minimum: 0
+        totalTokens:
+          type: integer
+          format: int64
+          minimum: 0
+        requests:
+          description: Model requests made.
+          type: integer
+          format: int64
+          minimum: 0
+        complete:
+          description:
+            False while a request has not reported its usage yet, so the numbers may still
+            grow.
+          type: boolean
+      required:
+        - inputTokens
+        - cachedInputTokens
+        - cacheWriteTokens
+        - outputTokens
+        - reasoningTokens
+        - totalTokens
+        - requests
+        - complete
+      additionalProperties: false
+    ReasoningEffort:
+      description: How much the model reasons before answering. Sent to the model unchanged.
+      type: string
+      enum:
+        - low
+        - medium
+        - high
+    ApprovalMode:
+      description:
+        "`manual` asks a person before tools that change something, `guardian` lets an automatic
+        reviewer decide, `yolo` runs them without asking."
+      type: string
+      enum:
+        - manual
+        - guardian
+        - yolo
+    ThreadStatus:
+      description:
+        What the thread is doing. `waiting` is waiting for subagents or tasks it started; `awaiting_approval`
+        and `awaiting_input` wait for a person.
+      type: string
+      enum:
+        - idle
+        - starting
+        - running
+        - waiting
+        - awaiting_approval
+        - awaiting_input
+    TurnStatus:
+      description: "`declined` ended because a person declined a tool call; `cancelled` was stopped."
+      type: string
+      enum:
+        - running
+        - completed
+        - failed
+        - declined
+        - cancelled

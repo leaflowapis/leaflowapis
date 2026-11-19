@@ -1,0 +1,450 @@
+paths:
+  /api/v1/monthly-statements:
+    get:
+      summary: List monthly statements
+      description: Monthly statements of account per UTC calendar month for your billing accounts, newest first. Each month summarizes order invoices issued in the month, closed usage statements of the month, credit notes issued in the month and payments recorded on those invoices.
+      operationId: list-monthly-statements
+      tags:
+        - statements
+      parameters:
+        - name: billing_account_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: from
+          in: query
+          description: Earliest period start, inclusive.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Latest period start, exclusive.
+          schema:
+            type: string
+            format: date-time
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MonthlyStatementList"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/monthly-statements/pdf:
+    get:
+      summary: Download monthly statement PDF
+      description: Renders the statement of account of one finalized UTC calendar month from invoices, usage statements, credit notes and payments read at download time. Supplement statements, later credit notes and later payments are reflected in later downloads. Not a tax invoice or a demand for payment. A month that is not finalized returns 409 with `BILLING_STATEMENT_NOT_FINALIZED`.
+      operationId: download-monthly-statement-pdf
+      tags:
+        - statements
+      parameters:
+        - name: billing_account_id
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: period_start
+          in: query
+          required: true
+          description: Start of the UTC calendar month, as returned in the monthly statement's `period_start`.
+          schema:
+            type: string
+            format: date-time
+        - $ref: ./openapi.yaml#/components/parameters/DocumentLocaleQuery
+        - $ref: ./openapi.yaml#/components/parameters/InlineQuery
+      responses:
+        "200":
+          description: OK
+          headers:
+            Content-Disposition:
+              description: "`inline` when requested, `attachment` otherwise, carrying a filename such as `statement-10023-202609.pdf`."
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/statements:
+    get:
+      summary: List statements
+      description: Statements of your billing accounts, filtered by billing_account_id, open or closed and period start. A closed statement does not mean the month is complete.
+      operationId: list-statements
+      tags:
+        - statements
+      parameters:
+        - name: billing_account_id
+          in: query
+          schema:
+            type: integer
+            format: int64
+        - name: status
+          in: query
+          required: false
+          description: Only statements in these statuses; omit for every status. Comma-separated.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 2
+            uniqueItems: true
+            items:
+              $ref: "#/components/schemas/StatementStatus"
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementList"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/statements/{statementId}:
+    parameters:
+      - name: statementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get statement
+      description: A statement of your billing account with its period, estimated or closed amounts and invoice. Returns 404 for a missing statement and 403 for another user's account.
+      operationId: get-statement
+      tags:
+        - statements
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Statement"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/statements/{statementId}/usage-summary:
+    parameters:
+      - name: statementId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get grouped consumption
+      description: The statement's consumption, grouped by project, product or meter and filtered within the statement. Quantities are given only for meter groups; grouping by meter also splits by the meter's presentation dimensions. Open to the owner of the statement's account and to members with the project permission `billing:finance.manage` of each project in `project_ids`, which must then be given and currently assigned to that account.
+      operationId: get-statement-usage
+      tags:
+        - statements
+      parameters:
+        - name: group_by
+          in: query
+          schema:
+            type: string
+            enum:
+              - project
+              - product
+              - meter
+            default: meter
+        - name: project_ids
+          in: query
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+              format: uuid
+        - name: product_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: meter_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatementSummary"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    MonthlyStatement:
+      description: One billing account's Statement of Account for one UTC calendar month, combining order invoices issued in the month, closed usage statements of the month, credit notes issued in the month and their payment state. Not a separate tax invoice or demand for payment; each underlying invoice is collected on its own.
+      type: object
+      properties:
+        billing_account_id:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        finalized:
+          description: True after the month's final usage closing, which applies the month's minimum charges, or after the month ends when it had no usage. Usage priced later is billed in supplement statements and added here.
+          type: boolean
+        finalized_at:
+          type: string
+          format: date-time
+        order_invoice_count:
+          description: Non-usage invoices finalized during the month.
+          type: integer
+          format: int32
+        statement_count:
+          description: Usage statements of the period, including the open one.
+          type: integer
+          format: int32
+        billed:
+          $ref: "#/components/schemas/StatementAmounts"
+          description: Sum of order_billed and usage_billed.
+        order_billed:
+          $ref: "#/components/schemas/StatementAmounts"
+          description: Sum of non-usage invoices finalized during the month.
+        usage_billed:
+          $ref: "#/components/schemas/StatementAmounts"
+          description: Sum of closed usage statements of the period.
+        credited_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: Valid credit notes issued during the month, tax included.
+        unbilled:
+          $ref: "#/components/schemas/StatementAmounts"
+          description: The open statement's estimate for usage priced since the last closing. Absent without an open statement.
+        credit_applied:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: Paid from credit grants on the period's invoices.
+        amount_paid:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: Paid on the period's invoices, including credit grants.
+        amount_due:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: Still owed on the period's invoices, collected from balance and credits as soon as they are available.
+        amount_refunded:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: Returned from the period's invoices after credit was issued against paid amounts.
+      required:
+        - billing_account_id
+        - currency
+        - period_start
+        - period_end
+        - finalized
+        - order_invoice_count
+        - statement_count
+        - billed
+        - order_billed
+        - usage_billed
+        - credited_amount
+        - credit_applied
+        - amount_paid
+        - amount_due
+        - amount_refunded
+    MonthlyStatementList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MonthlyStatement"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+    StatementAmounts:
+      type: object
+      properties:
+        subtotal:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        discount_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        tax_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        total:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        rounding_amount:
+          description: Added to total to round the invoiced amount to the currency's minor unit. Zero for an open statement's estimate.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+      required:
+        - subtotal
+        - discount_amount
+        - tax_amount
+        - total
+        - rounding_amount
+    Statement:
+      description: "An account's consumption for one billing period up to one closing. Usage is invoiced after every settlement run, about hourly: each closing issues an invoice for the usage priced since the previous one and collects it from credits and balance, and later usage goes into the next statement of the same period. A closed statement does not change. The period's consumption is the sum of its statements."
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        billing_account_id:
+          type: integer
+          format: int64
+        currency:
+          type: string
+        period_start:
+          type: string
+          format: date-time
+        period_end:
+          type: string
+          format: date-time
+        sequence:
+          description: Increases with each closing of the period.
+          type: integer
+          format: int32
+        status:
+          $ref: "#/components/schemas/StatementStatus"
+        type:
+          $ref: "#/components/schemas/StatementType"
+        estimated:
+          description: True while the statement is open. The estimate prices the period's usage so far at tier prices and adds tax for the current invoice contact. Minimum charges are added at the period's final closing, and a tier reduction larger than this statement's charges is credited to the period's earlier invoices at closing.
+          type: boolean
+        amounts:
+          $ref: "#/components/schemas/StatementAmounts"
+          description: The current estimate while open, or the invoiced result when closed.
+        closed_at:
+          type: string
+          format: date-time
+        invoice_id:
+          description: The invoice issued at this closing, when it produced one.
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        calculated_at:
+          type: string
+          format: date-time
+        credited_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: Credit issued at this closing against invoices already issued for the same period, including tax. Not part of `amounts`.
+      required:
+        - id
+        - billing_account_id
+        - currency
+        - period_start
+        - period_end
+        - status
+        - estimated
+        - created_at
+        - amounts
+        - sequence
+        - type
+        - credited_amount
+    StatementStatus:
+      type: string
+      enum:
+        - open
+        - closed
+    StatementType:
+      description: "`interim`: a closing before the period's usage is final, without minimum charges. `final`: the first closing after the period ended and its late usage was settled, applying the period's minimum charges. `supplement`: a closing after the final one, for usage priced late. An open statement is interim."
+      type: string
+      enum:
+        - interim
+        - final
+        - supplement
+    StatementList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Statement"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+    StatementItem:
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+        meter_id:
+          type: string
+          format: uuid
+        unit:
+          type: string
+        dimensions:
+          description: The values of the meter's presentation dimensions, such as the model and token kind. Included only when grouping by meter, which splits each meter by these values.
+          type: object
+          additionalProperties:
+            type: string
+        quantity:
+          description: Net usage quantity. Included only when grouping by meter.
+          type: string
+        deducted_quantity:
+          type: string
+        amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+          description: Priced amount before tax. Minimum charges added at closing are included; tier adjustments and tax appear only in the statement amounts.
+      required:
+        - amount
+    StatementSummary:
+      type: object
+      properties:
+        statement_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        estimated:
+          type: boolean
+        calculated_at:
+          type: string
+          format: date-time
+        group_by:
+          type: string
+          enum:
+            - project
+            - product
+            - meter
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatementItem"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - statement_id
+        - currency
+        - estimated
+        - group_by
+        - items
+        - pagination

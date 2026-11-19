@@ -1,0 +1,182 @@
+components:
+  schemas:
+    InstanceId:
+      description:
+        The public ins resource identifier. Only this fixed TypeID prefix is accepted; UUID text is not
+        an alternative representation.
+      type: string
+      minLength: 30
+      maxLength: 30
+      pattern: ^ins_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+    NetworkInterfaceId:
+      description:
+        The public eni resource identifier. Only this fixed TypeID prefix is accepted; UUID text is not
+        an alternative representation.
+      type: string
+      minLength: 30
+      maxLength: 30
+      pattern: ^eni_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+    LaunchTemplateId:
+      description:
+        The public lt resource identifier. Only this fixed TypeID prefix is accepted; UUID text is not an
+        alternative representation.
+      type: string
+      minLength: 29
+      maxLength: 29
+      pattern: ^lt_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+    VirtualPrivateCloudId:
+      description:
+        The public vpc resource identifier. Only this fixed TypeID prefix is accepted; UUID text is not
+        an alternative representation.
+      type: string
+      minLength: 30
+      maxLength: 30
+      pattern: ^vpc_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+    VirtualPrivateCloudIdOrWildcard:
+      description:
+        A virtual private cloud identifier, or `-` to read across every virtual private cloud of the
+        project (AIP-159).
+      type: string
+      pattern: ^(?:-|vpc_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25})$
+      example: "-"
+    ElasticIpId:
+      description:
+        The public eip resource identifier. Only this fixed TypeID prefix is accepted; UUID text is not
+        an alternative representation.
+      type: string
+      minLength: 30
+      maxLength: 30
+      pattern: ^eip_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+    InternetLineId:
+      type: string
+      minLength: 31
+      maxLength: 31
+      pattern: ^line_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute InternetLine TypeID. UUID text is not accepted.
+    RegionId:
+      type: string
+      minLength: 33
+      maxLength: 33
+      pattern: ^region_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute Region TypeID. UUID text is not accepted.
+    InstanceTypeId:
+      type: string
+      minLength: 34
+      maxLength: 34
+      pattern: ^instype_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute InstanceType TypeID. UUID text is not accepted.
+    InstanceFamilyId:
+      type: string
+      minLength: 36
+      maxLength: 36
+      pattern: ^insfamily_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute InstanceFamily TypeID. UUID text is not accepted.
+    AvailabilityZoneId:
+      type: string
+      minLength: 31
+      maxLength: 31
+      pattern: ^zone_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute AvailabilityZone TypeID. UUID text is not accepted.
+    VolumeId:
+      type: string
+      minLength: 30
+      maxLength: 30
+      pattern: ^vol_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute Volume TypeID. UUID text is not accepted.
+    VolumeBackupId:
+      type: string
+      minLength: 36
+      maxLength: 36
+      pattern: ^volbackup_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute VolumeBackup TypeID. UUID text is not accepted.
+    VolumeTypeId:
+      type: string
+      minLength: 34
+      maxLength: 34
+      pattern: ^voltype_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute VolumeType TypeID. UUID text is not accepted.
+    VolumeSnapshotId:
+      type: string
+      minLength: 38
+      maxLength: 38
+      pattern: ^volsnapshot_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute VolumeSnapshot TypeID. UUID text is not accepted.
+    InstanceVolumeId:
+      type: string
+      minLength: 33
+      maxLength: 33
+      pattern: ^insvol_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute InstanceVolume TypeID. UUID text is not accepted.
+    NetworkInterfaceAddressId:
+      type: string
+      minLength: 37
+      maxLength: 37
+      pattern: ^eniaddress_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute NetworkInterfaceAddress TypeID. UUID text is not accepted.
+    ElasticIpAssociationId:
+      type: string
+      minLength: 41
+      maxLength: 41
+      pattern: ^eipassociation_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute ElasticIpAssociation TypeID. UUID text is not accepted.
+    ImageId:
+      type: string
+      minLength: 32
+      maxLength: 32
+      pattern: ^image_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute Image TypeID. UUID text is not accepted.
+    SecurityGroupId:
+      type: string
+      minLength: 29
+      maxLength: 29
+      pattern: ^sg_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute SecurityGroup TypeID. UUID text is not accepted.
+    SecurityGroupIdOrWildcard:
+      description:
+        A security group identifier, or `-` to read across every security group of the project
+        (AIP-159).
+      type: string
+      pattern: ^(?:-|sg_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25})$
+      example: "-"
+    SubnetId:
+      type: string
+      minLength: 33
+      maxLength: 33
+      pattern: ^subnet_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute Subnet TypeID. UUID text is not accepted.
+    InstanceNetworkInterfaceId:
+      type: string
+      minLength: 33
+      maxLength: 33
+      pattern: ^inseni_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute InstanceNetworkInterface TypeID. UUID text is not accepted.
+    OperationLogId:
+      type: string
+      minLength: 39
+      maxLength: 39
+      pattern: ^operationlog_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute OperationLog TypeID. UUID text is not accepted.
+    VirtualPrivateCloudPeeringId:
+      type: string
+      minLength: 37
+      maxLength: 37
+      pattern: ^vpcpeering_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute VirtualPrivateCloudPeering TypeID. UUID text is not accepted.
+    VirtualPrivateCloudIpv6CidrBlockId:
+      type: string
+      minLength: 34
+      maxLength: 34
+      pattern: ^vpccidr_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute VirtualPrivateCloudIpv6CidrBlock TypeID. UUID text is not accepted.
+    VirtualPrivateCloudRouteId:
+      type: string
+      minLength: 35
+      maxLength: 35
+      pattern: ^vpcroute_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute VirtualPrivateCloudRoute TypeID. UUID text is not accepted.
+    SecurityGroupRuleId:
+      type: string
+      minLength: 33
+      maxLength: 33
+      pattern: ^sgrule_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
+      description: Compute SecurityGroupRule TypeID. UUID text is not accepted.

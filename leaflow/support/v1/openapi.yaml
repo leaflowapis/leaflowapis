@@ -1,0 +1,1083 @@
+openapi: 3.2.1
+info:
+  title: Leaflow Support API
+  version: 1.0.0
+  description: |-
+    Support tickets and scheduled maintenance notices.
+
+    ## Authentication
+
+    Every request carries a scoped token; see the `bearerAuth` security scheme. The single
+    exception is `GET /api/v1/notices`, which requires no credentials at all.
+
+    **Neither the path nor the headers carry a `project_id`**: the current project is determined by
+    the token.
+
+    ## Tickets belong to the project
+
+    A ticket is owned by the project it was opened in, not by the person who opened it. Every member
+    of that project can read it, reply to it and close it. `created_by` records who opened it and is
+    informational.
+
+    A ticket is in one of three states:
+
+    | State | Meaning |
+    | --- | --- |
+    | `OPEN` | Waiting on us |
+    | `AWAITING_USER` | Waiting on you |
+    | `CLOSED` | Finished |
+
+    **The state follows whoever spoke last** and cannot be set directly. Posting a message moves the
+    ticket to `OPEN`; a reply from support moves it to `AWAITING_USER`. Posting a message on a closed
+    ticket reopens it as `OPEN`, so a follow-up question never lands on a ticket nobody reads.
+
+    Tickets left in `AWAITING_USER` without activity are closed automatically after a period of
+    inactivity. Tickets in `OPEN` are never closed automatically.
+
+    ## Attachments are uploaded before they are referenced
+
+    Upload a file to `POST /api/v1/attachments`, then pass the returned id in `attachment_ids` when
+    opening a ticket or posting a message. An attachment that is never referenced is removed after a
+    time, so upload and reference in the same session.
+
+    The content type is determined from the content itself, not from the `Content-Type` header.
+    Files whose determined type is not accepted are rejected with `TICKET_ATTACHMENT_TYPE_REJECTED`.
+
+    ## Maintenance is read-only here
+
+    Scheduled maintenance is published by platform operators and is read-only here. Platform
+    announcements are not part of this API; they are owned by the notification service.
+servers:
+  - url: https://support.leaflow.cloud
+    description: Tickets and maintenance notices
+security:
+  - bearerAuth: []
+paths:
+  /api/v1/notices:
+    get:
+      summary: List the maintenance in effect right now
+      description: |-
+        Returns the maintenance windows that have not finished yet.
+
+        **This operation requires no credentials.** It is intended for sign-in pages and status
+        pages, which are reached before a project has been selected. It returns a narrower shape
+        than the authenticated operations and is not paginated.
+
+        Platform announcements are not part of this API. They are served by the notification
+        service, which owns platform-wide announcements.
+      operationId: list-notices
+      tags:
+        - Notice
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoticeResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/tickets:
+    get:
+      summary: List tickets in the current project
+      description: Ordered by most recent activity first, which is not the same as most recently opened.
+      operationId: list-tickets
+      tags:
+        - Ticket
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+        - name: status
+          in: query
+          description: Return only tickets in this state; omit for all states
+          explode: false
+          schema:
+            $ref: "#/components/schemas/TicketStatus"
+        - name: priority
+          in: query
+          description: Return only tickets at this priority; omit for all priorities
+          explode: false
+          schema:
+            $ref: "#/components/schemas/TicketPriority"
+        - name: category_id
+          in: query
+          description: Return only tickets in this category; omit for all categories
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: keyword
+          in: query
+          description: Match against the subject and the ticket number, case-insensitively
+          explode: false
+          schema:
+            type: string
+            maxLength: 128
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageTicketResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Open a ticket
+      description: |-
+        Opens a ticket and posts its first message in one request. A ticket always has at least one
+        message.
+
+        The new ticket is `OPEN`. Its `number` is assigned here and is the identifier to quote when
+        contacting support by other means.
+
+        `category_id` is optional. Submitting a category that has been disabled returns
+        `TICKET_CATEGORY_DISABLED`; the categories accepting new tickets are those returned by
+        `GET /api/v1/ticket-categories`.
+      operationId: create-ticket
+      tags:
+        - Ticket
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTicketRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/tickets/{ticketId}:
+    get:
+      summary: Get a ticket
+      description: Returns 404 for a ticket that belongs to another project.
+      operationId: get-ticket
+      tags:
+        - Ticket
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/tickets/{ticketId}:close:
+    post:
+      summary: Close a ticket
+      description: |-
+        Closing a ticket that is already closed succeeds and changes nothing.
+
+        A closed ticket can be rated once; see `POST /api/v1/tickets/{ticketId}/satisfaction`.
+        Posting a further message reopens it.
+      operationId: close-ticket
+      tags:
+        - Ticket
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/tickets/{ticketId}/messages:
+    get:
+      summary: List the messages on a ticket
+      description: Ordered oldest first, because a ticket is a conversation.
+      operationId: list-ticket-messages
+      tags:
+        - Ticket
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageTicketMessageResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Post a message on a ticket
+      description: |-
+        Moves the ticket to `OPEN`. Posting on a closed ticket reopens it.
+
+        Each id in `attachment_ids` must name an attachment uploaded in this project that no other
+        message references; otherwise the request fails with `TICKET_ATTACHMENT_ALREADY_ATTACHED`
+        and no message is posted.
+      operationId: create-ticket-message
+      tags:
+        - Ticket
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTicketMessageRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketMessageResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/tickets/{ticketId}/satisfaction:
+    get:
+      summary: Get the rating submitted for a ticket
+      operationId: get-ticket-satisfaction
+      tags:
+        - Ticket
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketSatisfactionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      summary: Rate a ticket
+      description: |-
+        The ticket must be closed; otherwise the request returns `TICKET_NOT_CLOSED`.
+
+        A ticket can be rated once. A second submission returns
+        `TICKET_SATISFACTION_ALREADY_SUBMITTED`, including after the ticket has been reopened and
+        closed again.
+      operationId: create-ticket-satisfaction
+      tags:
+        - Ticket
+      parameters:
+        - name: ticketId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTicketSatisfactionRequestBody"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketSatisfactionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/ticket-categories:
+    get:
+      summary: List the categories accepting new tickets
+      description: Ordered for presentation. Categories no longer accepting new tickets are omitted, including those still attached to existing tickets.
+      operationId: list-ticket-categories
+      tags:
+        - Ticket
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageTicketCategoryResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/attachments:
+    post:
+      summary: Upload an attachment
+      description: |-
+        The body is the file bytes themselves, not multipart, one file per request. The content type
+        is determined from the content, not from the `Content-Type` header.
+
+        Pass the returned id in `attachment_ids` when opening a ticket or posting a message. An
+        attachment that is never referenced by a message is removed after a time.
+      operationId: upload-attachment
+      tags:
+        - Attachment
+      parameters:
+        - name: filename
+          in: query
+          required: true
+          description: The file name to record, and the name the file is served under when downloaded
+          explode: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 255
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              contentMediaType: application/octet-stream
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TicketAttachmentResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/attachments/{attachmentId}/content:
+    get:
+      summary: Download an attachment
+      description: |-
+        Serves the file itself. The bytes are proxied by this API; the object store is not reachable
+        from outside, and no address to it is ever handed out.
+
+        `Content-Type` is the type determined from the content at upload time, not the one the
+        client claimed. `Content-Disposition` is `attachment` unless `inline` is requested **and**
+        the content type is one that can be rendered safely, in which case it is `inline`. Asking
+        for `inline` on anything else still yields a download.
+      operationId: download-attachment
+      tags:
+        - Attachment
+      parameters:
+        - name: attachmentId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: inline
+          in: query
+          description: Render in the browser instead of downloading, where the content type allows it
+          explode: false
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: OK
+          headers:
+            Content-Disposition:
+              description: "`inline` when the content type can be rendered safely and `inline` was asked for, `attachment` otherwise. Carries the original file name"
+              schema:
+                type: string
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/maintenances:
+    get:
+      summary: List maintenance notices
+      description: |-
+        Ordered by scheduled start, most recent first. Cancelled maintenance is omitted.
+
+        `scheduled_for` and `scheduled_until` are what was announced; `started_at` and
+        `completed_at` are what actually happened, and are null until it does.
+      operationId: list-maintenances
+      tags:
+        - Maintenance
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+        - name: status
+          in: query
+          description: Return only maintenance in this state; omit for all states
+          explode: false
+          schema:
+            $ref: "#/components/schemas/MaintenanceStatus"
+        - name: component
+          in: query
+          description: Return only maintenance affecting this component; omit for all components
+          explode: false
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageMaintenanceResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/maintenances/{maintenanceId}:
+    get:
+      summary: Get a maintenance notice
+      description: Returns 404 for cancelled maintenance.
+      operationId: get-maintenance
+      tags:
+        - Maintenance
+      parameters:
+        - name: maintenanceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/maintenances/{maintenanceId}/timeline:
+    get:
+      summary: List the updates posted during a maintenance
+      description: Ordered oldest first, because it is an account of what happened.
+      operationId: list-maintenance-timeline
+      tags:
+        - Maintenance
+      parameters:
+        - name: maintenanceId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Offset
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LengthAwarePageMaintenanceTimelineEntryResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    TicketStatus:
+      description: |-
+        `OPEN` is waiting on us. `AWAITING_USER` is waiting on you. `CLOSED` is finished.
+
+        The state follows whoever spoke last and cannot be set directly.
+      type: string
+      enum:
+        - OPEN
+        - AWAITING_USER
+        - CLOSED
+    TicketPriority:
+      description: How urgent the ticket is. It affects the order support works through tickets; it is not a commitment to a response time.
+      type: string
+      enum:
+        - LOW
+        - NORMAL
+        - HIGH
+        - URGENT
+    TicketAuthorType:
+      description: Whether a message was written by a project member or by support.
+      type: string
+      enum:
+        - USER
+        - OPERATOR
+    MaintenanceStatus:
+      description: |-
+        `SCHEDULED` has been announced but has not started. `IN_PROGRESS` is under way. `COMPLETED`
+        has finished. `CANCELLED` was announced and then called off, and never took place.
+      type: string
+      enum:
+        - SCHEDULED
+        - IN_PROGRESS
+        - COMPLETED
+        - CANCELLED
+    MaintenanceImpact:
+      description: What users should expect during the window.
+      type: string
+      enum:
+        - NONE
+        - DEGRADED
+        - PARTIAL_OUTAGE
+        - MAJOR_OUTAGE
+    TicketResource:
+      description: A support ticket, owned by the project it was opened in.
+      type: object
+      properties:
+        category:
+          description: The category this ticket is in; null when it has none
+          anyOf:
+            - $ref: "#/components/schemas/TicketCategoryResource"
+            - type: "null"
+        closed_at:
+          description: When the ticket was closed; null while it is open
+          type:
+            - string
+            - "null"
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          description: The user who opened the ticket. Every member of the project can read and reply to it regardless
+          type: string
+        id:
+          type: string
+          format: uuid
+        last_activity_at:
+          description: When someone last spoke on this ticket. Changing the priority or the category does not affect it
+          type: string
+          format: date-time
+        number:
+          description: The human-readable identifier to quote when contacting support by other means
+          type: string
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        satisfaction:
+          description: The rating submitted for this ticket; null when it has not been rated
+          anyOf:
+            - $ref: "#/components/schemas/TicketSatisfactionResource"
+            - type: "null"
+        status:
+          $ref: "#/components/schemas/TicketStatus"
+        subject:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - number
+        - subject
+        - status
+        - priority
+        - created_by
+        - category
+        - satisfaction
+        - last_activity_at
+        - closed_at
+        - created_at
+        - updated_at
+      additionalProperties: false
+    TicketCategoryResource:
+      description: A ticket category.
+      type: object
+      properties:
+        description:
+          type:
+            - string
+            - "null"
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+        - id
+        - name
+        - description
+      additionalProperties: false
+    TicketMessageResource:
+      description: One message on a ticket.
+      type: object
+      properties:
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketAttachmentResource"
+        author_id:
+          description: The identifier of whoever wrote the message, interpreted according to author_type
+          type: string
+        author_type:
+          $ref: "#/components/schemas/TicketAuthorType"
+        body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+      required:
+        - id
+        - author_type
+        - author_id
+        - body
+        - attachments
+        - created_at
+      additionalProperties: false
+    TicketAttachmentResource:
+      description: A file uploaded for a ticket. The bytes are retrieved separately; see the download-url operation.
+      type: object
+      properties:
+        content_type:
+          description: Determined from the content, which may differ from the Content-Type sent on upload
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        filename:
+          type: string
+        id:
+          type: string
+          format: uuid
+        size_bytes:
+          type: integer
+          format: int64
+      required:
+        - id
+        - filename
+        - content_type
+        - size_bytes
+        - created_at
+      additionalProperties: false
+    TicketSatisfactionResource:
+      description: The rating submitted for a ticket.
+      type: object
+      properties:
+        comment:
+          type:
+            - string
+            - "null"
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        score:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 5
+      required:
+        - id
+        - score
+        - comment
+        - created_at
+      additionalProperties: false
+    MaintenanceResource:
+      description: A scheduled maintenance notice published by platform operators.
+      type: object
+      properties:
+        body:
+          description: Markdown
+          type: string
+        completed_at:
+          description: When the maintenance actually finished; null until it does
+          type:
+            - string
+            - "null"
+          format: date-time
+        components:
+          description: What this maintenance affects. The names are those used by the services concerned
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          format: uuid
+        impact:
+          $ref: "#/components/schemas/MaintenanceImpact"
+        scheduled_for:
+          description: The announced start
+          type: string
+          format: date-time
+        scheduled_until:
+          description: The announced end
+          type: string
+          format: date-time
+        started_at:
+          description: When the maintenance actually started; null until it does
+          type:
+            - string
+            - "null"
+          format: date-time
+        status:
+          $ref: "#/components/schemas/MaintenanceStatus"
+        title:
+          type: string
+      required:
+        - id
+        - title
+        - body
+        - status
+        - impact
+        - scheduled_for
+        - scheduled_until
+        - started_at
+        - completed_at
+        - components
+      additionalProperties: false
+    MaintenanceTimelineEntryResource:
+      description: One update posted during a maintenance.
+      type: object
+      properties:
+        body:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        id:
+          type: string
+          format: uuid
+        impact:
+          description: The impact this update declared; null when the update did not change it
+          anyOf:
+            - $ref: "#/components/schemas/MaintenanceImpact"
+            - type: "null"
+        status:
+          description: The state this update moved the maintenance to; null when the update did not change it
+          anyOf:
+            - $ref: "#/components/schemas/MaintenanceStatus"
+            - type: "null"
+      required:
+        - id
+        - body
+        - status
+        - impact
+        - created_at
+      additionalProperties: false
+    NoticeResource:
+      description: |-
+        What is in effect right now, for readers who have not signed in.
+
+        This shape is deliberately narrower than the authenticated resources and carries no read
+        state.
+      type: object
+      properties:
+        maintenances:
+          type: array
+          items:
+            $ref: "#/components/schemas/NoticeMaintenanceResource"
+      required:
+        - maintenances
+      additionalProperties: false
+    NoticeMaintenanceResource:
+      type: object
+      properties:
+        body:
+          description: Markdown
+          type: string
+        components:
+          type: array
+          items:
+            type: string
+        id:
+          type: string
+          format: uuid
+        impact:
+          $ref: "#/components/schemas/MaintenanceImpact"
+        scheduled_for:
+          type: string
+          format: date-time
+        scheduled_until:
+          type: string
+          format: date-time
+        started_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        status:
+          $ref: "#/components/schemas/MaintenanceStatus"
+        title:
+          type: string
+      required:
+        - id
+        - title
+        - body
+        - status
+        - impact
+        - scheduled_for
+        - scheduled_until
+        - started_at
+        - components
+      additionalProperties: false
+    CreateTicketRequestBody:
+      type: object
+      properties:
+        attachment_ids:
+          description: Attachments to reference from the first message. Each must have been uploaded in this project and not yet referenced
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uuid
+        body:
+          description: The first message. Markdown
+          type: string
+          minLength: 1
+          maxLength: 20000
+        category_id:
+          type: string
+          format: uuid
+        priority:
+          $ref: "#/components/schemas/TicketPriority"
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 255
+      required:
+        - subject
+        - body
+      additionalProperties: false
+    CreateTicketMessageRequestBody:
+      type: object
+      properties:
+        attachment_ids:
+          description: Attachments to reference. Each must have been uploaded in this project and not yet referenced
+          type: array
+          maxItems: 10
+          items:
+            type: string
+            format: uuid
+        body:
+          description: Markdown
+          type: string
+          minLength: 1
+          maxLength: 20000
+      required:
+        - body
+      additionalProperties: false
+    CreateTicketSatisfactionRequestBody:
+      type: object
+      properties:
+        comment:
+          type: string
+          maxLength: 2000
+        score:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 5
+      required:
+        - score
+      additionalProperties: false
+    LengthAwarePageTicketResource:
+      type: object
+      properties:
+        items:
+          description: The contents of this page
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketResource"
+        limit:
+          description: Maximum items per page, echoing the value in the request
+          type: integer
+          format: int64
+        offset:
+          description: Items skipped, echoing the value in the request
+          type: integer
+          format: int64
+        total:
+          description: Total number of matching items, not only those in this page
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false
+    LengthAwarePageTicketMessageResource:
+      type: object
+      properties:
+        items:
+          description: The contents of this page
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketMessageResource"
+        limit:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false
+    LengthAwarePageTicketCategoryResource:
+      type: object
+      properties:
+        items:
+          description: The contents of this page
+          type: array
+          items:
+            $ref: "#/components/schemas/TicketCategoryResource"
+        limit:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false
+    LengthAwarePageMaintenanceResource:
+      type: object
+      properties:
+        items:
+          description: The contents of this page
+          type: array
+          items:
+            $ref: "#/components/schemas/MaintenanceResource"
+        limit:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false
+    LengthAwarePageMaintenanceTimelineEntryResource:
+      type: object
+      properties:
+        items:
+          description: The contents of this page
+          type: array
+          items:
+            $ref: "#/components/schemas/MaintenanceTimelineEntryResource"
+        limit:
+          type: integer
+          format: int64
+        offset:
+          type: integer
+          format: int64
+        total:
+          type: integer
+          format: int64
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      additionalProperties: false

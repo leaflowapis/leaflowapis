@@ -1,0 +1,11 @@
+{
+  "name": "leaflowapis",
+  "private": true,
+  "scripts": {
+    "format": "buf format -w && prettier --write \"**/*.{yaml,yml}\"",
+    "format:check": "buf format -d --exit-code && prettier --check \"**/*.{yaml,yml}\""
+  },
+  "devDependencies": {
+    "prettier": "3.6.2"
+  }
+}

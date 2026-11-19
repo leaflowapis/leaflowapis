@@ -1,0 +1,666 @@
+paths:
+  /api/v1/usage-estimates:
+    query:
+      summary: Estimate usage
+      description: |-
+        Estimates what future usage of metered prices would cost in `currency` at current rates, for anyone, signed in
+        or not. Nothing is saved. Graduated and volume tiers apply to the estimated quantity alone, while actual charges
+        follow each month's whole usage, and the amounts are before discounts and tax. Estimates are not collected at
+        checkout. An item that cannot be priced fails the whole request.
+      operationId: estimate-usage
+      tags:
+        - prices
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UsageEstimateRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageEstimate"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/prices:
+    get:
+      summary: List what is on sale, with prices
+      description: Every active price in the currency, one entry per plan and price. Archived prices are not listed; existing subscriptions keep the terms they were bought at.
+      operationId: list-prices
+      tags:
+        - prices
+      security: []
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - $ref: ./openapi.yaml#/components/parameters/IfNoneMatch
+        - name: currency
+          in: query
+          required: true
+          description: ISO 4217, three uppercase letters.
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 3
+        - name: product_id
+          in: query
+          required: false
+          schema:
+            $ref: ./products.yaml#/components/schemas/ProductId
+        - name: type
+          in: query
+          required: false
+          description: Narrows to one price type.
+          schema:
+            $ref: "#/components/schemas/PriceType"
+        - name: usage_type
+          in: query
+          required: false
+          description: Narrows to one usage type.
+          schema:
+            $ref: "#/components/schemas/UsageType"
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag:
+              description: Changes whenever this catalog representation changes.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceList"
+        "304":
+          description: Not Modified
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    query:
+      summary: Search what is on sale, with prices
+      description: |-
+        Lists the active prices in `currency` that meet every condition in the body, as `list-prices` lists them, for
+        anyone, signed in or not. Use it for conditions a query string cannot hold, such as the plans of a whole
+        catalog page. A price that delegates to a rate card has no amount of its own and carries its `rates`, which
+        `dimensions` narrows to the dimension values of the items on the page.
+      operationId: search-prices
+      tags:
+        - prices
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceSearch"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceList"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/prices/{priceId}:
+    parameters:
+      - name: priceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      summary: Get a price
+      description: A catalog price, archived prices included. The terms of past purchases are on their orders and subscriptions.
+      operationId: get-price
+      tags:
+        - prices
+      security: []
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/IfNoneMatch
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag:
+              description: Changes whenever this catalog listing changes.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Price"
+        "304":
+          description: Not Modified
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/plans/{planId}/prices:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/PlanId
+    get:
+      summary: List catalog prices
+      description: Public list prices. An account with a negotiated agreement may be charged less, never more.
+      operationId: list-prices-by-plan
+      tags:
+        - prices
+      security: []
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - $ref: ./openapi.yaml#/components/parameters/IfNoneMatch
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: type
+          in: query
+          required: false
+          description: Narrows to one price type.
+          schema:
+            $ref: "#/components/schemas/PriceType"
+        - name: usage_type
+          in: query
+          required: false
+          description: Narrows to one usage type.
+          schema:
+            $ref: "#/components/schemas/UsageType"
+      responses:
+        "200":
+          description: OK
+          headers:
+            ETag:
+              description: Changes whenever the catalogue changes. Send it as `If-None-Match` to receive `304` for an unchanged response.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PriceList"
+        "304":
+          $ref: ./openapi.yaml#/components/responses/NotModified
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    PriceSearch:
+      description: Conditions combined with AND.
+      type: object
+      properties:
+        currency:
+          description: ISO 4217, three uppercase letters.
+          type: string
+          minLength: 3
+          maxLength: 3
+        ids:
+          description: Only these prices, such as the prices another service names.
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        plan_ids:
+          description: Only prices of these plans.
+          type: array
+          minItems: 1
+          maxItems: 200
+          uniqueItems: true
+          items:
+            type: string
+            format: uuid
+        product_id:
+          $ref: ./products.yaml#/components/schemas/ProductId
+        type:
+          description: Narrows to one price type.
+          allOf:
+            - $ref: "#/components/schemas/PriceType"
+        usage_type:
+          description: Narrows to one usage type.
+          allOf:
+            - $ref: "#/components/schemas/UsageType"
+        dimensions:
+          description:
+            Narrows each price's `rates` to these dimension value sets, given as on order lines and usage; prices
+            are not filtered by it. A set no rate has adds nothing.
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: object
+            minProperties: 1
+            additionalProperties:
+              type: string
+              minLength: 1
+        page:
+          description: 1-based page number. Defaults to 1.
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 2147483647
+        page_size:
+          description: Items per page. Defaults to 50; at most 200.
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 200
+      required:
+        - currency
+      additionalProperties: false
+    PriceType:
+      description: "`one_time` charges once when bought. `recurring` charges again for every period, or for usage as it is settled."
+      type: string
+      enum:
+        - one_time
+        - recurring
+    UsageType:
+      description: |-
+        `licensed` charges for the quantity bought, each period paid before it starts. `metered` charges for the usage
+        reported, after it is settled; a metered subscription lasts until it is canceled. A one-time price is licensed.
+      type: string
+      enum:
+        - licensed
+        - metered
+    BillingScheme:
+      description: "`per_unit` multiplies a unit amount; `tiered` walks a ladder."
+      type: string
+      enum:
+        - per_unit
+        - tiered
+    CancellationPolicy:
+      description: Whether a cancellation of a delivered purchase may take effect immediately or only at the end of its paid term; refunds follow the refund policy. When absent, no cancellation terms were agreed.
+      type: string
+      enum:
+        - immediate
+        - period_end
+    RefundPolicy:
+      description: |-
+        `none` refunds nothing.
+
+        `prorated` refunds the amount paid for the current period minus the value of the time used, never below zero or above what remains unrefunded. Time used runs from the period start to effective cancellation, by the second. The order item freezes `list_amount` for one `list_interval`: each complete interval uses that amount, and the remainder is proportional to the actual length of its interval. Calendar intervals are anchored at the service period start in UTC. Without a frozen reference, time used is valued at the amount paid in proportion to the period length. A renewal starts a new period; an immediate change starts one at the change. Discounts and setup fees are not refunded. Refunds return to the original payment sources, with tax refunded in proportion.
+
+        `short_rate` applies the same calculation, but when cancellation takes effect less than `short_rate_threshold_seconds` after the period start, multiplies the used value by `short_rate_multiplier`, capped at `list_amount` for each reference interval begun, or at the amount paid when no reference was frozen.
+      type: string
+      enum:
+        - none
+        - prorated
+        - short_rate
+    PriceOption:
+      description: A price's display terms, including archived prices referenced by an applicability.
+      type: object
+      properties:
+        product:
+          $ref: ./products.yaml#/components/schemas/Product
+        plan:
+          $ref: ./openapi.yaml#/components/schemas/ObjectIdentity
+        billing_scheme:
+          description: Absent when the price delegates to a rate card.
+          allOf:
+            - $ref: "#/components/schemas/BillingScheme"
+        unit_quantity:
+          type: string
+        id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        type:
+          $ref: "#/components/schemas/PriceType"
+        usage_type:
+          $ref: "#/components/schemas/UsageType"
+        interval:
+          type: string
+          enum:
+            - none
+            - day
+            - month
+            - year
+        interval_count:
+          description: How many periods one purchase covers.
+          type: integer
+        unit_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        active:
+          description: False once the price is archived. It still applies to purchases already made at this price.
+          type: boolean
+      required:
+        - product
+        - plan
+        - currency
+        - type
+        - usage_type
+        - interval
+        - unit_quantity
+        - id
+        - active
+    Price:
+      type: object
+      properties:
+        rates:
+          description:
+            For a price that delegates to a rate card, the rates in effect now that it charges at, one for each
+            meter, dimension values and period; metered rates for a metered price, and rates on its own meter and
+            period for a licensed one. `search-prices` narrows them with `dimensions`. Null for a price with its own
+            amounts. Prices are set per currency, and dimension values a currency does not offer, for example in a
+            region it does not sell to, have no rate in that currency and cannot be bought with it.
+          type:
+            - array
+            - "null"
+          items:
+            $ref: "#/components/schemas/Rate"
+        lookup_key:
+          type: string
+        product:
+          $ref: ./products.yaml#/components/schemas/Product
+        plan:
+          $ref: ./openapi.yaml#/components/schemas/ObjectIdentity
+        meter_id:
+          description: For a metered price with its own amounts, the meter it charges. For a licensed price, the meter its quantity is held on. Absent otherwise.
+          type: string
+          format: uuid
+        meter:
+          $ref: ./openapi.yaml#/components/schemas/ObjectIdentity
+        unit_quantity:
+          type: string
+        active:
+          description: False once archived. An archived price cannot be bought until it is active again.
+          type: boolean
+        cancellation_policy:
+          $ref: "#/components/schemas/CancellationPolicy"
+        refund_policy:
+          $ref: "#/components/schemas/RefundPolicy"
+        short_rate_multiplier:
+          description: Refund policy `short_rate` only, the factor applied to the value of the time used when a cancellation takes effect less than `short_rate_threshold_seconds` after the period start.
+          type: string
+        short_rate_threshold_seconds:
+          description: Refund policy `short_rate` only, how long after the period start `short_rate_multiplier` applies.
+          type: integer
+          format: int64
+        product_id:
+          $ref: ./products.yaml#/components/schemas/ProductId
+        id:
+          type: string
+          format: uuid
+        plan_id:
+          type: string
+          format: uuid
+        currency:
+          type: string
+        type:
+          $ref: "#/components/schemas/PriceType"
+        usage_type:
+          $ref: "#/components/schemas/UsageType"
+        billing_scheme:
+          description: Absent when the price delegates to a rate card, where the rate depends on attributes such as region or machine type.
+          allOf:
+            - $ref: "#/components/schemas/BillingScheme"
+        unit_amount:
+          description: Present for `per_unit`.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        tiers_mode:
+          description: "How a ladder is walked: `graduated` charges each band at its own rate, `volume` charges everything at the rate of the band the total falls in. `none` when not tiered."
+          type: string
+          enum:
+            - none
+            - graduated
+            - volume
+        tiers:
+          description: Present for `tiered`, in ascending order.
+          type: array
+          items:
+            $ref: "#/components/schemas/Tier"
+        min_quantity:
+          description: The smallest quantity that can be bought. Absent means no lower bound.
+          type: string
+        max_quantity:
+          description: The largest quantity that may be bought; absent when there is no limit. A larger quantity is refused with `BILLING_PRICE_INVALID` and `field` `max_quantity`.
+          type: string
+        quantity_step:
+          description: Quantities must be a multiple of this. Absent means any quantity within the bounds.
+          type: string
+        interval_count:
+          description: For recurring licensed prices, how many interval units one period covers.
+          type: integer
+        interval:
+          type: string
+          enum:
+            - none
+            - day
+            - month
+            - year
+        setup_fee:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+      required:
+        - product
+        - plan
+        - interval
+        - unit_quantity
+        - active
+        - id
+        - plan_id
+        - currency
+        - type
+        - usage_type
+    PriceList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Price"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+    Rate:
+      type: object
+      properties:
+        meter:
+          $ref: ./openapi.yaml#/components/schemas/ObjectIdentity
+        unit:
+          description: The unit readings are reported in, such as `core-second`.
+          type: string
+        dimensions:
+          description: The dimension values this rate applies to, such as region and machine type.
+          type: object
+          additionalProperties:
+            type: string
+        billing_scheme:
+          $ref: "#/components/schemas/BillingScheme"
+        usage_type:
+          description: "`metered` prices usage; `licensed` prices holding a quantity for one period."
+          allOf:
+            - $ref: "#/components/schemas/UsageType"
+        interval:
+          description: Licensed rates only, the period the amount buys; `none` for metered rates.
+          type: string
+          enum:
+            - none
+            - day
+            - month
+            - year
+        interval_count:
+          type:
+            - integer
+            - "null"
+        tiers_mode:
+          description: "`graduated` charges each band at its own rate; `volume` charges everything at the rate of the band the total lands in. `none` for a `per_unit` rate."
+          type: string
+          enum:
+            - none
+            - graduated
+            - volume
+        unit_amount:
+          description: Present for `per_unit`. Tiered rates carry their amounts on the tiers.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        tiers:
+          description: Present for a tiered rate, in ascending order.
+          type: array
+          items:
+            $ref: "#/components/schemas/Tier"
+        unit_quantity:
+          description: How many measured units one amount covers; an hourly rate on a per-second meter is `"3600"`.
+          type: string
+        currency:
+          type: string
+        effective_from:
+          type: string
+          format: date-time
+        effective_to:
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - meter
+        - dimensions
+        - billing_scheme
+        - usage_type
+        - interval
+        - tiers_mode
+        - currency
+        - effective_from
+    Tier:
+      type: object
+      properties:
+        up_to:
+          description: The band's inclusive upper bound; null for the last band.
+          type:
+            - string
+            - "null"
+        unit_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        flat_amount:
+          description: Charged once when this band is reached, in addition to the per-unit amount.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+      required:
+        - unit_amount
+    UsageEstimateRequest:
+      type: object
+      properties:
+        currency:
+          description: The ISO 4217 currency to price in.
+          type: string
+          minLength: 3
+          maxLength: 3
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/UsageEstimateInput"
+      required:
+        - currency
+        - items
+      additionalProperties: false
+    UsageEstimateInput:
+      description: Future usage of one metered price. Give the price, or the plan to use its metered price in the currency, and the meter that measures the usage; give each resource's ID or lookup key, never both, and product_id with lookup keys.
+      type: object
+      properties:
+        product_id:
+          $ref: ./products.yaml#/components/schemas/ProductId
+        plan_id:
+          type: string
+          format: uuid
+        plan_lookup_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        price_id:
+          type: string
+          format: uuid
+        price_lookup_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        meter_id:
+          type: string
+          format: uuid
+        meter_lookup_key:
+          type: string
+          minLength: 1
+          maxLength: 128
+        dimensions:
+          description: The dimension values of the usage, such as region or token kind. Every key the meter declares must be given; a combination no rate covers is refused rather than priced at zero.
+          type: object
+          additionalProperties:
+            type: string
+        quantity:
+          description: Decimal string. Positive.
+          type: string
+          pattern: ^[0-9]{1,28}([.][0-9]{1,10})?$
+        duration_seconds:
+          description: For a duration meter, how long the quantity is held; the priced quantity is `quantity` times this duration.
+          type: integer
+          format: int64
+          minimum: 1
+      required:
+        - quantity
+      additionalProperties: false
+    UsageEstimate:
+      type: object
+      properties:
+        currency:
+          type: string
+        amount:
+          description: The sum of the items' amounts.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        items:
+          description: One per request item, in request order.
+          type: array
+          items:
+            $ref: "#/components/schemas/UsageEstimateItem"
+      required:
+        - currency
+        - amount
+        - items
+      additionalProperties: false
+    UsageEstimateItem:
+      type: object
+      properties:
+        index:
+          description: The zero-based request item this answers.
+          type: integer
+          minimum: 0
+        price_id:
+          type: string
+          format: uuid
+        meter_id:
+          type: string
+          format: uuid
+        quantity:
+          description: The quantity priced.
+          type: string
+        unit_amount:
+          description: Null when the matched rates do not have a single unit price, for example a tiered rate.
+          oneOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - type: "null"
+        unit_quantity:
+          description: The quantity unit_amount is for; null with unit_amount.
+          type:
+            - string
+            - "null"
+        amount:
+          description: Before discounts and tax, unrounded.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+      required:
+        - index
+        - price_id
+        - meter_id
+        - quantity
+        - unit_amount
+        - unit_quantity
+        - amount
+      additionalProperties: false

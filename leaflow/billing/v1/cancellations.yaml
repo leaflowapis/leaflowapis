@@ -1,0 +1,615 @@
+paths:
+  /api/v1/cancellations:
+    get:
+      summary: List cancellations
+      description: Newest first; members of a project list its cancellations with `project_ids`. Filter by `subscription_item_id` and `status=open` to find an item's cancellation in progress, or by `subscription_id` for every item of a subscription.
+      operationId: list-cancellations
+      tags:
+        - cancellations
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - $ref: ./openapi.yaml#/components/parameters/AccountIdQuery
+        - name: subscription_id
+          in: query
+          required: false
+          description: Only cancellations that include an item of this subscription.
+          schema:
+            type: string
+            format: uuid
+        - name: subscription_item_id
+          in: query
+          required: false
+          description: Only cancellations that include this subscription item.
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          required: false
+          description: Only cancellations in these statuses; omit for every status. `open` means requested, scheduled or releasing. Comma-separated, for example `status=open,failed`.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 7
+            uniqueItems: true
+            items:
+              type: string
+              enum:
+                - open
+                - requested
+                - scheduled
+                - releasing
+                - completed
+                - canceled
+                - failed
+        - $ref: ./openapi.yaml#/components/parameters/ProjectIdsQuery
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancellationList"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    post:
+      summary: Cancel subscription items
+      description: |-
+        Ends subscription items of one service together, from one subscription or several. Deleting a resource is an
+        `immediate` cancellation of every item released with it, such as a server with its disks or an address with
+        its bandwidth. Open to the owner of the items' current billing account and to members of their project with
+        the project permission `billing:finance.manage`.
+
+        The owning service releases the resources at once for `immediate`, or at `scheduled_at`, the end of the
+        subscription's current term, for `period_end`; until then the items are left out of renewals. When release is
+        confirmed, the unused value is returned to the original payment sources under each item's refund terms. For
+        `immediate` the refund is computed as of `proration_date` and is not reduced by service used during release.
+        Metered usage is charged until release. A subscription whose continuing items all end is canceled.
+
+        `mode` must be allowed for every item. A licensed item ends `period_end` while its subscription's paid term
+        lasts, and `immediate` unless its terms allow only the end of the paid term and that term has not ended.
+        During a free trial a licensed item ends either way whatever its terms, `period_end` meaning the end of the
+        trial, and nothing is refunded. For `period_end` the paid terms of all licensed items must end at the same
+        time. Metered and one-time items have no paid term: with `period_end` they end together with the licensed
+        items of the same cancellation, and a cancellation without a licensed item ends only `immediate`.
+
+        A billing account has a monthly refund quota: how many subscriptions it may end early with a refund in a UTC
+        calendar month. An `immediate` cancellation costs one for every subscription with a refund above zero, unless
+        it is withdrawn or fails. `period_end` cancellations, metered and one-time items, free trials and purchases
+        that cost nothing cost none. The preview shows the quota in `refund_quota`.
+
+        Refused with:
+
+        - 400 `BILLING_CANCELLATION_INVALID` when `items` or `proration_date` is invalid (`meta.field`), or the items
+          do not share one service, project, account and currency;
+        - 409 `BILLING_CANCELLATION_CONFLICT` when an item has not started or has ended;
+        - 422 `BILLING_CANCELLATION_MODE_FIXED` when `mode` is not allowed, and `BILLING_CANCELLATION_TERMS_UNSET`
+          when a licensed item has no cancellation terms, both with `meta.subscription_item_id`;
+        - 409 `BILLING_CANCELLATION_SCHEDULES_DIFFER` when, for `period_end`, the paid terms end at different times;
+        - 409 `BILLING_SUBSCRIPTION_OPERATION_PENDING` when an item is already being canceled
+          (`meta.cancellation_id`), its subscription is being reclaimed (`meta.reason` `reclaim_requested`), or the
+          item has a paid change waiting to switch (`meta.order_id`);
+        - 409 `BILLING_ORDER_PAYMENT_IN_FLIGHT` while an online renewal payment for one of their subscriptions is in
+          progress;
+        - 409 `BILLING_CANCELLATION_REFUND_CHANGED` when the refund no longer equals `expected_refundable_amount`;
+        - 422 `BILLING_CANCELLATION_REFUND_QUOTA_EXCEEDED` when the cancellation costs more of the monthly refund
+          quota than remains, with `meta.limit`, `meta.used`, `meta.remaining`, `meta.cost` and `meta.reset_at` as in
+          the preview's `refund_quota`; `period_end` stays available where the items allow it.
+
+        Repeating the request for the same items, mode and amount while the cancellation is open returns it with 200.
+        When it covers every continuing item of a subscription, unpaid renewal orders of that subscription are
+        canceled with it and its automatic renewal is turned off.
+      operationId: create-cancellation
+      tags:
+        - cancellations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancellationCreate"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cancellation"
+        "200":
+          description: The same cancellation, already open
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cancellation"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/cancellations:preview:
+    query:
+      summary: Preview a cancellation
+      description: What creating the cancellation now would return, per item and in total. Nothing is canceled, ended or refunded. Open to the owner of the items' current billing account and to members of their project; refused for the same states as creating it, including 422 `BILLING_CANCELLATION_REFUND_QUOTA_EXCEEDED`.
+      operationId: preview-cancellation
+      tags:
+        - cancellations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancellationPreviewRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancellationPreview"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/cancellations/{cancellationId}:
+    parameters:
+      - $ref: ./openapi.yaml#/components/parameters/CancellationId
+    get:
+      summary: Get a cancellation
+      description: A cancellation paid by your billing account or of a project you are a member of, with its schedule, expected refundable amount and the outcome for each item, including partial success.
+      operationId: get-cancellation
+      tags:
+        - cancellations
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cancellation"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    delete:
+      summary: Withdraw a cancellation
+      description: Withdraws the whole cancellation, which stays with status `canceled`, while no resource has begun to be released; afterwards it is refused with 409 `BILLING_CANCELLATION_CONFLICT`. The items continue and renew with their subscriptions again; a subscription's automatic renewal, turned off when the cancellation covered all of its continuing items, stays off until it is turned on again. Withdrawing a withdrawn cancellation returns it unchanged. Open to the owner of the items' current billing account and to members of their project with the project permission `billing:finance.manage`.
+      operationId: delete-cancellation
+      tags:
+        - cancellations
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cancellation"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    CancellationCreate:
+      type: object
+      properties:
+        items:
+          description: As in the preview.
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/CancellationItemInput"
+        mode:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationMode
+        proration_date:
+          description: "For `immediate`, the preview's `proration_date`: a whole second, not in the future and at most ten minutes old; the refund is computed as of it. Now when omitted."
+          type: string
+          format: date-time
+        expected_refundable_amount:
+          description: The preview's `refundable_amount`; the cancellation is refused when the refund differs.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+            - type: string
+              pattern: ^[0-9]{1,15}([.][0-9]{1,10})?$
+        reason:
+          description: A note from the account holder, kept with the cancellation.
+          type: string
+          maxLength: 1024
+      required:
+        - items
+        - mode
+        - expected_refundable_amount
+      additionalProperties: false
+    CancellationItemInput:
+      description: One subscription item to end, each at most once.
+      type: object
+      properties:
+        subscription_item_id:
+          type: string
+          format: uuid
+      required:
+        - subscription_item_id
+      additionalProperties: false
+    Cancellation:
+      description: |-
+        One cancellation of a set of subscription items of one service, released together at one time.
+
+        - `requested`: `immediate`, release has not begun.
+        - `scheduled`: `period_end`, waiting for `scheduled_at`.
+        - `releasing`: release has begun; it can no longer be withdrawn.
+        - `completed`: every item has ended and its refund has been made.
+        - `canceled`: withdrawn before release began; the items continue.
+        - `failed`: the service could not carry it out, for the reason in `failure_code`; the
+          items continue and can be canceled again.
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - requested
+            - scheduled
+            - releasing
+            - completed
+            - canceled
+            - failed
+        mode:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationMode
+        scheduled_at:
+          type: string
+          format: date-time
+        proration_date:
+          description: For `immediate`, the second the refund is computed as of.
+          type: string
+          format: date-time
+        origin:
+          description: Who requested it; `project_deletion` means the project was deleted.
+          type: string
+          enum:
+            - customer
+            - operator
+            - project_deletion
+        billing_account_id:
+          description: "The billing account paying for these items when the cancellation was created: the purchasing account of an account-level purchase, or the project's linked account."
+          type: integer
+          format: int64
+        currency:
+          type: string
+        expected_refundable_amount:
+          description: The refund confirmed when the cancellation was created. Absent when the platform created it.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        refund_policy:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationRefundPolicy
+        failure_code:
+          description: "Present with `failed`: the owning service's code, such as for a disk that can only be released with its server."
+          type: string
+        requested_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        canceled_at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CancellationItem"
+      required:
+        - id
+        - status
+        - mode
+        - origin
+        - billing_account_id
+        - currency
+        - requested_at
+        - items
+    CancellationItem:
+      description: One subscription item of the cancellation.
+      type: object
+      properties:
+        id:
+          description: The item's entry in the cancellation, the same as `SubscriptionItem.cancellation.id`.
+          type: string
+          format: uuid
+        subscription_item_id:
+          type: string
+          format: uuid
+        subscription_id:
+          description: The subscription the item belongs to.
+          type: string
+          format: uuid
+        plan_id:
+          type: string
+          format: uuid
+        plan_name:
+          type: string
+        type:
+          $ref: ./prices.yaml#/components/schemas/PriceType
+        usage_type:
+          description: |-
+            When the cancellation covers every continuing item of a subscription, creating it turned the
+            subscription's automatic renewal off; withdrawing it turns renewal back on for a subscription with
+            only `metered` items and leaves it off for one with `licensed` items.
+          allOf:
+            - $ref: ./prices.yaml#/components/schemas/UsageType
+        status:
+          type: string
+          enum:
+            - requested
+            - scheduled
+            - releasing
+            - completed
+            - canceled
+            - failed
+        failure_code:
+          description: The release stopped or its result is unknown; present while the release needs resolution.
+          type: string
+        release_started_at:
+          type: string
+          format: date-time
+        effective_at:
+          description: When the service ended, as confirmed by the service that provides it.
+          type: string
+          format: date-time
+        balance_amount:
+          description: Present with `completed`. The part of the refund returned to the account balance.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        credit_amount:
+          description: Present with `completed`. The part restored to the credit grants that paid.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        gateway_amount:
+          description: Present with `completed`. The part returned to the payment method it was paid with.
+          allOf:
+            - $ref: ../../type/v1/money.yaml#/components/schemas/Money
+      required:
+        - id
+        - subscription_item_id
+        - subscription_id
+        - plan_id
+        - plan_name
+        - type
+        - usage_type
+        - status
+    CancellationList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Cancellation"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+      required:
+        - items
+        - pagination
+    SubscriptionItemCancellation:
+      description: "The latest cancellation including the subscription item, with this item's entry: `id` is the entry and `cancellation_id` the cancellation. scheduled_at is the intended time and effective_at the confirmed end of service."
+      type: object
+      properties:
+        reason:
+          type: string
+        cancellation_id:
+          description: The cancellation this entry belongs to, with the other items released together.
+          type: string
+          format: uuid
+        id:
+          type: string
+          format: uuid
+        subscription_item_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum:
+            - requested
+            - scheduled
+            - releasing
+            - failed
+            - completed
+            - canceled
+        mode:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationMode
+        requested_at:
+          type: string
+          format: date-time
+        scheduled_at:
+          type: string
+          format: date-time
+        effective_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        release_started_at:
+          type: string
+          format: date-time
+        canceled_at:
+          type: string
+          format: date-time
+        refund_policy:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationRefundPolicy
+        failure_code:
+          type: string
+        failure_reason:
+          type: string
+      required:
+        - id
+        - subscription_item_id
+        - status
+        - mode
+        - requested_at
+    CancellationPreviewRequest:
+      description: "What ending these items together would return, for one mode; preview `immediate` and `period_end` separately to compare. Refused with 409 `BILLING_SUBSCRIPTION_OPERATION_PENDING` when an item is already being canceled (`meta.cancellation_id`), its subscription is being reclaimed (`meta.reason` `reclaim_requested`) or the item has a paid change waiting to switch (`meta.order_id`)."
+      type: object
+      properties:
+        billing_account_id:
+          description: A billing account you own that currently pays for every item.
+          type: integer
+          format: int64
+          minimum: 1
+        items:
+          description: The items to end together, all of one service, including every item released with a resource.
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/CancellationItemInput"
+        mode:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationMode
+      required:
+        - billing_account_id
+        - items
+        - mode
+      additionalProperties: false
+    CancellationPreview:
+      description: |-
+        What the cancellation would return, per item and in total, as of now. Give `proration_date` and
+        `refundable_amount` when creating the cancellation.
+
+        - `unused_amount`: before tax, the amount paid for the current periods in proportion to the time remaining.
+        - `short_rate_surcharge_amount`: before tax, the part of `forfeited_amount` due to the short rate of the
+          refund policy.
+        - `refundable_amount`: what is returned the way it was paid, tax included; `refund_amount` plus
+          `credit_amount`.
+        - `refund_amount`: the part returned to the balance or the payment method.
+        - `credit_amount`: the part restored to the credit grants that paid.
+        - `tax_amount`: the tax included in `refundable_amount`.
+        - `forfeited_amount`: before tax, the part of `unused_amount` the refund terms do not return.
+        - `refund_quota`: the billing account's monthly refund quota and what this cancellation would cost of it;
+          absent when refunds are not limited.
+
+        Metered and one-time items show zero; their usage until release is charged as usual.
+      type: object
+      properties:
+        mode:
+          $ref: ../../billing/type/v1/cancellation.yaml#/components/schemas/CancellationMode
+        scheduled_at:
+          description: For `period_end`, when release begins, the end of the subscriptions' current terms.
+          type: string
+          format: date-time
+        proration_date:
+          description: For `immediate`, the second the refund is computed as of. Give it when creating the cancellation.
+          type: string
+          format: date-time
+        currency:
+          type: string
+        unused_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        short_rate_surcharge_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        refundable_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        refund_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        credit_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        tax_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        forfeited_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        refund_quota:
+          $ref: "#/components/schemas/RefundQuota"
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CancellationPreviewItem"
+      required:
+        - mode
+        - currency
+        - unused_amount
+        - short_rate_surcharge_amount
+        - refundable_amount
+        - refund_amount
+        - credit_amount
+        - tax_amount
+        - forfeited_amount
+        - items
+    RefundQuota:
+      description: How many subscriptions the billing account may end early with a refund in the current UTC calendar month, and what the previewed cancellation would cost of it.
+      type: object
+      properties:
+        limit:
+          description: The quota for the month.
+          type: integer
+          minimum: 1
+        used:
+          description: Used so far this month, without the previewed cancellation.
+          type: integer
+          minimum: 0
+        remaining:
+          description: Left this month before the previewed cancellation; `limit` minus `used`, never below zero.
+          type: integer
+          minimum: 0
+        cost:
+          description: What creating the previewed cancellation would use, one for every subscription with a refund above zero. Zero for `period_end` and when nothing is refunded; creating it is refused when greater than `remaining`.
+          type: integer
+          minimum: 0
+        reset_at:
+          description: When the next month begins and `used` starts again from zero.
+          type: string
+          format: date-time
+      required:
+        - limit
+        - used
+        - remaining
+        - cost
+        - reset_at
+    CancellationPreviewItem:
+      description: One subscription item of the previewed cancellation.
+      type: object
+      properties:
+        subscription_item_id:
+          type: string
+          format: uuid
+        subscription_id:
+          description: The subscription the item belongs to.
+          type: string
+          format: uuid
+        plan_id:
+          type: string
+          format: uuid
+        plan_name:
+          type: string
+        project:
+          description: The project and its current name. Absent for an account-level purchase or when the project cannot be read.
+          oneOf:
+            - $ref: ../../type/v1/identity.yaml#/components/schemas/NamedIdentity
+            - type: "null"
+        type:
+          $ref: ./prices.yaml#/components/schemas/PriceType
+        usage_type:
+          $ref: ./prices.yaml#/components/schemas/UsageType
+        auto_renew:
+          description: Whether the item's subscription renews automatically now. Creating a cancellation of every continuing item of the subscription turns it off; withdrawing it turns it back on for a subscription with only metered items but not for one with licensed items.
+          type: boolean
+        unused_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        short_rate_surcharge_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        refundable_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        refund_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        credit_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        tax_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+        forfeited_amount:
+          $ref: ../../type/v1/money.yaml#/components/schemas/Money
+      required:
+        - subscription_item_id
+        - subscription_id
+        - plan_id
+        - plan_name
+        - type
+        - usage_type
+        - auto_renew
+        - unused_amount
+        - short_rate_surcharge_amount
+        - refundable_amount
+        - refund_amount
+        - credit_amount
+        - tax_amount
+        - forfeited_amount
