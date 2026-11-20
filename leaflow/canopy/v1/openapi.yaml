@@ -193,6 +193,8 @@ components:
       $ref: ./api-keys.yaml#/components/schemas/IssuedAPIKeyResource
     UpdateAPIKeyRequestBody:
       $ref: ./api-keys.yaml#/components/schemas/UpdateAPIKeyRequestBody
+    ModelCategory:
+      $ref: ./models.yaml#/components/schemas/ModelCategory
     ModelResource:
       $ref: ./models.yaml#/components/schemas/ModelResource
     ModelBilling:

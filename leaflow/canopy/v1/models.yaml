@@ -13,6 +13,33 @@ paths:
       operationId: list-models
       tags:
         - Model
+      parameters:
+        - name: category
+          in: query
+          description: Restricts the result to models serving the specified high-level category (`chat`, `image`, `video`, `speech`, `transcription`, `realtime`, `embedding`, `rerank`, `decision`), derived from reachable inference endpoints.
+          explode: false
+          schema:
+            $ref: "#/components/schemas/ModelCategory"
+        - name: endpoint
+          in: query
+          description: Restricts the result to models reachable on the specified inference endpoint path (for example `/v1/chat/completions`, `/v1/audio/speech`, or `/v1/realtime`).
+          explode: false
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+        - name: input_modality
+          in: query
+          description: Restricts the result to models declaring the specified input modality.
+          explode: false
+          schema:
+            $ref: ./capabilities.yaml#/components/schemas/Modality
+        - name: output_modality
+          in: query
+          description: Restricts the result to models declaring the specified output modality.
+          explode: false
+          schema:
+            $ref: ./capabilities.yaml#/components/schemas/Modality
       responses:
         "200":
           description: OK
@@ -74,6 +101,19 @@ paths:
           $ref: ./openapi.yaml#/components/responses/Error
 components:
   schemas:
+    ModelCategory:
+      type: string
+      description: High-level capability category derived from a model's reachable inference endpoints.
+      enum:
+        - chat
+        - image
+        - video
+        - speech
+        - transcription
+        - realtime
+        - embedding
+        - rerank
+        - decision
     ModelResource:
       type: object
       properties:
@@ -122,6 +162,11 @@ components:
           description: Produced output modalities. Image input does not imply image generation.
         capabilities:
           $ref: ./capabilities.yaml#/components/schemas/ModelCapabilities
+        supported_endpoints:
+          type: array
+          items:
+            type: string
+          description: Inference endpoints reachable on Canopy for this model, derived from its provider mappings.
         access:
           description: |-
             Who can call the model. Every model is listed to every project.
