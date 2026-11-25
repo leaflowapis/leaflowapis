@@ -423,7 +423,7 @@ components:
       type: object
       properties:
         available_credit:
-          description: Balance minus pending balance returns and the part of unbilled_amount and due that estimated_credit_applied does not cover. Negative only when the balance and applicable credit fall short of what the account owes.
+          description: Balance minus pending balance returns and the part of unbilled_amount and due that estimated_credit_applied does not cover. Open usage therefore reduces available_credit before a usage invoice exists. Negative only when the balance and applicable credit fall short of what the account owes.
           allOf:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         estimated_credit_applied:
@@ -462,7 +462,7 @@ components:
             - $ref: ../../type/v1/money.yaml#/components/schemas/Money
         pending_returns_amount:
           $ref: ../../type/v1/money.yaml#/components/schemas/Money
-          description: Balance held for pending top-up refunds and not spendable. Unbilled usage does not hold balance.
+          description: Balance held for pending top-up refunds and not spendable. Unbilled usage is reported separately and reduces available_credit.
       required:
         - billing_account_id
         - currency
