@@ -612,6 +612,18 @@ components:
             - "null"
         is_default:
           type: boolean
+        fingerprint:
+          type:
+            - string
+            - "null"
+        invoice_collection_authorized_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
         status:
           type: string
           enum:
@@ -623,6 +635,7 @@ components:
         - billing_account_id
         - payment_gateway
         - is_default
+        - created_at
         - status
     PaymentMethodList:
       type: object
