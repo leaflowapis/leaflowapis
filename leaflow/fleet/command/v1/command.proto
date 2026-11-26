@@ -12,17 +12,18 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/command/v1;commandv
 // already leads to the machine. Every call fails with the reasons of each
 // method in a google.rpc.ErrorInfo of the domain "fleet.leaflow.cloud".
 //
-// Accounts. A command runs as the directory account of the platform user who
-// asked for it (leaflow.fleet.directory.v1), the account the user also logs
-// in with over SSH and opens sessions as; never as a local account. The Agent
-// runs it through the account and session stacks of its PAM service, so it
-// is refused whenever a login of the account would be.
+// Accounts. A command runs as the account resolved for the platform user who
+// asked for it on the machine (leaflow.fleet.directory.v1: their bound local
+// account when one is configured on the machine, or their directory account
+// otherwise), never as root or an unbound local account. The Agent runs it
+// through the account and session stacks of its PAM service, so it is refused
+// whenever a Fleet login of the account would be.
 //
 // Elevation. Inside a command, sudo(8) succeeds without a prompt while the
-// account may become root (Account.admin, asked with GetAccount at that
-// moment), and refuses otherwise: the user asked for the command, so
-// the request stands for the approval a person gives on a participant of a
-// session (leaflow.fleet.privilege.v1).
+// account may become root (admin, resolved at that moment), and refuses
+// otherwise: the user asked for the command, so the request stands for the
+// approval a person gives on a participant of a session
+// (leaflow.fleet.privilege.v1).
 //
 // A command is one line for the account's login shell, as `ssh host
 // 'command'` runs it (RFC 4254 §6.5 "exec"): pipes, redirection and `&&`

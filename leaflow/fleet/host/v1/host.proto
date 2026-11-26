@@ -35,8 +35,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/host/v1;hostv1";
 // one whose session process the service no longer admits, is ended by the
 // service with TerminateSession. Nothing is replayed after a reconnect.
 //
-// Accounts. A session runs as the directory account of its platform user,
-// admitted by PAM as any login is, and ends when the account may no longer
+// Accounts. A session runs as the account resolved for its platform user on
+// the machine (leaflow.fleet.directory.v1: their bound local account when one
+// is configured on the machine, or their directory account otherwise),
+// admitted by the Agent's PAM service, and ends when the user may no longer
 // log in (SESSION_CLOSE_REASON_ACCESS_REVOKED).
 //
 // Feature "leaflow.fleet.host.v1" (leaflow.fleet.machine.v1 Feature):

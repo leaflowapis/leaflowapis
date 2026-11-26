@@ -31,18 +31,19 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/privilege/v1;privil
 // They may contain secrets: participants show them to the person and never
 // store or log them.
 
-// Decides on the platform the PAM authentications of directory accounts
-// (leaflow.fleet.directory.v1), so that sudo works where no participant can
-// approve, such as after an SSH login, and its owner can approve from any of
-// their devices. Served by the service on daemon connections
-// (leaflow.fleet.control.v1).
+// Decides on the platform the PAM authentications of managed accounts on the
+// machine (leaflow.fleet.directory.v1: directory accounts and bound local
+// accounts), so that sudo works where no participant can approve, such as
+// after an SSH login, and its owner can approve from any of their devices.
+// Served by the service on daemon connections (leaflow.fleet.control.v1).
 //
-// The daemon asks for every PAM authentication of a directory account, at the
-// same time as it shows the request to the participants of the session the
-// process belongs to, if any. The first decision counts: the daemon cancels
-// this call (CallCancel) once a participant decides, and stops showing the
-// request once this call answers. A decision of the platform is not signed; the
-// daemon trusts it as it trusts the service for the directory.
+// The daemon asks for every PAM authentication of a managed account that may
+// become root on the machine, at the same time as it shows the request to the
+// participants of the session the process belongs to, if any. The first
+// decision counts: the daemon cancels this call (CallCancel) once a
+// participant decides, and stops showing the request once this call answers. A
+// decision of the platform is not signed; the daemon trusts it as it trusts
+// the service for the directory.
 //
 // Unlike a participant, the platform keeps the request's claims with the
 // request and shows them to the account's owner: at most the first 4 KiB of

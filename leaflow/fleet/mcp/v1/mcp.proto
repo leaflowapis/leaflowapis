@@ -14,16 +14,16 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/mcp/v1;mcpv1";
 // Every call fails with the reasons of each method in a google.rpc.ErrorInfo
 // of the domain "fleet.leaflow.cloud".
 //
-// Accounts. Everything happens as the directory account of the platform user
-// who asked (leaflow.fleet.directory.v1), never as root and never as a local
-// account: the Agent reads and writes the account's configuration file as the
-// account, and starts the account's servers through the account and session
-// stacks of its PAM service, as it runs a command
-// (leaflow.fleet.command.v1). Whatever the account may not do, its servers
-// may not either, and they are refused whenever a login of the account would
-// be. When the account may no longer log in, such as when the directory
-// changes or the account expires, its servers stop at once, as its sessions
-// do.
+// Accounts. Everything happens as the account resolved for the platform user
+// who asked on the machine (leaflow.fleet.directory.v1: their bound local
+// account when one is configured on the machine, or their directory account
+// otherwise), never as root or an unbound local account: the Agent reads and
+// writes the account's configuration file as the account, and starts the
+// account's servers through the account and session stacks of its PAM
+// service, as it runs a command (leaflow.fleet.command.v1). Whatever the
+// account may not do, its servers may not either, and they are refused
+// whenever a Fleet login of the account would be. When the account may no
+// longer log in, its servers stop at once, as its sessions do.
 //
 // Configuration. Each account configures its servers in
 // ~/.local/share/leaflow/agent/mcp.json in its home directory, in the format
