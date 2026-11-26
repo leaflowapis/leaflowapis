@@ -12,8 +12,9 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/portforward/v1;port
 // fixed target on the other: from the participant's machine into the session's
 // (LOCAL_TO_REMOTE, as ssh -L) or the reverse (REMOTE_TO_LOCAL, as ssh -R). The
 // session binds and connects as the session's user, the participant as its own;
-// nothing binds or connects as root for them. Only native participants can
-// listen and connect; a browser cannot.
+// nothing binds or connects as root for them. Native participants may listen
+// and connect. A browser uses direct_dial when it cannot create a local
+// listener.
 //
 // Channel types:
 //   - "leaflow.fleet.portforward.v1", lane "metadata": opened by the
@@ -30,6 +31,10 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/portforward/v1;port
 //     The opener sends no data before the channel is accepted. Then both
 //     ends send TcpMessage. Closing the channel with CANCELLED resets the
 //     connection; nothing is retried or replayed.
+//   - "leaflow.fleet.portforward.v1.direct_dial", lane "bulk": one per
+//     outbound TCP or Unix Socket connection, opened by the participant. The
+//     participant sends DirectDialOpen; the session connects to the target and
+//     accepts the channel. Then both ends send StreamMessage.
 //   - "leaflow.fleet.portforward.v1.udp", lane "bulk": one per UDP
 //     association, opened by the listening side when a packet arrives from a
 //     new peer. The opener sends UdpOpen; the other side opens a socket to
@@ -39,10 +44,11 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/portforward/v1;port
 //     is full or before acceptance, is dropped whole. Closing the channel, or
 //     idling longer than the policy allows, ends the association.
 //
-// Targets come only from the forward the participant created and the policy
-// allows; addresses a connection came from are reported, never obeyed.
-// Addresses are IP address literals, never host names, so that policies hold
-// without DNS; an IPv4-mapped IPv6 address counts as IPv4. A forward and its
+// Targets come only from the forward the participant created or the direct
+// dial request, and the policy allows; addresses a connection came from are
+// reported, never obeyed. TCP addresses are IP literals, never host names, so
+// that policies hold without DNS; an IPv4-mapped IPv6 address counts as IPv4.
+// Unix Socket paths are absolute filesystem paths. A forward and its
 // connections end when it is deleted, when the connection or the participant's
 // authorization ends, and never come back by themselves. Needs
 // PortForwardPolicy; read-only participants forward nothing.
@@ -96,6 +102,16 @@ message ForwardSpec {
   Endpoint target_endpoint = 3;
   // TCP or UDP.
   ForwardProtocol protocol = 4;
+}
+
+// An address a session or participant can bind or connect.
+message SocketAddress {
+  oneof address {
+    // An IP literal and port.
+    Endpoint tcp = 1;
+    // An absolute filesystem Unix Socket path.
+    string unix_path = 2;
+  }
 }
 
 // A forward of this connection.
@@ -213,6 +229,22 @@ message TcpMessage {
 // The sender sends nothing more on the connection.
 message TcpShutdown {}
 
+// The first message of a direct_dial channel.
+message DirectDialOpen {
+  SocketAddress target = 1;
+}
+
+// A byte stream message for direct_dial.
+message StreamMessage {
+  oneof message {
+    // The next bytes of the stream. At most 64 KiB.
+    bytes data = 1;
+    StreamShutdown shutdown = 2;
+  }
+}
+
+message StreamShutdown {}
+
 // The first message of a UDP channel.
 message UdpOpen {
   // The forward whose listener received the first packet.
@@ -261,17 +293,25 @@ message PortForwardPolicy {
   // The longest a UDP association may stay idle, at most 5 minutes. Unset:
   // 60 seconds.
   google.protobuf.Duration udp_idle_timeout = 14;
+  // Allows direct_dial. Its target is checked against remote_targets and the
+  // Unix path fields of that policy.
+  bool direct_dial_allowed = 15;
 }
 
-// The addresses and ports a side may listen on or connect to. An endpoint is
-// allowed when its address lies in one of the prefixes and its port in one
-// of the ranges; empty lists allow nothing.
+// The addresses, ports, and Unix Socket paths a side may listen on or connect
+// to. An IP endpoint is allowed when its address lies in one of the prefixes
+// and its port in one of the ranges. Unix Socket paths are allowed by exact
+// path or prefix. Empty lists allow nothing.
 message EndpointPolicy {
   // IPv4 or IPv6 prefixes in CIDR notation (RFC 4632), such as "127.0.0.0/8";
   // "0.0.0.0/0" and "::/0" allow any address.
   repeated string prefixes = 1;
   // The ports.
   repeated PortRange ports = 2;
+  // Exact absolute Unix Socket paths.
+  repeated string unix_paths = 3;
+  // Absolute Unix Socket path prefixes.
+  repeated string unix_path_prefixes = 4;
 }
 
 // Ports from first to last, inclusive, each 1 to 65535.

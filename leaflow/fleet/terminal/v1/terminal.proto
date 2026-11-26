@@ -6,19 +6,20 @@ import "google/rpc/status.proto";
 
 option go_package = "github.com/leaflowapis/leaflow-go/fleet/terminal/v1;terminalv1";
 
-// The terminal of a session without a desktop: the login shell of the
-// session's user, with its groups, home directory and shell, never as another
+// The terminal of a Fleet session: the login shell of the session's user, with
+// its groups, home directory and shell, never as another
 // account (RFC 4254 §6.2 "pty-req" with §6.5 "shell"; participants cannot
 // choose the command). Such a session is a terminal session and has exactly
 // one terminal: its shell starts when the session opens, before any
 // participant attaches, and the session ends when the shell exits
 // (leaflow.fleet.host.v1 SESSION_CLOSE_REASON_LOGOUT). Participants cannot
 // start another terminal; a user who wants another opens another session. A
-// session with a desktop has no terminal of this package: its terminals are
-// programs on the desktop.
+// desktop session also exposes this terminal as a durable shell for browser
+// clients. It remains one shell per Fleet session.
 //
 // The shell starts at 80 columns and 24 rows, with TERM "xterm-256color" and
-// UTF-8 input. When it cannot start, the session ends as when it exits.
+// UTF-8 input. When it cannot start in a terminal-only session, the session
+// ends as when it exits. A desktop session continues without this shell.
 //
 // The terminal belongs to the session and outlives the connections that show
 // it: its output is one byte stream numbered from 0, of which the session keeps

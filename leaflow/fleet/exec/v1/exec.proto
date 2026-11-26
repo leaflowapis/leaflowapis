@@ -21,6 +21,14 @@ option go_package = "github.com/leaflowapis/leaflow-go/fleet/exec/v1;execv1";
 //
 // Neither the arguments nor the output enter logs. Needs ExecPolicy;
 // read-only participants open none.
+//
+// Channel type "leaflow.fleet.exec.v1.background", lane "bulk": uses the
+// same messages for a process owned by the Fleet session. The participant
+// starts with ExecStart and receives ExecStarted. Closing the channel detaches
+// without stopping the process; a later participant sends ExecAttach with the
+// returned token. It ends only with ExecStop, process exit, session end or
+// authorization revocation. This channel type is separate so an older Agent
+// cannot silently treat a background request as a foreground run.
 
 // A message from the participant.
 message ClientMessage {
@@ -33,6 +41,10 @@ message ClientMessage {
     ExecInput input = 2;
     // Closes the program's standard input (RFC 4254 §5.3 "eof").
     ExecInputEnd input_end = 3;
+    // Reattaches to a background process. Only on the background channel.
+    ExecAttach attach = 4;
+    // Stops a background process. Only on the background channel.
+    ExecStop stop = 5;
   }
 }
 
@@ -44,6 +56,8 @@ message ServerMessage {
     ExecOutput output = 1;
     // The program ended, or never ran. The last message.
     ExecExit exit = 2;
+    // Identifies a background process for later attachment.
+    ExecStarted started = 3;
   }
 }
 
@@ -55,8 +69,10 @@ message ExecStart {
   repeated string argv = 1;
   // The working directory. Empty: the user's home directory.
   string working_directory = 2;
-  // Kills the program when it runs longer, at most 10 minutes. Unset: 120
-  // seconds.
+  // The requested execution timeout, at most 10 minutes. Unset: 120 seconds
+  // for foreground execution. A background execution with
+  // ExecPolicy.unlimited_lifetime may leave this unset to run until it exits,
+  // is explicitly stopped, the session ends, or its authorization is revoked.
   google.protobuf.Duration timeout = 3;
   // The program reads standard input from ExecInput. Otherwise its
   // standard input is empty.
@@ -74,9 +90,23 @@ message ExecInput {
 // Closes the program's standard input.
 message ExecInputEnd {}
 
+// A background process handle. Both values are opaque to participants.
+message ExecStarted {
+  bytes execution_id = 1;
+  bytes attach_token = 2;
+}
+
+// Reattaches to a background process.
+message ExecAttach {
+  bytes execution_id = 1;
+  bytes attach_token = 2;
+}
+
+// Stops a background process owned by the session.
+message ExecStop {}
+
 // Bytes the program wrote (RFC 4254 §5.2 data and extended data). Each
-// stream keeps its own order. A run writes at most 16 MiB in total; then the
-// session kills it.
+// stream keeps its own order. The output limit comes from ExecPolicy.
 message ExecOutput {
   // Where it wrote them.
   OutputStream stream = 1;
@@ -114,5 +144,17 @@ message ExecExit {
 }
 
 // Allows a participant to run commands. Carried in the participant's signed
-// authorization.
-message ExecPolicy {}
+// authorization. Limits that are absent use the Agent's defaults. The
+// unlimited flags explicitly remove the corresponding application limit.
+message ExecPolicy {
+  uint32 max_processes = 1;
+  google.protobuf.Duration max_lifetime = 2;
+  uint64 max_output_bytes = 3;
+  bool unlimited_lifetime = 4;
+  bool unlimited_output = 5;
+  bool background_allowed = 6;
+  // Allows the Agent to start the process without PR_SET_NO_NEW_PRIVS. This
+  // is required when it must invoke sudo or another set-user-ID helper. Any
+  // elevation still goes through the machine's PAM and Fleet approval policy.
+  bool allow_privilege_escalation = 7;
+}
