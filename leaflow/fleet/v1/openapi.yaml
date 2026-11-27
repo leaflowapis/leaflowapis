@@ -255,6 +255,21 @@ info:
     `project_deletion_requested` when deletion of the project was requested, `machine_removed` when
     its machine was removed, or `key_revoked` when the key that signed its authorization was
     revoked. A participant whose creation failed is not announced.
+
+    ## Background executions
+
+    Background programs started inside a session (`leaflow.fleet.exec.v1.background`) live only in
+    the session process and its per-boot runtime directory, so Fleet keeps no database table for
+    them and rebooting the machine clears every running execution. Fleet forwards live listing,
+    inspection, output reading (by tail lines, line range, or byte range from the persisted output
+    file), and stopping over the session process's control connection. Because these calls traverse
+    Fleet, their arguments, metadata and output are visible to the platform (never logged).
+
+    While a background execution runs, the session process reports a heartbeat every 30 minutes
+    (`leaflow.fleet.exec.running`) and a terminal event when it finishes or is stopped
+    (`leaflow.fleet.exec.exited`, including `exit_code`, `signal_name`, `duration_seconds`,
+    `output_path`, full `argv`, `working_directory`, `user_id` and `username`), delivered through
+    EventBus to the session's user in the current project.
 servers:
   - url: https://fleet.leaflow.cloud
     description: Machines, accounts, commands, sessions and participants
@@ -267,6 +282,7 @@ tags:
   - name: Account
   - name: Group
   - name: Session
+  - name: Execution
   - name: Participant
   - name: Privilege
   - name: MCP
@@ -896,6 +912,183 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ToolActivityList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/machines/{machineId}/executions:
+    get:
+      summary: List background executions on a machine
+      description: |-
+        Queries all open sessions belonging to the caller on the machine in parallel and merges
+        their live background executions, newest first. Does not store process state in Fleet;
+        sessions that are temporarily unreachable or run an older Agent are reported in
+        `unavailable_sessions` rather than failing the whole response. Requires
+        `fleet:machines.login` on the machine.
+      operationId: list-machine-executions
+      tags:
+        - Execution
+      parameters:
+        - $ref: "#/components/parameters/MachineId"
+        - name: state
+          in: query
+          description: Filter by execution state
+          schema:
+            $ref: "#/components/schemas/ExecutionState"
+      responses:
+        "200":
+          description: Live background executions across open sessions on the machine
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/executions:
+    get:
+      summary: List background executions in a session
+      description: |-
+        Queries the session process live for its background executions, newest first. Returns an
+        empty list when the session is already closed (for example after the machine rebooted).
+      operationId: list-session-executions
+      tags:
+        - Execution
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - name: state
+          in: query
+          description: Filter by execution state
+          schema:
+            $ref: "#/components/schemas/ExecutionState"
+      responses:
+        "200":
+          description: Live background executions in the session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionList"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/executions/{executionId}:
+    get:
+      summary: Get a background execution
+      description: Queries the session process live for the current metadata and status of one background execution.
+      operationId: get-session-execution
+      tags:
+        - Execution
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ExecutionId"
+      responses:
+        "200":
+          description: Current execution metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionResource"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/executions/{executionId}/output:
+    get:
+      summary: Read output of a background execution
+      description: |-
+        Reads a bounded slice of a background execution's persisted output file from the session
+        process. Choose at most one addressing mode: `tail_lines`, `start_line` (with optional
+        `max_lines`), or `offset` (with optional `max_bytes`). When none is specified, returns the
+        last 200 lines of the combined output stream.
+      operationId: read-session-execution-output
+      tags:
+        - Execution
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ExecutionId"
+        - name: stream
+          in: query
+          description: Which output stream to read; defaults to `combined`
+          schema:
+            $ref: "#/components/schemas/ExecutionStream"
+        - name: tail_lines
+          in: query
+          description: Return at most the last N lines
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 5000
+        - name: start_line
+          in: query
+          description: 1-based starting line number
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: max_lines
+          in: query
+          description: Maximum lines to return from `start_line`
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 5000
+        - name: offset
+          in: query
+          description: 0-based byte offset into the output stream
+          schema:
+            type: integer
+            format: int64
+            minimum: 0
+        - name: max_bytes
+          in: query
+          description: Maximum bytes to return from `offset` (at most 262144)
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 262144
+      responses:
+        "200":
+          description: Output slice
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionOutput"
+        default:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/sessions/{sessionId}/executions/{executionId}:stop:
+    post:
+      summary: Stop a background execution
+      description: Stops a running background execution in the session. Stopping an already exited execution succeeds and returns its final metadata.
+      operationId: stop-session-execution
+      tags:
+        - Execution
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+        - $ref: "#/components/parameters/ExecutionId"
+      responses:
+        "200":
+          description: Updated execution metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExecutionResource"
         default:
           description: Error
           content:
@@ -2440,6 +2633,15 @@ components:
       schema:
         type: string
         format: uuid
+    ExecutionId:
+      name: executionId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: "^[A-Za-z0-9-]+$"
     SessionId:
       name: sessionId
       in: path
@@ -4337,4 +4539,203 @@ components:
           type: string
           format: byte
           maxLength: 262144
+      additionalProperties: false
+    ExecutionState:
+      type: string
+      enum:
+        - running
+        - exited
+    ExecutionStream:
+      type: string
+      enum:
+        - combined
+        - stdout
+        - stderr
+    ExecutionExit:
+      type: object
+      required:
+        - exit_code
+        - signal_name
+        - core_dumped
+        - reason
+      properties:
+        exit_code:
+          description: Exit status (0–255) when the process exited normally; null otherwise
+          type:
+            - integer
+            - "null"
+          format: int32
+          minimum: 0
+          maximum: 255
+        signal_name:
+          description: Signal name without "SIG" (for example `KILL`) when terminated by a signal; null otherwise
+          type:
+            - string
+            - "null"
+        core_dumped:
+          type: boolean
+        reason:
+          description: Machine-readable termination reason (`exited`, `signaled`, `stopped`, `timed_out`, `output_limit`, `start_failed`, or `failed`)
+          type: string
+      additionalProperties: false
+    ExecutionResource:
+      type: object
+      required:
+        - machine_id
+        - session_id
+        - execution_id
+        - user_id
+        - username
+        - argv
+        - working_directory
+        - state
+        - started_at
+        - finished_at
+        - duration_seconds
+        - exit
+        - output_path
+        - output_bytes
+        - output_lines
+        - output_truncated
+      properties:
+        machine_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        execution_id:
+          type: string
+        user_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        argv:
+          description: Full argument vector of the background command
+          type: array
+          items:
+            type: string
+        working_directory:
+          type: string
+        state:
+          $ref: "#/components/schemas/ExecutionState"
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        duration_seconds:
+          description: Elapsed runtime in seconds (while running) or total runtime in seconds (once exited)
+          type: number
+          format: double
+          minimum: 0
+        exit:
+          anyOf:
+            - $ref: "#/components/schemas/ExecutionExit"
+            - type: "null"
+        output_path:
+          description: Absolute path on the machine where the combined output file is persisted
+          type: string
+        output_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        output_lines:
+          type: integer
+          format: int64
+          minimum: 0
+        output_truncated:
+          type: boolean
+      additionalProperties: false
+    UnavailableExecutionSession:
+      type: object
+      required:
+        - session_id
+        - reason
+      properties:
+        session_id:
+          type: string
+        reason:
+          type: string
+      additionalProperties: false
+    ExecutionList:
+      type: object
+      required:
+        - items
+        - unavailable_sessions
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExecutionResource"
+        unavailable_sessions:
+          description: Open sessions that could not be queried during a machine-wide fan-out
+          type: array
+          items:
+            $ref: "#/components/schemas/UnavailableExecutionSession"
+      additionalProperties: false
+    ExecutionOutput:
+      type: object
+      required:
+        - machine_id
+        - session_id
+        - execution_id
+        - stream
+        - data
+        - start_line
+        - end_line
+        - total_lines
+        - start_offset
+        - next_offset
+        - total_bytes
+        - has_more
+        - output_truncated
+        - output_path
+      properties:
+        machine_id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+        execution_id:
+          type: string
+        stream:
+          $ref: "#/components/schemas/ExecutionStream"
+        data:
+          description: Output bytes in standard Base64 (RFC 4648)
+          type: string
+          format: byte
+        start_line:
+          type: integer
+          format: int64
+          minimum: 0
+        end_line:
+          type: integer
+          format: int64
+          minimum: 0
+        total_lines:
+          type: integer
+          format: int64
+          minimum: 0
+        start_offset:
+          type: integer
+          format: int64
+          minimum: 0
+        next_offset:
+          type: integer
+          format: int64
+          minimum: 0
+        total_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        has_more:
+          type: boolean
+        output_truncated:
+          type: boolean
+        output_path:
+          type: string
       additionalProperties: false
