@@ -28,6 +28,10 @@ info:
       (`POST /api/v1/logins/{secretId}:generateTotp`). `vault:secret.reveal` permits human members
       to read stored secret material through `:reveal` while `revealable` is `true`. Service
       accounts cannot call `:reveal`, and sealing (`revealable: false`) is irreversible.
+    - Secrets may carry optional `managed_by` and `managed_resource_id` fields identifying an
+      external tool or service that synchronizes the secret (for example, `terraform`).
+      Identifiers prefixed with `leaflow.` are reserved for platform-managed secrets, which are
+      read-only on this API.
 servers:
   - url: https://vault.leaflow.cloud
     description: Project secrets, certificates, and TOTP generation
@@ -68,6 +72,8 @@ paths:
           schema:
             $ref: "#/components/schemas/SecretType"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -128,6 +134,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Query"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -255,6 +263,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Query"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -365,6 +375,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Query"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -475,6 +487,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Query"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -585,6 +599,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Query"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -695,6 +711,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Query"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - name: expiring_before
           in: query
           required: false
@@ -812,6 +830,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Query"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -922,6 +942,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/Query"
         - $ref: "#/components/parameters/Tag"
+        - $ref: "#/components/parameters/Managed"
+        - $ref: "#/components/parameters/ManagedBy"
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
       responses:
@@ -1052,6 +1074,23 @@ components:
         type: string
         minLength: 1
         maxLength: 64
+    Managed:
+      name: managed
+      in: query
+      required: false
+      description: Filter by management state (`true` for secrets with `managed_by` set, `false` for unmanaged secrets).
+      schema:
+        type: boolean
+    ManagedBy:
+      name: managed_by
+      in: query
+      required: false
+      description: Filter by exact `managed_by` owner or service identifier.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+        pattern: "^[a-z0-9](?:[a-z0-9._-]{0,62}[a-z0-9])?$"
   responses:
     Error:
       description: Error
@@ -1128,6 +1167,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -1150,6 +1199,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -1228,6 +1279,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -1250,6 +1311,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -1300,6 +1363,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
           default: true
@@ -1350,6 +1425,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
         clear_expires_at:
@@ -1479,6 +1566,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -1498,6 +1595,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -1548,6 +1647,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
           default: true
@@ -1586,6 +1697,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
         clear_expires_at:
@@ -1673,6 +1796,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -1694,6 +1827,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -1744,6 +1879,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
           default: true
@@ -1783,6 +1930,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
         clear_expires_at:
@@ -1874,6 +2033,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -1893,6 +2062,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -1943,6 +2114,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
           default: true
@@ -1978,6 +2161,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
         clear_expires_at:
@@ -2062,6 +2257,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -2084,6 +2289,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -2134,6 +2341,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
           default: true
@@ -2171,6 +2390,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
         clear_expires_at:
@@ -2277,6 +2508,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -2305,6 +2546,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -2355,6 +2598,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
           default: true
@@ -2398,6 +2653,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
         clear_expires_at:
@@ -2489,6 +2756,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -2510,6 +2787,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -2560,6 +2839,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
           default: true
@@ -2606,6 +2897,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
         clear_expires_at:
@@ -2706,6 +3009,16 @@ components:
           format: date-time
         created_by:
           type: string
+        managed_by:
+          description: Optional owner or service identifier managing this secret; null when unmanaged.
+          type:
+            - string
+            - "null"
+        managed_resource_id:
+          description: Optional resource identifier within the managing service; null when unset.
+          type:
+            - string
+            - "null"
         created_at:
           type: string
           format: date-time
@@ -2725,6 +3038,8 @@ components:
         - expires_at
         - last_used_at
         - created_by
+        - managed_by
+        - managed_resource_id
         - created_at
         - updated_at
       additionalProperties: false
@@ -2775,6 +3090,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
           default: true
@@ -2808,6 +3135,18 @@ components:
             type: string
             minLength: 1
             maxLength: 64
+        managed_by:
+          description: Optional controller or service identifier managing this secret (for example, `terraform`). The `leaflow.` prefix is reserved for platform-managed secrets.
+          type:
+            - string
+            - "null"
+          maxLength: 64
+        managed_resource_id:
+          description: Optional resource identifier within the managing service. Requires `managed_by` to be set.
+          type:
+            - string
+            - "null"
+          maxLength: 128
         revealable:
           type: boolean
         clear_expires_at:
