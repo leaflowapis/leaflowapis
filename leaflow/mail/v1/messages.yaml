@@ -1,0 +1,419 @@
+paths:
+  /api/v1/messages:
+    get:
+      summary: List and search project messages
+      description: |-
+        Cursor-paged lightweight message summaries, newest first, without full body payloads.
+        Service account tokens are automatically restricted to their own mailbox. Call
+        `get-message` to read full plain-text or sanitized HTML bodies and attachments.
+      operationId: list-messages
+      tags:
+        - Message
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Cursor
+        - name: mailbox_id
+          in: query
+          required: false
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: service_account_id
+          in: query
+          required: false
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: thread_id
+          in: query
+          required: false
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: direction
+          in: query
+          required: false
+          description: Only messages in these directions; omit for every direction. Comma-separated, for example `direction=inbound,outbound`.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 2
+            uniqueItems: true
+            items:
+              $ref: ./openapi.yaml#/components/schemas/MessageDirection
+        - name: status
+          in: query
+          required: false
+          description: Only messages in these statuses; omit for every status. Comma-separated, for example `status=accepted,delivered,bounced`.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 8
+            uniqueItems: true
+            items:
+              $ref: ./openapi.yaml#/components/schemas/MessageStatus
+        - name: from_address
+          in: query
+          required: false
+          description: Case-insensitive filter matching the sender email address.
+          explode: false
+          schema:
+            type: string
+            maxLength: 320
+        - name: to_address
+          in: query
+          required: false
+          description: Case-insensitive filter matching any `to` or `cc` recipient email address.
+          explode: false
+          schema:
+            type: string
+            maxLength: 320
+        - name: q
+          in: query
+          required: false
+          description: Keyword search across subject, snippet, plain-text body, and addresses.
+          explode: false
+          schema:
+            type: string
+            maxLength: 500
+        - name: unread_only
+          in: query
+          required: false
+          explode: false
+          schema:
+            type: boolean
+        - name: flagged_only
+          in: query
+          required: false
+          explode: false
+          schema:
+            type: boolean
+        - name: has_attachments
+          in: query
+          required: false
+          explode: false
+          schema:
+            type: boolean
+        - name: from
+          in: query
+          required: false
+          description: Inclusive start timestamp (RFC 3339).
+          explode: false
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Exclusive end timestamp (RFC 3339).
+          explode: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/MessageSummaryListResponseBody
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    post:
+      summary: Send an outbound email from a project mailbox
+      description: |-
+        Submits an outbound email from a project mailbox and bills the project's active mail
+        subscription by the number of accepted recipients (`to` + `cc` + `bcc`, at most 50).
+
+        - **Validation, suppression, and rate limits**: Messages rejected for invalid arguments
+          (400), suppressed recipients (422 `MAIL_RECIPIENT_SUPPRESSED`, non-retryable), or rate /
+          daily-quota limits (429 `MAIL_RATE_LIMITED` with `retry_delay`, retryable) are not billed.
+        - **Accepted sends and bounces**: Once accepted (201 with `status: accepted`), delivery
+          proceeds asynchronously and per-recipient outcomes appear in `deliveries`; subsequent
+          hard bounces remain billed.
+        - **Sender derivation**: `From` is derived strictly from the sending mailbox's allocated
+          address. A service account token may omit `mailbox_id` to send from its own mailbox.
+        - **Plain-text derivation**: If only `html` is provided, a plain-text alternative is
+          automatically derived for multipart delivery.
+      operationId: send-message
+      tags:
+        - Message
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/IdempotencyKeyHeader
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequestBody"
+      responses:
+        "201":
+          description: Accepted for outbound delivery.
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/MessageResource
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/messages:batchUpdate:
+    post:
+      summary: Batch update read or flagged state on project messages
+      description: |-
+        Updates `read` and/or `flagged` on up to 200 messages belonging to the authenticated
+        project in a single call. Service account tokens may only update messages in their own
+        mailbox.
+      operationId: batch-update-messages
+      tags:
+        - Message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./openapi.yaml#/components/schemas/BatchUpdateMessagesRequestBody
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/BatchUpdateMessagesResponseBody
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/messages/{messageId}:
+    get:
+      summary: Get a project message
+      description: |-
+        Returns full message details including plain-text body, server-sanitized HTML body (unless
+        `include_html=false`), attachments, and per-recipient delivery statuses.
+      operationId: get-message
+      tags:
+        - Message
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
+        - $ref: ./openapi.yaml#/components/parameters/IncludeHtmlQuery
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/MessageResource
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    patch:
+      summary: Update read or flagged state of a project message
+      operationId: update-message
+      tags:
+        - Message
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: ./openapi.yaml#/components/schemas/UpdateMessageRequestBody
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/MessageResource
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    delete:
+      summary: Delete a project message from the mailbox
+      description: |-
+        Removes the message body, raw archive, and attachments from the tenant mailbox view.
+        Outbound delivery and billing metadata are retained for auditing.
+      operationId: delete-message
+      tags:
+        - Message
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
+      responses:
+        "204":
+          description: No Content
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/messages/{messageId}:reply:
+    post:
+      summary: Reply to a project message
+      description: |-
+        Sends a billed outbound reply from the original message's mailbox while automatically
+        preserving `In-Reply-To`, `References`, and `Re:` subject folding.
+
+        Defaults to replying to the original message's `reply_to` (or `from` if absent). When
+        `reply_all` is true, deduplicated recipients from the original `to` and `cc` (excluding the
+        sending mailbox's own address) are added to `cc`. Additional `cc` and `bcc` recipients may
+        also be specified; total recipients must not exceed 50.
+      operationId: reply-message
+      tags:
+        - Message
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
+        - $ref: ./openapi.yaml#/components/parameters/IdempotencyKeyHeader
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReplyMessageRequestBody"
+      responses:
+        "201":
+          description: Accepted for outbound delivery.
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/MessageResource
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/messages/{messageId}/headers:
+    get:
+      summary: Get raw RFC 5322 headers of a project message
+      operationId: get-message-headers
+      tags:
+        - Message
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/MessageHeadersResource
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/messages/{messageId}/raw:
+    get:
+      summary: Download raw RFC 5322 `.eml` source of a project message
+      operationId: download-message-raw
+      tags:
+        - Message
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
+      responses:
+        "200":
+          description: Raw RFC 5322 message stream.
+          headers:
+            Content-Disposition:
+              description: Always `attachment` carrying `<messageId>.eml`.
+              schema:
+                type: string
+          content:
+            message/rfc822:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    SendMessageRequestBody:
+      type: object
+      required:
+        - to
+        - subject
+      additionalProperties: false
+      properties:
+        mailbox_id:
+          description: Sending mailbox ID. Optional when authenticated as a service account (defaults to its own allocated mailbox and must match it); required when a human member sends on behalf of a mailbox.
+          type: string
+          format: uuid
+        to:
+          description: Primary recipients. Combined count across `to`, `cc`, and `bcc` must not exceed 50.
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: ./openapi.yaml#/components/schemas/EmailAddress
+        cc:
+          type: array
+          maxItems: 50
+          items:
+            $ref: ./openapi.yaml#/components/schemas/EmailAddress
+        bcc:
+          type: array
+          maxItems: 50
+          items:
+            $ref: ./openapi.yaml#/components/schemas/EmailAddress
+        reply_to:
+          $ref: ./openapi.yaml#/components/schemas/EmailAddress
+        subject:
+          type: string
+          minLength: 1
+          maxLength: 998
+        text:
+          description: Plain-text body. At least one of `text` or `html` is required.
+          type: string
+        html:
+          description: HTML body. At least one of `text` or `html` is required; plain text is auto-derived when omitted.
+          type: string
+        in_reply_to_message_id:
+          description: Existing message ID in the same mailbox to reply to; automatically sets threading headers and attaches to the same thread.
+          type: string
+          format: uuid
+        attachment_ids:
+          description: Pre-uploaded attachment IDs from `upload-attachment`. Combined assembled message size must not exceed 25 MiB.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
+        headers:
+          description: Optional custom `X-*` headers (combined size at most 16 KiB). Standard envelope and authentication headers are rejected.
+          type: object
+          additionalProperties:
+            type: string
+    ReplyMessageRequestBody:
+      type: object
+      additionalProperties: false
+      properties:
+        reply_all:
+          description: When true, includes original `to` and `cc` addresses in `cc` (deduplicated and excluding the sending mailbox's own address). Defaults to false.
+          type: boolean
+          default: false
+        cc:
+          description: Optional additional CC recipients merged with `reply_all` recipients.
+          type: array
+          maxItems: 50
+          items:
+            $ref: ./openapi.yaml#/components/schemas/EmailAddress
+        bcc:
+          type: array
+          maxItems: 50
+          items:
+            $ref: ./openapi.yaml#/components/schemas/EmailAddress
+        subject:
+          description: "Optional subject override; defaults to `Re: <subject>` with duplicate prefixes collapsed."
+          type: string
+          minLength: 1
+          maxLength: 998
+        text:
+          description: Plain-text reply body. At least one of `text` or `html` is required.
+          type: string
+        html:
+          description: HTML reply body. At least one of `text` or `html` is required; plain text is auto-derived when omitted.
+          type: string
+        attachment_ids:
+          description: Pre-uploaded attachment IDs from `upload-attachment`.
+          type: array
+          maxItems: 20
+          items:
+            type: string
+            format: uuid
+        headers:
+          description: Optional custom `X-*` headers (combined size at most 16 KiB).
+          type: object
+          additionalProperties:
+            type: string

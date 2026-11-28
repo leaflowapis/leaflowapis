@@ -1,0 +1,97 @@
+paths:
+  /api/v1/threads:
+    get:
+      summary: List project email threads
+      description: |-
+        Cursor-paged conversation threads ordered by most recent message first. Service account
+        tokens are automatically restricted to their own mailbox.
+      operationId: list-threads
+      tags:
+        - Thread
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Cursor
+        - name: mailbox_id
+          in: query
+          required: false
+          description: Restricts results to threads belonging to the specified mailbox.
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: service_account_id
+          in: query
+          required: false
+          description: Restricts results to threads belonging to the specified service account's mailbox.
+          explode: false
+          schema:
+            type: string
+            format: uuid
+        - name: unread_only
+          in: query
+          required: false
+          description: When true, returns only threads with at least one unread message.
+          explode: false
+          schema:
+            type: boolean
+        - name: flagged_only
+          in: query
+          required: false
+          description: When true, returns only threads with at least one flagged message.
+          explode: false
+          schema:
+            type: boolean
+        - name: q
+          in: query
+          required: false
+          description: Case-insensitive keyword search across subject and participant addresses.
+          explode: false
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/ThreadListResponseBody
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/threads/{threadId}:
+    get:
+      summary: Get a project email thread
+      operationId: get-thread
+      tags:
+        - Thread
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/ThreadIdPath
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/ThreadResource
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/threads/{threadId}/messages:
+    get:
+      summary: List messages in a project thread
+      description: Cursor-paged lightweight message summaries belonging to the thread, oldest first. Fetch full body content via `get-message`.
+      operationId: list-thread-messages
+      tags:
+        - Thread
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/ThreadIdPath
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Cursor
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/MessageSummaryListResponseBody
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error

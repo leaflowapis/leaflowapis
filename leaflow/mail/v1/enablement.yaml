@@ -1,0 +1,158 @@
+paths:
+  /api/v1/enablement:
+    get:
+      summary: Get project mail service enablement
+      description: |-
+        Returns the mail service enablement of the authenticated project. Once `status` is `active`,
+        default email addresses are provisioned for active service accounts in the project, inbound
+        delivery is accepted at no charge, and outbound sends are billed per accepted recipient
+        under `subscription_id` (unless `billing_suspended` is true).
+      operationId: get-enablement
+      tags:
+        - Enable
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnablementResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    post:
+      summary: Enable project mail service
+      description: |-
+        Enables the mail service for the authenticated project. Enabling carries no upfront fee;
+        inbound mail is free and outbound mail is billed per accepted recipient with no free
+        outbound allowance. Returns the enablement as `pending` together with its Billing Checkout
+        Session; once the order is accepted, `status` transitions to `active` and default email
+        addresses are allocated for project service accounts.
+
+        Refused with 409 `MAIL_SERVICE_ALREADY_ENABLED` while an enablement is `pending` or
+        `active`. Billing refusals are returned with Billing's error code, such as
+        `BILLING_PRICE_UNAVAILABLE` when the service has no price in the project billing account's
+        currency.
+      operationId: create-enablement
+      tags:
+        - Enable
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateEnablementRequestBody"
+      responses:
+        "202":
+          description: The enablement and its Checkout Session were created; the enablement is not active yet.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateEnablementResponseBody"
+        "409":
+          $ref: ./openapi.yaml#/components/responses/Conflict
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    EnablementResource:
+      description: The mail service enablement of a project.
+      type: object
+      properties:
+        status:
+          description: "`inactive` has never been enabled or its subscription has ended; `pending` awaits completion of checkout and acceptance of its order; `active` provisions mailboxes and allows billed outbound sending; `failed` means enabling failed, as `failure_reason` states."
+          type: string
+          enum:
+            - inactive
+            - pending
+            - active
+            - failed
+        billing_suspended:
+          description: True when outbound sending is currently suspended due to billing arrears on the underlying subscription. Inbound mail continues unaffected.
+          type: boolean
+        failure_reason:
+          description: Why the enablement failed; null unless `status` is `failed`.
+          type:
+            - string
+            - "null"
+          enum:
+            - checkout_expired
+            - order_declined
+            - order_canceled
+            - order_expired
+            - null
+        checkout_session_id:
+          description: The Checkout Session of the latest enablement; null before any enablement.
+          type:
+            - string
+            - "null"
+          format: uuid
+        order_id:
+          description: The order that enabled the service; null before checkout completes.
+          type:
+            - string
+            - "null"
+          format: uuid
+        plan_id:
+          description: The Billing plan the mail service is sold under; null where the service is not sold. Preview pricing with Billing's `preview-checkout-session` using `recurring` price type, `metered` usage type, and quantity 1.
+          type:
+            - string
+            - "null"
+          format: uuid
+        subscription_id:
+          description: The Billing subscription under which outbound recipients are billed; null until checkout completes.
+          type:
+            - string
+            - "null"
+          format: uuid
+        activated_at:
+          description: When the enablement became active; null until then.
+          type:
+            - string
+            - "null"
+          format: date-time
+        ended_at:
+          description: When the subscription ended; null unless it has ended.
+          type:
+            - string
+            - "null"
+          format: date-time
+      required:
+        - status
+        - billing_suspended
+        - failure_reason
+        - checkout_session_id
+        - order_id
+        - plan_id
+        - subscription_id
+        - activated_at
+        - ended_at
+      additionalProperties: false
+    CreateEnablementRequestBody:
+      type: object
+      properties:
+        checkout:
+          $ref: "#/components/schemas/CheckoutOptions"
+      additionalProperties: false
+    CreateEnablementResponseBody:
+      description: The enablement, `pending` until its order is accepted, together with its Checkout Session.
+      type: object
+      properties:
+        enablement:
+          $ref: "#/components/schemas/EnablementResource"
+        checkout_session_id:
+          description: The Billing Checkout Session of this enablement.
+          type: string
+          format: uuid
+        order_id:
+          description: The order created when checkout completes; null until then.
+          type:
+            - string
+            - "null"
+          format: uuid
+      required:
+        - enablement
+        - checkout_session_id
+        - order_id
+      additionalProperties: false
+    CheckoutOptions:
+      $ref: ../../billing/type/v1/checkout.yaml#/components/schemas/CheckoutOptions

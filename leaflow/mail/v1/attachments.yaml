@@ -1,0 +1,60 @@
+paths:
+  /api/v1/attachments:
+    post:
+      summary: Upload a project email attachment
+      description: |-
+        The body is the raw file bytes (`application/octet-stream`), one file per request. The
+        content type is determined by inspecting the bytes, not from request headers.
+
+        Pass the returned `id` in `attachment_ids` when calling `send-message`. An unreferenced
+        attachment is removed automatically after 24 hours.
+      operationId: upload-attachment
+      tags:
+        - Attachment
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/FilenameQuery
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              contentMediaType: application/octet-stream
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: ./openapi.yaml#/components/schemas/AttachmentResource
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/attachments/{attachmentId}/content:
+    get:
+      summary: Download a project email attachment
+      description: |-
+        Streams the attachment bytes for an inbound or outbound message in the authenticated
+        project. `Content-Disposition` is `attachment` unless `inline=true` is requested and the
+        detected content type can be rendered safely.
+      operationId: download-attachment
+      tags:
+        - Attachment
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/AttachmentIdPath
+        - $ref: ./openapi.yaml#/components/parameters/InlineQuery
+      responses:
+        "200":
+          description: OK
+          headers:
+            Content-Disposition:
+              description: "`inline` when requested and safe for the detected content type, `attachment` otherwise."
+              schema:
+                type: string
+          content:
+            "*/*":
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error

@@ -1,0 +1,748 @@
+openapi: 3.2.1
+info:
+  title: Leaflow Mail API
+  version: 1.0.0
+  description: |-
+    Project service-account mailboxes, personal account mailboxes, threaded email retrieval,
+    attachment storage, outbound sending, service enablement, and delivery tracking.
+
+    ## Authentication
+
+    - **Project endpoints (`/api/v1/*`, excluding `/api/v1/account/*`)** require an IAM scoped token
+      (`bearerAuth`). Neither the path nor headers carry a `project_id`; the current project is
+      asserted by the token.
+    - **Account endpoints (`/api/v1/account/*`)** require an account access token
+      (`accessTokenAuth`) issued at `auth.leaflow.net` and operate on the caller's personal
+      mailbox outside any project. Application tokens are rejected with 403
+      `APPLICATION_TOKEN_NOT_ACCEPTED`.
+
+    ## Conventions
+
+    - **Service enablement and mailbox allocation**: A project enables the mail service once through
+      `create-enablement`. Enabling the service carries no fixed fee and provisions default email
+      addresses for active service accounts in the project; `list-mailboxes` reports each mailbox's
+      address and allocation state. Inbound delivery is free. Outbound sending from project
+      mailboxes is billed per accepted recipient (sum of `to`, `cc`, and `bcc`) with no free
+      outbound allowance.
+    - **Lightweight lists vs. full message detail**: List endpoints (`list-messages`,
+      `list-thread-messages`, `list-account-messages`, `list-account-thread-messages`) return
+      lightweight `MessageSummaryResource` rows without body payloads. Retrieve full text,
+      sanitized HTML, attachments, and per-recipient deliveries from `get-message` or
+      `get-account-message`, raw RFC 5322 headers from `/headers`, and original `.eml` bytes from
+      `/raw`.
+    - **Sanitized HTML**: The `html` field returned on `MessageResource` is server-sanitized for
+      safe rendering. Callers that only need plain text may pass `include_html=false`.
+    - **Sender identity**: The `From` address is always derived from the sending mailbox's
+      allocated address. Callers cannot specify an arbitrary sender address.
+    - **Service account isolation**: A service account token may only read, update, or send from
+      its own allocated mailbox; attempts to act on another mailbox in the same project fail with
+      403 `MAIL_SERVICE_ACCOUNT_SCOPE_FORBIDDEN`.
+    - **Personal account replies**: Personal account mailboxes accept free inbound delivery
+      (with optional forwarding to the account's verified email address) and free replies to
+      existing inbound threads via `reply-account-thread`. Arbitrary outbound sending to new
+      external recipients is not supported on personal mailboxes.
+    - **Idempotency and retries**: Supply `Idempotency-Key` when sending or replying so retries
+      after transient 429 or 503 responses (carrying `retry_delay`) do not send or bill duplicates.
+    - **Attachments are uploaded before reference**: Upload bytes to `POST /api/v1/attachments`
+      (or `POST /api/v1/account/attachments`), then pass the returned IDs in `attachment_ids`.
+      Unreferenced uploads expire automatically.
+servers:
+  - url: https://mail.leaflow.cloud
+    description: Project and personal account mail API
+security:
+  - bearerAuth: []
+tags:
+  - name: Enable
+    description: Project mail service enablement.
+  - name: Mailbox
+    description: Project mailbox allocation status and outbound controls.
+  - name: Thread
+    description: Project email threads.
+  - name: Message
+    description: Project inbound retrieval, search, batch updates, and billed outbound sending.
+  - name: Attachment
+    description: Project email attachment upload and download.
+  - name: Usage
+    description: Project outbound delivery statistics and suppression visibility.
+  - name: Account
+    description: Personal account mailbox, forwarding preferences, inbox, and thread replies.
+paths:
+  /api/v1/enablement:
+    $ref: ./enablement.yaml#/paths/~1api~1v1~1enablement
+  /api/v1/mailboxes:
+    $ref: ./mailboxes.yaml#/paths/~1api~1v1~1mailboxes
+  /api/v1/mailboxes/{mailboxId}:
+    $ref: ./mailboxes.yaml#/paths/~1api~1v1~1mailboxes~1{mailboxId}
+  /api/v1/mailboxes/{mailboxId}:pauseOutbound:
+    $ref: ./mailboxes.yaml#/paths/~1api~1v1~1mailboxes~1{mailboxId}:pauseOutbound
+  /api/v1/mailboxes/{mailboxId}:resumeOutbound:
+    $ref: ./mailboxes.yaml#/paths/~1api~1v1~1mailboxes~1{mailboxId}:resumeOutbound
+  /api/v1/threads:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads
+  /api/v1/threads/{threadId}:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{threadId}
+  /api/v1/threads/{threadId}/messages:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{threadId}~1messages
+  /api/v1/messages:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1messages
+  /api/v1/messages:batchUpdate:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1messages:batchUpdate
+  /api/v1/messages/{messageId}:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1messages~1{messageId}
+  /api/v1/messages/{messageId}:reply:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1messages~1{messageId}:reply
+  /api/v1/messages/{messageId}/headers:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1messages~1{messageId}~1headers
+  /api/v1/messages/{messageId}/raw:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1messages~1{messageId}~1raw
+  /api/v1/attachments:
+    $ref: ./attachments.yaml#/paths/~1api~1v1~1attachments
+  /api/v1/attachments/{attachmentId}/content:
+    $ref: ./attachments.yaml#/paths/~1api~1v1~1attachments~1{attachmentId}~1content
+  /api/v1/usage:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1usage
+  /api/v1/suppressions:
+    $ref: ./usage.yaml#/paths/~1api~1v1~1suppressions
+  /api/v1/account/mailbox:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1mailbox
+  /api/v1/account/mailbox:activate:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1mailbox:activate
+  /api/v1/account/threads:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1threads
+  /api/v1/account/threads/{threadId}:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1threads~1{threadId}
+  /api/v1/account/threads/{threadId}/messages:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1threads~1{threadId}~1messages
+  /api/v1/account/threads/{threadId}:reply:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1threads~1{threadId}:reply
+  /api/v1/account/messages:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages
+  /api/v1/account/messages:batchUpdate:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages:batchUpdate
+  /api/v1/account/messages/{messageId}:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages~1{messageId}
+  /api/v1/account/messages/{messageId}/headers:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages~1{messageId}~1headers
+  /api/v1/account/messages/{messageId}/raw:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages~1{messageId}~1raw
+  /api/v1/account/attachments:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1attachments
+  /api/v1/account/attachments/{attachmentId}/content:
+    $ref: ./account.yaml#/paths/~1api~1v1~1account~1attachments~1{attachmentId}~1content
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+    accessTokenAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/AccessToken
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Conflict:
+      description: The request conflicts with the current state of the resource.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  parameters:
+    MailboxIdPath:
+      name: mailboxId
+      in: path
+      required: true
+      description: Mailbox identifier.
+      schema:
+        type: string
+        format: uuid
+    ThreadIdPath:
+      name: threadId
+      in: path
+      required: true
+      description: Thread identifier.
+      schema:
+        type: string
+        format: uuid
+    MessageIdPath:
+      name: messageId
+      in: path
+      required: true
+      description: Message identifier.
+      schema:
+        type: string
+        format: uuid
+    AttachmentIdPath:
+      name: attachmentId
+      in: path
+      required: true
+      description: Attachment identifier.
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKeyHeader:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: |-
+        Optional caller-generated idempotency key (1 to 255 visible ASCII characters), retained
+        for 24 hours. Reusing the same key with an identical payload returns the original response;
+        reusing it with a different payload fails with 409 `MAIL_IDEMPOTENCY_KEY_REUSED`.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    IncludeHtmlQuery:
+      name: include_html
+      in: query
+      required: false
+      description: Include the server-sanitized HTML body in the response. Defaults to true; pass false to return plain text only.
+      explode: false
+      schema:
+        type: boolean
+        default: true
+    FilenameQuery:
+      name: filename
+      in: query
+      required: true
+      description: Original file name to record and serve when downloaded.
+      explode: false
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    InlineQuery:
+      name: inline
+      in: query
+      required: false
+      description: Render in the browser instead of downloading when the detected content type can be rendered safely.
+      explode: false
+      schema:
+        type: boolean
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    OffsetPagination:
+      $ref: ../../type/v1/pagination.yaml#/components/schemas/OffsetPagination
+    CursorPagination:
+      $ref: ../../type/v1/pagination.yaml#/components/schemas/CursorPagination
+    EmailAddress:
+      type: object
+      required:
+        - address
+      additionalProperties: false
+      properties:
+        address:
+          type: string
+          format: email
+          maxLength: 320
+        name:
+          type: string
+          maxLength: 255
+    AllocationStatus:
+      type: string
+      description: Current address allocation state for a mailbox.
+      enum:
+        - unallocated
+        - pending
+        - allocated
+        - failed
+        - released
+    OutboundStatus:
+      type: string
+      description: Current outbound sending state for a mailbox.
+      enum:
+        - disabled
+        - active
+        - paused_by_project
+        - paused_for_reputation
+        - suspended_by_operator
+    PauseReason:
+      type: string
+      enum:
+        - manual
+        - complaint
+        - bounce_rate
+        - operator
+    MessageDirection:
+      type: string
+      enum:
+        - inbound
+        - outbound
+    MessageStatus:
+      type: string
+      enum:
+        - received
+        - accepted
+        - deferred
+        - delivered
+        - partially_delivered
+        - bounced
+        - failed
+        - rejected
+    DeliveryStatus:
+      type: string
+      enum:
+        - accepted
+        - deferred
+        - delivered
+        - bounced
+        - failed
+        - rejected
+        - complained
+    AttachmentDisposition:
+      type: string
+      description: "`attachment` for regular downloadable files; `inline` for embedded MIME parts such as `cid:` images."
+      enum:
+        - attachment
+        - inline
+    AttachmentResource:
+      type: object
+      required:
+        - id
+        - filename
+        - content_type
+        - size_bytes
+        - sha256
+        - disposition
+        - content_id
+        - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        filename:
+          type: string
+        content_type:
+          description: Content type determined by inspecting the uploaded or received bytes.
+          type: string
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        sha256:
+          description: Lowercase hex-encoded SHA-256 digest of the file bytes.
+          type: string
+        disposition:
+          $ref: "#/components/schemas/AttachmentDisposition"
+        content_id:
+          description: MIME Content-ID without surrounding angle brackets when referenced inline via `cid:`; null otherwise.
+          type:
+            - string
+            - "null"
+        created_at:
+          type: string
+          format: date-time
+    MessageHeader:
+      type: object
+      required:
+        - name
+        - value
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+    MessageHeadersResource:
+      description: Ordered RFC 5322 headers preserved from the raw message, retaining duplicate header names such as `Received`.
+      type: object
+      required:
+        - message_id
+        - headers
+      additionalProperties: false
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        headers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageHeader"
+    MessageDelivery:
+      type: object
+      required:
+        - recipient
+        - status
+        - bounce_type
+        - bounce_classification
+        - smtp_code
+        - updated_at
+      additionalProperties: false
+      properties:
+        recipient:
+          type: string
+          format: email
+        status:
+          $ref: "#/components/schemas/DeliveryStatus"
+        bounce_type:
+          type:
+            - string
+            - "null"
+          enum:
+            - hard
+            - soft
+            - null
+        bounce_classification:
+          type:
+            - string
+            - "null"
+        smtp_code:
+          type:
+            - string
+            - "null"
+        updated_at:
+          type: string
+          format: date-time
+    MessageSummaryResource:
+      description: Lightweight message row returned by list endpoints without full body payloads.
+      type: object
+      required:
+        - id
+        - mailbox_id
+        - thread_id
+        - direction
+        - status
+        - from
+        - sender
+        - to
+        - subject
+        - snippet
+        - has_attachments
+        - size_bytes
+        - billed_recipients
+        - read_at
+        - flagged
+        - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        mailbox_id:
+          type: string
+          format: uuid
+        thread_id:
+          type: string
+          format: uuid
+        direction:
+          $ref: "#/components/schemas/MessageDirection"
+        status:
+          $ref: "#/components/schemas/MessageStatus"
+        from:
+          $ref: "#/components/schemas/EmailAddress"
+        sender:
+          description: Present when the RFC 5322 `Sender` header differs from `From` (on-behalf-of sender); null otherwise.
+          anyOf:
+            - $ref: "#/components/schemas/EmailAddress"
+            - type: "null"
+        to:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAddress"
+        subject:
+          type: string
+        snippet:
+          description: Short plain-text preview excerpt of the message body.
+          type: string
+        has_attachments:
+          description: True when the message contains at least one non-inline attachment.
+          type: boolean
+        size_bytes:
+          description: Total encoded RFC 5322 message size in bytes.
+          type: integer
+          format: int64
+          minimum: 0
+        billed_recipients:
+          description: Number of billable recipients accepted for outbound delivery. Zero for inbound messages and free personal replies.
+          type: integer
+          format: int64
+          minimum: 0
+        read_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        flagged:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    MessageSummaryListResponseBody:
+      type: object
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageSummaryResource"
+        pagination:
+          $ref: "#/components/schemas/CursorPagination"
+    MessageResource:
+      type: object
+      required:
+        - id
+        - mailbox_id
+        - thread_id
+        - direction
+        - status
+        - rfc_message_id
+        - in_reply_to
+        - references
+        - from
+        - sender
+        - to
+        - cc
+        - bcc
+        - reply_to
+        - subject
+        - snippet
+        - text
+        - html
+        - has_attachments
+        - size_bytes
+        - attachments
+        - deliveries
+        - billed_recipients
+        - read_at
+        - flagged
+        - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        mailbox_id:
+          type: string
+          format: uuid
+        thread_id:
+          type: string
+          format: uuid
+        direction:
+          $ref: "#/components/schemas/MessageDirection"
+        status:
+          $ref: "#/components/schemas/MessageStatus"
+        rfc_message_id:
+          type: string
+        in_reply_to:
+          type:
+            - string
+            - "null"
+        references:
+          description: Ordered list of RFC 5322 `References` Message-IDs for thread reconstruction.
+          type: array
+          items:
+            type: string
+        from:
+          $ref: "#/components/schemas/EmailAddress"
+        sender:
+          description: Present when the RFC 5322 `Sender` header differs from `From` (on-behalf-of sender); null otherwise.
+          anyOf:
+            - $ref: "#/components/schemas/EmailAddress"
+            - type: "null"
+        to:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAddress"
+        cc:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAddress"
+        bcc:
+          description: Present on outbound messages only; empty array on inbound messages.
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAddress"
+        reply_to:
+          anyOf:
+            - $ref: "#/components/schemas/EmailAddress"
+            - type: "null"
+        subject:
+          type: string
+        snippet:
+          description: Short plain-text preview excerpt of the message body.
+          type: string
+        text:
+          type:
+            - string
+            - "null"
+        html:
+          description: Server-sanitized HTML body safe for display; null when the message has no HTML part or `include_html=false`.
+          type:
+            - string
+            - "null"
+        has_attachments:
+          type: boolean
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        attachments:
+          type: array
+          items:
+            $ref: "#/components/schemas/AttachmentResource"
+        deliveries:
+          description: Per-recipient delivery states for outbound messages; empty array on inbound messages.
+          type: array
+          items:
+            $ref: "#/components/schemas/MessageDelivery"
+        billed_recipients:
+          description: Number of billable recipients accepted for outbound delivery. Zero for inbound messages and free personal replies.
+          type: integer
+          format: int64
+          minimum: 0
+        read_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        flagged:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+    UpdateMessageRequestBody:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        read:
+          description: Set to true to mark the message as read, or false to mark it as unread.
+          type: boolean
+        flagged:
+          description: Set to true to star/flag the message, or false to unflag it.
+          type: boolean
+    BatchUpdateMessagesRequestBody:
+      type: object
+      required:
+        - message_ids
+      additionalProperties: false
+      properties:
+        message_ids:
+          description: Message IDs to update (1 to 200). At least one of `read` or `flagged` must be supplied.
+          type: array
+          minItems: 1
+          maxItems: 200
+          items:
+            type: string
+            format: uuid
+        read:
+          type: boolean
+        flagged:
+          type: boolean
+    BatchUpdateMessagesResponseBody:
+      type: object
+      required:
+        - updated_count
+      additionalProperties: false
+      properties:
+        updated_count:
+          type: integer
+          format: int64
+          minimum: 0
+    ThreadResource:
+      type: object
+      required:
+        - id
+        - mailbox_id
+        - subject
+        - snippet
+        - participants
+        - message_count
+        - unread_count
+        - flagged
+        - has_attachments
+        - replyable
+        - last_message_at
+        - created_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        mailbox_id:
+          type: string
+          format: uuid
+        subject:
+          type: string
+        snippet:
+          type: string
+        participants:
+          type: array
+          items:
+            $ref: "#/components/schemas/EmailAddress"
+        message_count:
+          type: integer
+          format: int64
+          minimum: 0
+        unread_count:
+          type: integer
+          format: int64
+          minimum: 0
+        flagged:
+          description: True when at least one message in the thread is flagged.
+          type: boolean
+        has_attachments:
+          description: True when at least one message in the thread has a non-inline attachment.
+          type: boolean
+        replyable:
+          description: Whether the thread has a verified external counterparty eligible for a reply.
+          type: boolean
+        last_message_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+    ThreadListResponseBody:
+      type: object
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ThreadResource"
+        pagination:
+          $ref: "#/components/schemas/CursorPagination"
+    EnablementResource:
+      $ref: ./enablement.yaml#/components/schemas/EnablementResource
+    CreateEnablementRequestBody:
+      $ref: ./enablement.yaml#/components/schemas/CreateEnablementRequestBody
+    CreateEnablementResponseBody:
+      $ref: ./enablement.yaml#/components/schemas/CreateEnablementResponseBody
+    CheckoutOptions:
+      $ref: ./enablement.yaml#/components/schemas/CheckoutOptions
+    MailboxResource:
+      $ref: ./mailboxes.yaml#/components/schemas/MailboxResource
+    MailboxListResponseBody:
+      $ref: ./mailboxes.yaml#/components/schemas/MailboxListResponseBody
+    AllocateMailboxRequestBody:
+      $ref: ./mailboxes.yaml#/components/schemas/AllocateMailboxRequestBody
+    SendMessageRequestBody:
+      $ref: ./messages.yaml#/components/schemas/SendMessageRequestBody
+    ReplyMessageRequestBody:
+      $ref: ./messages.yaml#/components/schemas/ReplyMessageRequestBody
+    UsageResource:
+      $ref: ./usage.yaml#/components/schemas/UsageResource
+    ProjectSuppressionReason:
+      $ref: ./usage.yaml#/components/schemas/ProjectSuppressionReason
+    ProjectSuppressionResource:
+      $ref: ./usage.yaml#/components/schemas/ProjectSuppressionResource
+    ProjectSuppressionListResponseBody:
+      $ref: ./usage.yaml#/components/schemas/ProjectSuppressionListResponseBody
+    SpamFilterMode:
+      $ref: ./account.yaml#/components/schemas/SpamFilterMode
+    AccountMailboxResource:
+      $ref: ./account.yaml#/components/schemas/AccountMailboxResource
+    UpdateAccountMailboxRequestBody:
+      $ref: ./account.yaml#/components/schemas/UpdateAccountMailboxRequestBody
+    ReplyAccountThreadRequestBody:
+      $ref: ./account.yaml#/components/schemas/ReplyAccountThreadRequestBody
