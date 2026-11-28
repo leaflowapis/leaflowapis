@@ -1,0 +1,465 @@
+openapi: 3.2.1
+info:
+  title: Leaflow Audit API
+  version: 1.0.0
+  description: |-
+    Unified control-plane operation logs and high-sensitivity access audit trails across Leaflow
+    services.
+
+    ## Authentication
+
+    - **Project audit logs (`/api/v1/audit-logs`, `/api/v1/audit-logs/{auditLogId}`)** require an
+      IAM scoped token (`bearerAuth`). The project is asserted by the token and requires the
+      `audit:log.read` permission.
+    - **Account audit logs (`/api/v1/account/audit-logs`,
+      `/api/v1/account/audit-logs/{auditLogId}`)** require an account access token
+      (`accessTokenAuth`) issued at `auth.leaflow.net` and return operations scoped to the caller's
+      personal account outside any project. Application tokens are rejected with 403
+      `APPLICATION_TOKEN_NOT_ACCEPTED`.
+
+    ## Conventions
+
+    - **Append-only**: Audit records are immutable and retained according to platform retention
+      policy. Deleting a resource or project does not remove historical records.
+    - **Point-in-time snapshots**: `actor.name` and `resources[].name` capture the names recorded
+      when the event occurred. For `actor.name`, `null` means no name was captured (for example,
+      platform actions or callers without a display name claim), while an empty string `""` means
+      the credential had no display name set at that time.
+    - **Platform attribution**: Operations performed by the platform or its operators appear with
+      `actor.type` set to `platform`, and `actor.id`, `actor.name`, `context.client_ip`, and
+      `context.user_agent` set to `null`.
+    - **Cursor pagination**: Listings are ordered newest-first by `(occurred_at, id)` and use
+      opaque keyset cursors (`cursor` and `limit`).
+servers:
+  - url: https://audit.leaflow.cloud
+    description: Project and personal account audit log API
+security:
+  - bearerAuth: []
+tags:
+  - name: Project Audit Logs
+    description: Audit records scoped to the current project.
+  - name: Account Audit Logs
+    description: Audit records scoped to the caller's personal account.
+paths:
+  /api/v1/audit-logs:
+    get:
+      summary: List project audit logs
+      description: |-
+        Returns cursor-paged audit log records for the current project, ordered newest-first.
+        Requires the `audit:log.read` project permission.
+      operationId: list-audit-logs
+      tags:
+        - Project Audit Logs
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Services"
+        - $ref: "#/components/parameters/Action"
+        - $ref: "#/components/parameters/OperationTypes"
+        - $ref: "#/components/parameters/ActorTypes"
+        - $ref: "#/components/parameters/UserId"
+        - $ref: "#/components/parameters/ResourceType"
+        - $ref: "#/components/parameters/ResourceId"
+        - $ref: "#/components/parameters/Outcomes"
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Cursor
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/audit-logs/{auditLogId}:
+    get:
+      summary: Get a project audit log entry
+      description: |-
+        Returns a single audit log entry belonging to the current project. Entries that do not
+        exist or belong to another project return 404.
+      operationId: get-audit-log
+      tags:
+        - Project Audit Logs
+      parameters:
+        - $ref: "#/components/parameters/AuditLogId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLog"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/account/audit-logs:
+    get:
+      summary: List personal account audit logs
+      description: |-
+        Returns cursor-paged audit log records scoped to the caller's personal account, ordered
+        newest-first.
+      operationId: list-account-audit-logs
+      tags:
+        - Account Audit Logs
+      security:
+        - accessTokenAuth: []
+      parameters:
+        - $ref: "#/components/parameters/From"
+        - $ref: "#/components/parameters/To"
+        - $ref: "#/components/parameters/Services"
+        - $ref: "#/components/parameters/Action"
+        - $ref: "#/components/parameters/OperationTypes"
+        - $ref: "#/components/parameters/ActorTypes"
+        - $ref: "#/components/parameters/ResourceType"
+        - $ref: "#/components/parameters/ResourceId"
+        - $ref: "#/components/parameters/Outcomes"
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Cursor
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogListResponse"
+        default:
+          $ref: "#/components/responses/Error"
+  /api/v1/account/audit-logs/{auditLogId}:
+    get:
+      summary: Get a personal account audit log entry
+      description: |-
+        Returns a single audit log entry belonging to the caller's personal account. Entries that
+        do not exist or belong to another account return 404.
+      operationId: get-account-audit-log
+      tags:
+        - Account Audit Logs
+      security:
+        - accessTokenAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AuditLogId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLog"
+        default:
+          $ref: "#/components/responses/Error"
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
+    accessTokenAuth:
+      $ref: ../../type/v1/security.yaml#/components/securitySchemes/AccessToken
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+  parameters:
+    AuditLogId:
+      name: auditLogId
+      in: path
+      required: true
+      description: Audit log entry identifier.
+      schema:
+        type: string
+        format: uuid
+    From:
+      name: from
+      in: query
+      required: false
+      description: Inclusive lower bound for `occurred_at` in RFC 3339 format.
+      schema:
+        type: string
+        format: date-time
+    To:
+      name: to
+      in: query
+      required: false
+      description: Exclusive upper bound for `occurred_at` in RFC 3339 format.
+      schema:
+        type: string
+        format: date-time
+    Services:
+      name: service
+      in: query
+      required: false
+      description: Filter by one or more source services (comma-separated, e.g. `vault,compute`).
+      style: form
+      explode: false
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 16
+        uniqueItems: true
+        items:
+          type: string
+          minLength: 1
+          maxLength: 64
+    Action:
+      name: action
+      in: query
+      required: false
+      description: Exact operation identifier (OpenAPI `operationId` or RPC method name).
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    OperationTypes:
+      name: operation_type
+      in: query
+      required: false
+      description: Filter by one or more coarse operation categories (comma-separated).
+      style: form
+      explode: false
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 5
+        uniqueItems: true
+        items:
+          $ref: "#/components/schemas/OperationType"
+    ActorTypes:
+      name: actor_type
+      in: query
+      required: false
+      description: Filter by one or more actor types (comma-separated).
+      style: form
+      explode: false
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 3
+        uniqueItems: true
+        items:
+          $ref: "#/components/schemas/ActorType"
+    UserId:
+      name: user_id
+      in: query
+      required: false
+      description: Filter by the acting user or service account identifier.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    ResourceType:
+      name: resource_type
+      in: query
+      required: false
+      description: Filter to entries that touched at least one resource of this type.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 64
+    ResourceId:
+      name: resource_id
+      in: query
+      required: false
+      description: Filter to entries that touched a specific resource identifier.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    Outcomes:
+      name: outcome
+      in: query
+      required: false
+      description: Filter by one or more operation outcomes (comma-separated).
+      style: form
+      explode: false
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 3
+        uniqueItems: true
+        items:
+          $ref: "#/components/schemas/Outcome"
+  schemas:
+    Error:
+      $ref: ../../type/v1/error.yaml#/components/schemas/Error
+    AuditScope:
+      type: string
+      description: Ownership scope visible on the tenant API.
+      enum:
+        - project
+        - account
+    OperationType:
+      type: string
+      description: Coarse category of the operation.
+      enum:
+        - create
+        - update
+        - delete
+        - read
+        - execute
+    ActorType:
+      type: string
+      description: |-
+        Kind of actor visible to the tenant: `user` for a human member, `service_account` for a
+        project service account, and `platform` for platform automation or operator actions.
+      enum:
+        - user
+        - service_account
+        - platform
+    Outcome:
+      type: string
+      description: |-
+        `succeeded` means the operation took effect. `rejected` means the request was refused with
+        an actionable 4xx error. `failed` means the platform failed to complete it (5xx).
+      enum:
+        - succeeded
+        - rejected
+        - failed
+    AuditActor:
+      type: object
+      description: Actor attribution visible to the tenant.
+      properties:
+        type:
+          $ref: "#/components/schemas/ActorType"
+        id:
+          description: Acting user or service account identifier. Null when `type` is `platform`.
+          type:
+            - string
+            - "null"
+        name:
+          description: |-
+            Display name recorded when the operation occurred. Null when `type` is `platform` or
+            when no name was captured; empty string when the credential had no display name.
+          type:
+            - string
+            - "null"
+        via_service:
+          description: Platform service acting on behalf of the actor when applicable.
+          type:
+            - string
+            - "null"
+      required:
+        - type
+        - id
+        - name
+        - via_service
+      additionalProperties: false
+    AuditResource:
+      type: object
+      description: Resource affected by the operation, recorded as a point-in-time snapshot.
+      properties:
+        type:
+          type: string
+        id:
+          type: string
+        name:
+          description: Human-readable resource name or slug captured at the time of the operation.
+          type:
+            - string
+            - "null"
+      required:
+        - type
+        - id
+        - name
+      additionalProperties: false
+    AuditContext:
+      type: object
+      description: Request correlation and network context.
+      properties:
+        request_id:
+          type: string
+        client_ip:
+          description: Client IP address. Null when `actor.type` is `platform` or unavailable.
+          type:
+            - string
+            - "null"
+        user_agent:
+          description: Client User-Agent header. Null when `actor.type` is `platform` or unavailable.
+          type:
+            - string
+            - "null"
+      required:
+        - request_id
+        - client_ip
+        - user_agent
+      additionalProperties: false
+    AuditLog:
+      type: object
+      description: Single immutable audit log entry.
+      properties:
+        id:
+          type: string
+          format: uuid
+        occurred_at:
+          type: string
+          format: date-time
+        scope:
+          $ref: "#/components/schemas/AuditScope"
+        project_id:
+          type:
+            - string
+            - "null"
+          format: uuid
+        account_id:
+          type:
+            - string
+            - "null"
+          format: uuid
+        service:
+          type: string
+        action:
+          type: string
+        operation_type:
+          $ref: "#/components/schemas/OperationType"
+        actor:
+          $ref: "#/components/schemas/AuditActor"
+        resources:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditResource"
+        outcome:
+          $ref: "#/components/schemas/Outcome"
+        error_code:
+          type:
+            - string
+            - "null"
+        failure:
+          description: Sanitized client-safe failure summary; null when `outcome` is `succeeded` or redacted.
+          type:
+            - string
+            - "null"
+        context:
+          $ref: "#/components/schemas/AuditContext"
+        metadata:
+          description: Sanitized non-sensitive request and change metadata.
+          type: object
+          additionalProperties: {}
+      required:
+        - id
+        - occurred_at
+        - scope
+        - project_id
+        - account_id
+        - service
+        - action
+        - operation_type
+        - actor
+        - resources
+        - outcome
+        - error_code
+        - failure
+        - context
+        - metadata
+      additionalProperties: false
+    AuditLogListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLog"
+        pagination:
+          $ref: ../../type/v1/pagination.yaml#/components/schemas/CursorPagination
+      required:
+        - items
+        - pagination
+      additionalProperties: false
