@@ -1,31 +1,17 @@
 paths:
-  /api/v1/messages:
+  /api/v1/inboxes/{inboxId}/messages:
     get:
-      summary: List and search project messages
+      summary: List and search messages in an inbox
       description: |-
-        Cursor-paged lightweight message summaries, newest first, without full body payloads.
-        Service account tokens are automatically restricted to their own mailbox. Call
+        Cursor-paged lightweight message summaries, newest first, without full body payloads. Call
         `get-message` to read full plain-text or sanitized HTML bodies and attachments.
       operationId: list-messages
       tags:
         - Message
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Limit
         - $ref: ../../type/v1/pagination.yaml#/components/parameters/Cursor
-        - name: mailbox_id
-          in: query
-          required: false
-          explode: false
-          schema:
-            type: string
-            format: uuid
-        - name: service_account_id
-          in: query
-          required: false
-          explode: false
-          schema:
-            type: string
-            format: uuid
         - name: thread_id
           in: query
           required: false
@@ -127,25 +113,22 @@ paths:
         default:
           $ref: ./openapi.yaml#/components/responses/Error
     post:
-      summary: Send an outbound email from a project mailbox
+      summary: Send an outbound email from an inbox
       description: |-
-        Submits an outbound email from a project mailbox and bills the project's active mail
+        Submits an outbound email from the specified inbox and bills the project's active mail
         subscription by the number of accepted recipients (`to` + `cc` + `bcc`, at most 50).
 
         - **Validation, suppression, and rate limits**: Messages rejected for invalid arguments
           (400), suppressed recipients (422 `MAIL_RECIPIENT_SUPPRESSED`, non-retryable), or rate /
           daily-quota limits (429 `MAIL_RATE_LIMITED` with `retry_delay`, retryable) are not billed.
-        - **Accepted sends and bounces**: Once accepted (201 with `status: accepted`), delivery
-          proceeds asynchronously and per-recipient outcomes appear in `deliveries`; subsequent
-          hard bounces remain billed.
-        - **Sender derivation**: `From` is derived strictly from the sending mailbox's allocated
-          address. A service account token may omit `mailbox_id` to send from its own mailbox.
+        - **Sender derivation**: `From` is derived strictly from the inbox's allocated address.
         - **Plain-text derivation**: If only `html` is provided, a plain-text alternative is
           automatically derived for multipart delivery.
       operationId: send-message
       tags:
         - Message
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/IdempotencyKeyHeader
       requestBody:
         required: true
@@ -162,16 +145,17 @@ paths:
                 $ref: ./openapi.yaml#/components/schemas/MessageResource
         default:
           $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/messages:batchUpdate:
+  /api/v1/inboxes/{inboxId}/messages:batchUpdate:
     post:
-      summary: Batch update read or flagged state on project messages
+      summary: Batch update read or flagged state on messages in an inbox
       description: |-
-        Updates `read` and/or `flagged` on up to 200 messages belonging to the authenticated
-        project in a single call. Service account tokens may only update messages in their own
-        mailbox.
+        Updates `read` and/or `flagged` on up to 200 messages belonging to the specified inbox in a
+        single call.
       operationId: batch-update-messages
       tags:
         - Message
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
       requestBody:
         required: true
         content:
@@ -187,9 +171,9 @@ paths:
                 $ref: ./openapi.yaml#/components/schemas/BatchUpdateMessagesResponseBody
         default:
           $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/messages/{messageId}:
+  /api/v1/inboxes/{inboxId}/messages/{messageId}:
     get:
-      summary: Get a project message
+      summary: Get a message
       description: |-
         Returns full message details including plain-text body, server-sanitized HTML body (unless
         `include_html=false`), attachments, and per-recipient delivery statuses.
@@ -197,6 +181,7 @@ paths:
       tags:
         - Message
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
         - $ref: ./openapi.yaml#/components/parameters/IncludeHtmlQuery
       responses:
@@ -209,11 +194,12 @@ paths:
         default:
           $ref: ./openapi.yaml#/components/responses/Error
     patch:
-      summary: Update read or flagged state of a project message
+      summary: Update read or flagged state of a message
       operationId: update-message
       tags:
         - Message
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
       requestBody:
         required: true
@@ -231,35 +217,33 @@ paths:
         default:
           $ref: ./openapi.yaml#/components/responses/Error
     delete:
-      summary: Delete a project message from the mailbox
+      summary: Delete a message from an inbox
       description: |-
-        Removes the message body, raw archive, and attachments from the tenant mailbox view.
-        Outbound delivery and billing metadata are retained for auditing.
+        Removes the message body, raw archive, and attachments from the tenant inbox view. Outbound
+        delivery and billing metadata are retained for auditing.
       operationId: delete-message
       tags:
         - Message
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
       responses:
         "204":
           description: No Content
         default:
           $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/messages/{messageId}:reply:
+  /api/v1/inboxes/{inboxId}/messages/{messageId}:reply:
     post:
-      summary: Reply to a project message
+      summary: Reply to a message
       description: |-
-        Sends a billed outbound reply from the original message's mailbox while automatically
-        preserving `In-Reply-To`, `References`, and `Re:` subject folding.
-
-        Defaults to replying to the original message's `reply_to` (or `from` if absent). When
-        `reply_all` is true, deduplicated recipients from the original `to` and `cc` (excluding the
-        sending mailbox's own address) are added to `cc`. Additional `cc` and `bcc` recipients may
-        also be specified; total recipients must not exceed 50.
+        Sends an outbound reply from the inbox while preserving `In-Reply-To`, `References`, and
+        `Re:` subject folding. Defaults to replying to the original message's `reply_to` (or `from`
+        if absent); pass `reply_all=true` to include original `to` and `cc` recipients.
       operationId: reply-message
       tags:
         - Message
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
         - $ref: ./openapi.yaml#/components/parameters/IdempotencyKeyHeader
       requestBody:
@@ -277,13 +261,14 @@ paths:
                 $ref: ./openapi.yaml#/components/schemas/MessageResource
         default:
           $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/messages/{messageId}/headers:
+  /api/v1/inboxes/{inboxId}/messages/{messageId}/headers:
     get:
-      summary: Get raw RFC 5322 headers of a project message
+      summary: Get raw RFC 5322 headers of a message
       operationId: get-message-headers
       tags:
         - Message
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
       responses:
         "200":
@@ -294,13 +279,14 @@ paths:
                 $ref: ./openapi.yaml#/components/schemas/MessageHeadersResource
         default:
           $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/messages/{messageId}/raw:
+  /api/v1/inboxes/{inboxId}/messages/{messageId}/raw:
     get:
-      summary: Download raw RFC 5322 `.eml` source of a project message
+      summary: Download raw RFC 5322 `.eml` source of a message
       operationId: download-message-raw
       tags:
         - Message
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/MessageIdPath
       responses:
         "200":
@@ -326,10 +312,6 @@ components:
         - subject
       additionalProperties: false
       properties:
-        mailbox_id:
-          description: Sending mailbox ID. Optional when authenticated as a service account (defaults to its own allocated mailbox and must match it); required when a human member sends on behalf of a mailbox.
-          type: string
-          format: uuid
         to:
           description: Primary recipients. Combined count across `to`, `cc`, and `bcc` must not exceed 50.
           type: array
@@ -360,11 +342,11 @@ components:
           description: HTML body. At least one of `text` or `html` is required; plain text is auto-derived when omitted.
           type: string
         in_reply_to_message_id:
-          description: Existing message ID in the same mailbox to reply to; automatically sets threading headers and attaches to the same thread.
+          description: Existing message ID in the same inbox to reply to; automatically sets threading headers and attaches to the same thread.
           type: string
           format: uuid
         attachment_ids:
-          description: Pre-uploaded attachment IDs from `upload-attachment`. Combined assembled message size must not exceed 25 MiB.
+          description: Pre-uploaded attachment IDs from `upload-attachment` on the same inbox. Combined assembled message size must not exceed 25 MiB.
           type: array
           maxItems: 20
           items:
@@ -380,7 +362,7 @@ components:
       additionalProperties: false
       properties:
         reply_all:
-          description: When true, includes original `to` and `cc` addresses in `cc` (deduplicated and excluding the sending mailbox's own address). Defaults to false.
+          description: When true, includes original `to` and `cc` addresses in `cc` (deduplicated and excluding the sending inbox's own address). Defaults to false.
           type: boolean
           default: false
         cc:
@@ -406,7 +388,7 @@ components:
           description: HTML reply body. At least one of `text` or `html` is required; plain text is auto-derived when omitted.
           type: string
         attachment_ids:
-          description: Pre-uploaded attachment IDs from `upload-attachment`.
+          description: Pre-uploaded attachment IDs from `upload-attachment` on the same inbox.
           type: array
           maxItems: 20
           items:

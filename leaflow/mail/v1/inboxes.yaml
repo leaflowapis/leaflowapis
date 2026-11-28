@@ -1,0 +1,268 @@
+paths:
+  /api/v1/inboxes:
+    get:
+      summary: List project inboxes
+      description: |-
+        Lists inboxes provisioned for members of the authenticated project (both human members and
+        service accounts). Service account tokens only receive their own inbox.
+      operationId: list-inboxes
+      tags:
+        - Inbox
+      parameters:
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/Page
+        - $ref: ../../type/v1/pagination.yaml#/components/parameters/PageSize
+        - name: user_id
+          in: query
+          required: false
+          description: Filter to a specific project member's IAM user ID.
+          explode: false
+          schema:
+            type: string
+            maxLength: 255
+        - name: outbound_status
+          in: query
+          required: false
+          description: Only inboxes in these outbound statuses; omit for every status. Comma-separated, for example `outbound_status=active,paused`.
+          style: form
+          explode: false
+          schema:
+            type: array
+            minItems: 1
+            maxItems: 3
+            uniqueItems: true
+            items:
+              $ref: ./openapi.yaml#/components/schemas/OutboundStatus
+        - name: keyword
+          in: query
+          required: false
+          description: Case-insensitive substring filter on email address or display name.
+          explode: false
+          schema:
+            type: string
+            maxLength: 255
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxListResponseBody"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    post:
+      summary: Create or retrieve an inbox for a project member
+      description: |-
+        Idempotently provisions an active `@onleaflow.cloud` inbox for an active member of the
+        authenticated project (human user or service account). When `user_id` is omitted, provisions
+        an inbox for the caller. Returns immediately with the allocated address.
+      operationId: create-inbox
+      tags:
+        - Inbox
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateInboxRequestBody"
+      responses:
+        "200":
+          description: Inbox already existed or was provisioned synchronously.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/inboxes/{inboxId}:
+    get:
+      summary: Get an inbox
+      operationId: get-inbox
+      tags:
+        - Inbox
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+    patch:
+      summary: Update inbox settings and forwarding preferences
+      description: |-
+        Updates display name, inbound delivery toggle, or optional email forwarding preferences for
+        the inbox. Unsupplied fields are left unchanged.
+      operationId: update-inbox
+      tags:
+        - Inbox
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateInboxRequestBody"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/inboxes/{inboxId}:pauseOutbound:
+    post:
+      summary: Pause outbound sending for an inbox
+      description: |-
+        Stops outbound sending from the inbox while keeping inbound mail delivery active.
+      operationId: pause-inbox-outbound
+      tags:
+        - Inbox
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+  /api/v1/inboxes/{inboxId}:resumeOutbound:
+    post:
+      summary: Resume outbound sending for an inbox
+      description: |-
+        Resumes outbound sending for a project-paused or reputation-paused inbox. Operator
+        suspensions (`suspended`) cannot be lifted by project users and return 403
+        `MAIL_OUTBOUND_SUSPENDED_BY_OPERATOR`.
+      operationId: resume-inbox-outbound
+      tags:
+        - Inbox
+      parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InboxResource"
+        default:
+          $ref: ./openapi.yaml#/components/responses/Error
+components:
+  schemas:
+    InboxForwarding:
+      description: Optional inbound forwarding preferences to the owning member's verified IAM email address.
+      type: object
+      required:
+        - enabled
+        - verified
+        - spam_filter_mode
+      additionalProperties: false
+      properties:
+        enabled:
+          type: boolean
+        verified:
+          description: True when the owning IAM user has a verified external email eligible for forwarding and reply-by-email.
+          type: boolean
+        spam_filter_mode:
+          $ref: ./openapi.yaml#/components/schemas/SpamFilterMode
+    InboxResource:
+      type: object
+      required:
+        - id
+        - user_id
+        - address
+        - display_name
+        - inbound_enabled
+        - outbound_status
+        - pause_reason
+        - pause_detail
+        - paused_at
+        - forwarding
+        - created_at
+        - updated_at
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          description: IAM user ID of the project member owning this inbox (human member or service account).
+          type: string
+        address:
+          description: Allocated primary email address on the platform domain.
+          type: string
+          format: email
+        display_name:
+          type: string
+        inbound_enabled:
+          type: boolean
+        outbound_status:
+          $ref: ./openapi.yaml#/components/schemas/OutboundStatus
+        pause_reason:
+          anyOf:
+            - $ref: ./openapi.yaml#/components/schemas/PauseReason
+            - type: "null"
+        pause_detail:
+          type:
+            - string
+            - "null"
+        paused_at:
+          type:
+            - string
+            - "null"
+          format: date-time
+        forwarding:
+          $ref: "#/components/schemas/InboxForwarding"
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    InboxListResponseBody:
+      type: object
+      required:
+        - items
+        - pagination
+      additionalProperties: false
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InboxResource"
+        pagination:
+          $ref: ./openapi.yaml#/components/schemas/OffsetPagination
+    CreateInboxRequestBody:
+      type: object
+      additionalProperties: false
+      properties:
+        user_id:
+          description: Target project member's IAM user ID. Omit to provision an inbox for the caller.
+          type: string
+          minLength: 1
+          maxLength: 255
+        display_name:
+          type: string
+          maxLength: 255
+    UpdateInboxRequestBody:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+          maxLength: 255
+        inbound_enabled:
+          type: boolean
+        forwarding_enabled:
+          type: boolean
+        spam_filter_mode:
+          $ref: ./openapi.yaml#/components/schemas/SpamFilterMode

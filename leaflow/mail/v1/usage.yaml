@@ -26,22 +26,22 @@ paths:
           schema:
             type: string
             format: date-time
-        - name: mailbox_id
+        - name: inbox_id
           in: query
           required: false
-          description: Restricts the summary to a single mailbox.
+          description: Restricts the summary to a single inbox.
           explode: false
           schema:
             type: string
             format: uuid
-        - name: service_account_id
+        - name: user_id
           in: query
           required: false
-          description: Restricts the summary to a single service account's mailbox.
+          description: Restricts the summary to a single member's inbox.
           explode: false
           schema:
             type: string
-            format: uuid
+            maxLength: 255
       responses:
         "200":
           description: OK

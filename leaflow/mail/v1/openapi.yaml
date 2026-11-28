@@ -3,138 +3,98 @@ info:
   title: Leaflow Mail API
   version: 1.0.0
   description: |-
-    Project service-account mailboxes, personal account mailboxes, threaded email retrieval,
-    attachment storage, outbound sending, service enablement, and delivery tracking.
+    Project member inboxes, threaded email retrieval, attachment storage, billed outbound sending,
+    optional email forwarding, service enablement, and delivery tracking.
 
     ## Authentication
 
-    - **Project endpoints (`/api/v1/*`, excluding `/api/v1/account/*`)** require an IAM scoped token
-      (`bearerAuth`). Neither the path nor headers carry a `project_id`; the current project is
-      asserted by the token.
-    - **Account endpoints (`/api/v1/account/*`)** require an account access token
-      (`accessTokenAuth`) issued at `auth.leaflow.net` and operate on the caller's personal
-      mailbox outside any project. Application tokens are rejected with 403
-      `APPLICATION_TOKEN_NOT_ACCEPTED`.
+    Every request carries an IAM scoped token (`bearerAuth`). Neither the path nor the headers
+    carry a `project_id`: the current project is asserted by the token.
 
     ## Conventions
 
-    - **Service enablement and mailbox allocation**: A project enables the mail service once through
-      `create-enablement`. Enabling the service carries no fixed fee and provisions default email
-      addresses for active service accounts in the project; `list-mailboxes` reports each mailbox's
-      address and allocation state. Inbound delivery is free. Outbound sending from project
-      mailboxes is billed per accepted recipient (sum of `to`, `cc`, and `bcc`) with no free
-      outbound allowance.
+    - **Project member inboxes**: Enabling Mail on a project (`create-enablement`) provisions an
+      inbox (`@onleaflow.cloud`) for every active project member — both human members and service
+      accounts are IAM users and are modeled uniformly by `(project_id, user_id)`. Callers may also
+      provision an inbox synchronously with `create-inbox`.
+    - **Inbound is free; outbound is billed per accepted recipient**: Inbound delivery and optional
+      forwarding to a member's verified email address are free. Outbound sends and replies from a
+      project inbox are billed per accepted recipient (`to` + `cc` + `bcc`, up to 50).
+    - **AgentMail-style nested resource hierarchy**: Threads, messages, replies, and attachments
+      live directly under `/api/v1/inboxes/{inboxId}/...`. A project-wide `GET /api/v1/threads`
+      endpoint is also provided for cross-inbox overview and supervision.
     - **Lightweight lists vs. full message detail**: List endpoints (`list-messages`,
-      `list-thread-messages`, `list-account-messages`, `list-account-thread-messages`) return
-      lightweight `MessageSummaryResource` rows without body payloads. Retrieve full text,
-      sanitized HTML, attachments, and per-recipient deliveries from `get-message` or
-      `get-account-message`, raw RFC 5322 headers from `/headers`, and original `.eml` bytes from
-      `/raw`.
-    - **Sanitized HTML**: The `html` field returned on `MessageResource` is server-sanitized for
-      safe rendering. Callers that only need plain text may pass `include_html=false`.
-    - **Sender identity**: The `From` address is always derived from the sending mailbox's
-      allocated address. Callers cannot specify an arbitrary sender address.
-    - **Service account isolation**: A service account token may only read, update, or send from
-      its own allocated mailbox; attempts to act on another mailbox in the same project fail with
-      403 `MAIL_SERVICE_ACCOUNT_SCOPE_FORBIDDEN`.
-    - **Personal account replies**: Personal account mailboxes accept free inbound delivery
-      (with optional forwarding to the account's verified email address) and free replies to
-      existing inbound threads via `reply-account-thread`. Arbitrary outbound sending to new
-      external recipients is not supported on personal mailboxes.
-    - **Idempotency and retries**: Supply `Idempotency-Key` when sending or replying so retries
+      `list-thread-messages`) return `MessageSummaryResource` rows without body payloads. Retrieve
+      full plain text, server-sanitized HTML, attachments, and per-recipient deliveries from
+      `get-message`, raw RFC 5322 headers from `/headers`, and original `.eml` bytes from `/raw`.
+    - **Idempotency (Resend-style)**: Supply `Idempotency-Key` when sending or replying so retries
       after transient 429 or 503 responses (carrying `retry_delay`) do not send or bill duplicates.
-    - **Attachments are uploaded before reference**: Upload bytes to `POST /api/v1/attachments`
-      (or `POST /api/v1/account/attachments`), then pass the returned IDs in `attachment_ids`.
-      Unreferenced uploads expire automatically.
+      Reusing a key with a different payload fails with 409 `MAIL_IDEMPOTENCY_KEY_REUSED`.
+    - **Service account isolation**: A service account token may only read, update, or send from
+      its own inbox; attempts to act on another inbox fail with 403 `MAIL_INBOX_SCOPE_FORBIDDEN`.
+    - **Attachments are uploaded before reference**: Upload bytes to
+      `POST /api/v1/inboxes/{inboxId}/attachments`, then pass the returned IDs in `attachment_ids`.
 servers:
   - url: https://mail.leaflow.cloud
-    description: Project and personal account mail API
+    description: Project Mail API
 security:
   - bearerAuth: []
 tags:
   - name: Enable
     description: Project mail service enablement.
-  - name: Mailbox
-    description: Project mailbox allocation status and outbound controls.
+  - name: Inbox
+    description: Project member inboxes, forwarding preferences, and outbound controls.
   - name: Thread
-    description: Project email threads.
+    description: Conversation threads within an inbox or across the project.
   - name: Message
-    description: Project inbound retrieval, search, batch updates, and billed outbound sending.
+    description: Inbound retrieval, search, batch updates, and billed outbound sending.
   - name: Attachment
-    description: Project email attachment upload and download.
+    description: Email attachment upload and download scoped to an inbox.
   - name: Usage
     description: Project outbound delivery statistics and suppression visibility.
-  - name: Account
-    description: Personal account mailbox, forwarding preferences, inbox, and thread replies.
 paths:
   /api/v1/enablement:
     $ref: ./enablement.yaml#/paths/~1api~1v1~1enablement
-  /api/v1/mailboxes:
-    $ref: ./mailboxes.yaml#/paths/~1api~1v1~1mailboxes
-  /api/v1/mailboxes/{mailboxId}:
-    $ref: ./mailboxes.yaml#/paths/~1api~1v1~1mailboxes~1{mailboxId}
-  /api/v1/mailboxes/{mailboxId}:pauseOutbound:
-    $ref: ./mailboxes.yaml#/paths/~1api~1v1~1mailboxes~1{mailboxId}:pauseOutbound
-  /api/v1/mailboxes/{mailboxId}:resumeOutbound:
-    $ref: ./mailboxes.yaml#/paths/~1api~1v1~1mailboxes~1{mailboxId}:resumeOutbound
+  /api/v1/inboxes:
+    $ref: ./inboxes.yaml#/paths/~1api~1v1~1inboxes
+  /api/v1/inboxes/{inboxId}:
+    $ref: ./inboxes.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}
+  /api/v1/inboxes/{inboxId}:pauseOutbound:
+    $ref: ./inboxes.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}:pauseOutbound
+  /api/v1/inboxes/{inboxId}:resumeOutbound:
+    $ref: ./inboxes.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}:resumeOutbound
   /api/v1/threads:
     $ref: ./threads.yaml#/paths/~1api~1v1~1threads
-  /api/v1/threads/{threadId}:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{threadId}
-  /api/v1/threads/{threadId}/messages:
-    $ref: ./threads.yaml#/paths/~1api~1v1~1threads~1{threadId}~1messages
-  /api/v1/messages:
-    $ref: ./messages.yaml#/paths/~1api~1v1~1messages
-  /api/v1/messages:batchUpdate:
-    $ref: ./messages.yaml#/paths/~1api~1v1~1messages:batchUpdate
-  /api/v1/messages/{messageId}:
-    $ref: ./messages.yaml#/paths/~1api~1v1~1messages~1{messageId}
-  /api/v1/messages/{messageId}:reply:
-    $ref: ./messages.yaml#/paths/~1api~1v1~1messages~1{messageId}:reply
-  /api/v1/messages/{messageId}/headers:
-    $ref: ./messages.yaml#/paths/~1api~1v1~1messages~1{messageId}~1headers
-  /api/v1/messages/{messageId}/raw:
-    $ref: ./messages.yaml#/paths/~1api~1v1~1messages~1{messageId}~1raw
-  /api/v1/attachments:
-    $ref: ./attachments.yaml#/paths/~1api~1v1~1attachments
-  /api/v1/attachments/{attachmentId}/content:
-    $ref: ./attachments.yaml#/paths/~1api~1v1~1attachments~1{attachmentId}~1content
+  /api/v1/inboxes/{inboxId}/threads:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1threads
+  /api/v1/inboxes/{inboxId}/threads/{threadId}:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1threads~1{threadId}
+  /api/v1/inboxes/{inboxId}/threads/{threadId}/messages:
+    $ref: ./threads.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1threads~1{threadId}~1messages
+  /api/v1/inboxes/{inboxId}/messages:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1messages
+  /api/v1/inboxes/{inboxId}/messages:batchUpdate:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1messages:batchUpdate
+  /api/v1/inboxes/{inboxId}/messages/{messageId}:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1messages~1{messageId}
+  /api/v1/inboxes/{inboxId}/messages/{messageId}:reply:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1messages~1{messageId}:reply
+  /api/v1/inboxes/{inboxId}/messages/{messageId}/headers:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1messages~1{messageId}~1headers
+  /api/v1/inboxes/{inboxId}/messages/{messageId}/raw:
+    $ref: ./messages.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1messages~1{messageId}~1raw
+  /api/v1/inboxes/{inboxId}/attachments:
+    $ref: ./attachments.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1attachments
+  /api/v1/inboxes/{inboxId}/attachments/{attachmentId}/content:
+    $ref: ./attachments.yaml#/paths/~1api~1v1~1inboxes~1{inboxId}~1attachments~1{attachmentId}~1content
   /api/v1/usage:
     $ref: ./usage.yaml#/paths/~1api~1v1~1usage
   /api/v1/suppressions:
     $ref: ./usage.yaml#/paths/~1api~1v1~1suppressions
-  /api/v1/account/mailbox:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1mailbox
-  /api/v1/account/mailbox:activate:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1mailbox:activate
-  /api/v1/account/threads:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1threads
-  /api/v1/account/threads/{threadId}:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1threads~1{threadId}
-  /api/v1/account/threads/{threadId}/messages:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1threads~1{threadId}~1messages
-  /api/v1/account/threads/{threadId}:reply:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1threads~1{threadId}:reply
-  /api/v1/account/messages:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages
-  /api/v1/account/messages:batchUpdate:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages:batchUpdate
-  /api/v1/account/messages/{messageId}:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages~1{messageId}
-  /api/v1/account/messages/{messageId}/headers:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages~1{messageId}~1headers
-  /api/v1/account/messages/{messageId}/raw:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1messages~1{messageId}~1raw
-  /api/v1/account/attachments:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1attachments
-  /api/v1/account/attachments/{attachmentId}/content:
-    $ref: ./account.yaml#/paths/~1api~1v1~1account~1attachments~1{attachmentId}~1content
 components:
   securitySchemes:
     bearerAuth:
       $ref: ../../type/v1/security.yaml#/components/securitySchemes/ScopedToken
-    accessTokenAuth:
-      $ref: ../../type/v1/security.yaml#/components/securitySchemes/AccessToken
   responses:
     Error:
       description: Error
@@ -149,11 +109,11 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   parameters:
-    MailboxIdPath:
-      name: mailboxId
+    InboxIdPath:
+      name: inboxId
       in: path
       required: true
-      description: Mailbox identifier.
+      description: Inbox identifier.
       schema:
         type: string
         format: uuid
@@ -186,9 +146,9 @@ components:
       in: header
       required: false
       description: |-
-        Optional caller-generated idempotency key (1 to 255 visible ASCII characters), retained
-        for 24 hours. Reusing the same key with an identical payload returns the original response;
-        reusing it with a different payload fails with 409 `MAIL_IDEMPOTENCY_KEY_REUSED`.
+        Optional caller-generated idempotency key (1 to 255 visible ASCII characters), scoped to
+        the sending inbox. Reusing the same key with an identical payload returns the original
+        message; reusing it with a different payload fails with 409 `MAIL_IDEMPOTENCY_KEY_REUSED`.
       schema:
         type: string
         minLength: 1
@@ -240,24 +200,13 @@ components:
         name:
           type: string
           maxLength: 255
-    AllocationStatus:
-      type: string
-      description: Current address allocation state for a mailbox.
-      enum:
-        - unallocated
-        - pending
-        - allocated
-        - failed
-        - released
     OutboundStatus:
       type: string
-      description: Current outbound sending state for a mailbox.
+      description: Current outbound sending state for an inbox.
       enum:
-        - disabled
         - active
-        - paused_by_project
-        - paused_for_reputation
-        - suspended_by_operator
+        - paused
+        - suspended
     PauseReason:
       type: string
       enum:
@@ -265,6 +214,11 @@ components:
         - complaint
         - bounce_rate
         - operator
+    SpamFilterMode:
+      type: string
+      enum:
+        - standard
+        - strict
     MessageDirection:
       type: string
       enum:
@@ -401,7 +355,7 @@ components:
       type: object
       required:
         - id
-        - mailbox_id
+        - inbox_id
         - thread_id
         - direction
         - status
@@ -421,7 +375,7 @@ components:
         id:
           type: string
           format: uuid
-        mailbox_id:
+        inbox_id:
           type: string
           format: uuid
         thread_id:
@@ -456,7 +410,7 @@ components:
           format: int64
           minimum: 0
         billed_recipients:
-          description: Number of billable recipients accepted for outbound delivery. Zero for inbound messages and free personal replies.
+          description: Number of billable recipients accepted for outbound delivery. Zero for inbound messages.
           type: integer
           format: int64
           minimum: 0
@@ -487,7 +441,7 @@ components:
       type: object
       required:
         - id
-        - mailbox_id
+        - inbox_id
         - thread_id
         - direction
         - status
@@ -517,7 +471,7 @@ components:
         id:
           type: string
           format: uuid
-        mailbox_id:
+        inbox_id:
           type: string
           format: uuid
         thread_id:
@@ -592,7 +546,7 @@ components:
           items:
             $ref: "#/components/schemas/MessageDelivery"
         billed_recipients:
-          description: Number of billable recipients accepted for outbound delivery. Zero for inbound messages and free personal replies.
+          description: Number of billable recipients accepted for outbound delivery. Zero for inbound messages.
           type: integer
           format: int64
           minimum: 0
@@ -649,7 +603,7 @@ components:
       type: object
       required:
         - id
-        - mailbox_id
+        - inbox_id
         - subject
         - snippet
         - participants
@@ -665,7 +619,7 @@ components:
         id:
           type: string
           format: uuid
-        mailbox_id:
+        inbox_id:
           type: string
           format: uuid
         subject:
@@ -691,7 +645,7 @@ components:
           description: True when at least one message in the thread has a non-inline attachment.
           type: boolean
         replyable:
-          description: Whether the thread has a verified external counterparty eligible for a reply.
+          description: Whether the thread has an external counterparty eligible for a reply.
           type: boolean
         last_message_at:
           type: string
@@ -720,12 +674,16 @@ components:
       $ref: ./enablement.yaml#/components/schemas/CreateEnablementResponseBody
     CheckoutOptions:
       $ref: ./enablement.yaml#/components/schemas/CheckoutOptions
-    MailboxResource:
-      $ref: ./mailboxes.yaml#/components/schemas/MailboxResource
-    MailboxListResponseBody:
-      $ref: ./mailboxes.yaml#/components/schemas/MailboxListResponseBody
-    AllocateMailboxRequestBody:
-      $ref: ./mailboxes.yaml#/components/schemas/AllocateMailboxRequestBody
+    InboxForwarding:
+      $ref: ./inboxes.yaml#/components/schemas/InboxForwarding
+    InboxResource:
+      $ref: ./inboxes.yaml#/components/schemas/InboxResource
+    InboxListResponseBody:
+      $ref: ./inboxes.yaml#/components/schemas/InboxListResponseBody
+    CreateInboxRequestBody:
+      $ref: ./inboxes.yaml#/components/schemas/CreateInboxRequestBody
+    UpdateInboxRequestBody:
+      $ref: ./inboxes.yaml#/components/schemas/UpdateInboxRequestBody
     SendMessageRequestBody:
       $ref: ./messages.yaml#/components/schemas/SendMessageRequestBody
     ReplyMessageRequestBody:
@@ -738,11 +696,3 @@ components:
       $ref: ./usage.yaml#/components/schemas/ProjectSuppressionResource
     ProjectSuppressionListResponseBody:
       $ref: ./usage.yaml#/components/schemas/ProjectSuppressionListResponseBody
-    SpamFilterMode:
-      $ref: ./account.yaml#/components/schemas/SpamFilterMode
-    AccountMailboxResource:
-      $ref: ./account.yaml#/components/schemas/AccountMailboxResource
-    UpdateAccountMailboxRequestBody:
-      $ref: ./account.yaml#/components/schemas/UpdateAccountMailboxRequestBody
-    ReplyAccountThreadRequestBody:
-      $ref: ./account.yaml#/components/schemas/ReplyAccountThreadRequestBody

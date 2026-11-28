@@ -4,9 +4,9 @@ paths:
       summary: Get project mail service enablement
       description: |-
         Returns the mail service enablement of the authenticated project. Once `status` is `active`,
-        default email addresses are provisioned for active service accounts in the project, inbound
-        delivery is accepted at no charge, and outbound sends are billed per accepted recipient
-        under `subscription_id` (unless `billing_suspended` is true).
+        inboxes are provisioned for active project members (human members and service accounts
+        alike), inbound delivery is accepted at no charge, and outbound sends are billed per
+        accepted recipient under `subscription_id` (unless `billing_suspended` is true).
       operationId: get-enablement
       tags:
         - Enable
@@ -22,16 +22,12 @@ paths:
     post:
       summary: Enable project mail service
       description: |-
-        Enables the mail service for the authenticated project. Enabling carries no upfront fee;
-        inbound mail is free and outbound mail is billed per accepted recipient with no free
-        outbound allowance. Returns the enablement as `pending` together with its Billing Checkout
-        Session; once the order is accepted, `status` transitions to `active` and default email
-        addresses are allocated for project service accounts.
+        Enables the mail service for the authenticated project and provisions inboxes for active
+        project members. Enabling carries no upfront fee; inbound mail is free and outbound mail is
+        billed per accepted recipient.
 
         Refused with 409 `MAIL_SERVICE_ALREADY_ENABLED` while an enablement is `pending` or
-        `active`. Billing refusals are returned with Billing's error code, such as
-        `BILLING_PRICE_UNAVAILABLE` when the service has no price in the project billing account's
-        currency.
+        `active`.
       operationId: create-enablement
       tags:
         - Enable
@@ -43,7 +39,7 @@ paths:
               $ref: "#/components/schemas/CreateEnablementRequestBody"
       responses:
         "202":
-          description: The enablement and its Checkout Session were created; the enablement is not active yet.
+          description: The enablement was created (and checkout initiated when billing is configured).
           content:
             application/json:
               schema:
@@ -59,7 +55,7 @@ components:
       type: object
       properties:
         status:
-          description: "`inactive` has never been enabled or its subscription has ended; `pending` awaits completion of checkout and acceptance of its order; `active` provisions mailboxes and allows billed outbound sending; `failed` means enabling failed, as `failure_reason` states."
+          description: "`inactive` has never been enabled or its subscription has ended; `pending` awaits completion of checkout and acceptance of its order; `active` provisions member inboxes and allows outbound sending; `failed` means enabling failed, as `failure_reason` states."
           type: string
           enum:
             - inactive
@@ -93,7 +89,7 @@ components:
             - "null"
           format: uuid
         plan_id:
-          description: The Billing plan the mail service is sold under; null where the service is not sold. Preview pricing with Billing's `preview-checkout-session` using `recurring` price type, `metered` usage type, and quantity 1.
+          description: The Billing plan the mail service is sold under; null where the service is not sold.
           type:
             - string
             - "null"
@@ -134,7 +130,7 @@ components:
           $ref: "#/components/schemas/CheckoutOptions"
       additionalProperties: false
     CreateEnablementResponseBody:
-      description: The enablement, `pending` until its order is accepted, together with its Checkout Session.
+      description: The enablement together with its Checkout Session when billing checkout is required.
       type: object
       properties:
         enablement:

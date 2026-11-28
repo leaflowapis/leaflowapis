@@ -1,17 +1,18 @@
 paths:
-  /api/v1/attachments:
+  /api/v1/inboxes/{inboxId}/attachments:
     post:
-      summary: Upload a project email attachment
+      summary: Upload an email attachment for an inbox
       description: |-
         The body is the raw file bytes (`application/octet-stream`), one file per request. The
         content type is determined by inspecting the bytes, not from request headers.
 
-        Pass the returned `id` in `attachment_ids` when calling `send-message`. An unreferenced
-        attachment is removed automatically after 24 hours.
+        Pass the returned `id` in `attachment_ids` when calling `send-message` or `reply-message`
+        on the same inbox. An unreferenced attachment is removed automatically after 24 hours.
       operationId: upload-attachment
       tags:
         - Attachment
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/FilenameQuery
       requestBody:
         required: true
@@ -30,17 +31,18 @@ paths:
                 $ref: ./openapi.yaml#/components/schemas/AttachmentResource
         default:
           $ref: ./openapi.yaml#/components/responses/Error
-  /api/v1/attachments/{attachmentId}/content:
+  /api/v1/inboxes/{inboxId}/attachments/{attachmentId}/content:
     get:
-      summary: Download a project email attachment
+      summary: Download an email attachment from an inbox
       description: |-
-        Streams the attachment bytes for an inbound or outbound message in the authenticated
-        project. `Content-Disposition` is `attachment` unless `inline=true` is requested and the
-        detected content type can be rendered safely.
+        Streams the attachment bytes for an inbound or outbound message in the specified inbox.
+        `Content-Disposition` is `attachment` unless `inline=true` is requested and the detected
+        content type can be rendered safely.
       operationId: download-attachment
       tags:
         - Attachment
       parameters:
+        - $ref: ./openapi.yaml#/components/parameters/InboxIdPath
         - $ref: ./openapi.yaml#/components/parameters/AttachmentIdPath
         - $ref: ./openapi.yaml#/components/parameters/InlineQuery
       responses:
