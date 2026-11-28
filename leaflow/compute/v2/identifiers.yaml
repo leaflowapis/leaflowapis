@@ -150,12 +150,6 @@ components:
       maxLength: 33
       pattern: ^inseni_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
       description: Compute InstanceNetworkInterface TypeID. UUID text is not accepted.
-    OperationLogId:
-      type: string
-      minLength: 39
-      maxLength: 39
-      pattern: ^operationlog_[0-7][0123456789abcdefghjkmnpqrstvwxyz]{25}$
-      description: Compute OperationLog TypeID. UUID text is not accepted.
     VirtualPrivateCloudPeeringId:
       type: string
       minLength: 37

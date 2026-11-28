@@ -62,8 +62,6 @@ tags:
     description: Launch templates, reusable descriptions of how to create instances.
   - name: network-interfaces
     description: Network interfaces, addresses and attachments.
-  - name: operation-logs
-    description: Historical records of Compute operations.
   - name: private-images
     description: Images this project captured from its own instances, and their billed storage.
   - name: public-images
@@ -183,10 +181,6 @@ paths:
     $ref: ./network-interfaces.yaml#/paths/~1api~1v2~1network-interfaces~1{networkInterfaceId}~1addresses
   /api/v2/network-interfaces/{networkInterfaceId}/addresses/{addressId}:
     $ref: ./network-interfaces.yaml#/paths/~1api~1v2~1network-interfaces~1{networkInterfaceId}~1addresses~1{addressId}
-  /api/v2/operation-logs:
-    $ref: ./operation-logs.yaml#/paths/~1api~1v2~1operation-logs
-  /api/v2/operation-logs/{operationLogId}:
-    $ref: ./operation-logs.yaml#/paths/~1api~1v2~1operation-logs~1{operationLogId}
   /api/v2/private-images:
     $ref: ./private-images.yaml#/paths/~1api~1v2~1private-images
   /api/v2/private-images/{privateImageId}:
@@ -386,8 +380,6 @@ components:
       $ref: ./identifiers.yaml#/components/schemas/SubnetId
     InstanceNetworkInterfaceId:
       $ref: ./identifiers.yaml#/components/schemas/InstanceNetworkInterfaceId
-    OperationLogId:
-      $ref: ./identifiers.yaml#/components/schemas/OperationLogId
     VirtualPrivateCloudPeeringId:
       $ref: ./identifiers.yaml#/components/schemas/VirtualPrivateCloudPeeringId
     VirtualPrivateCloudIpv6CidrBlockId:
@@ -530,10 +522,6 @@ components:
       $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAttachment
     NetworkInterfaceAttachmentList:
       $ref: ./network-interfaces.yaml#/components/schemas/NetworkInterfaceAttachmentList
-    OperationLogResource:
-      $ref: ./operation-logs.yaml#/components/schemas/OperationLogResource
-    OperationLogListResponseBody:
-      $ref: ./operation-logs.yaml#/components/schemas/OperationLogListResponseBody
     DeletePrivateImageResponseBody:
       $ref: ./private-images.yaml#/components/schemas/DeletePrivateImageResponseBody
     PrivateImageResource:
